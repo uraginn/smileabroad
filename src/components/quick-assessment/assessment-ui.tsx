@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export function QuickAssessmentShell({
   step,
@@ -206,7 +207,7 @@ export function UploadCard({
   );
 }
 
-export function AssessmentAccordion({
+export function AssessmentSelectionList({
   title,
   summary,
   expanded,
@@ -219,33 +220,27 @@ export function AssessmentAccordion({
   onToggle: () => void;
   children: ReactNode;
 }) {
-  const regionId = `medical-${title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
-    <section className="overflow-hidden rounded-lg border bg-background">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={regionId}
-        onClick={onToggle}
-        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-      >
-        <span className="min-w-0">
+    <Collapsible open={expanded} onOpenChange={onToggle} className="border-b last:border-b-0">
+      <CollapsibleTrigger className="flex min-h-14 w-full items-center justify-between gap-3 px-1 py-2.5 text-left focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{title}</span>
           <span className="block truncate text-xs text-muted-foreground">{summary}</span>
         </span>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            expanded && "rotate-180",
-          )}
-          aria-hidden="true"
-        />
-      </button>
-      {expanded && (
-        <div id={regionId} className="border-t bg-surface/30 p-3">
-          {children}
-        </div>
-      )}
-    </section>
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
+          {expanded ? "Close" : "Select"}
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              expanded && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pb-3 pt-1">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

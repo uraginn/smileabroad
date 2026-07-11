@@ -4,11 +4,11 @@ import { TREATMENTS, COUNTRIES, CITIES_BY_COUNTRY } from "@/lib/constants";
 import { useMockStore } from "@/lib/mock/store";
 import { generateRoadmap } from "@/lib/roadmap";
 import {
-  AssessmentAccordion,
   AssessmentInput,
   AssessmentNavigation,
   AssessmentOption,
   AssessmentQuestion,
+  AssessmentSelectionList,
   QuickAssessmentShell,
   UploadCard,
 } from "@/components/quick-assessment/assessment-ui";
@@ -79,7 +79,7 @@ function Assessment() {
   const [conditions, setConditions] = useState<MedicalGroup>({ selected: [], other: "" });
   const [medications, setMedications] = useState<MedicalGroup>({ selected: [], other: "" });
   const [allergies, setAllergies] = useState<MedicalGroup>({ selected: [], other: "" });
-  const [openMedicalGroup, setOpenMedicalGroup] = useState("conditions");
+  const [openMedicalGroup, setOpenMedicalGroup] = useState("");
   const [uploads, setUploads] = useState({ dentalPhotos: false, panoramic: false });
 
   useEffect(() => {
@@ -517,7 +517,7 @@ function MedicalGroup({
             : [...value.selected.filter((item) => item !== "None of these"), option],
     });
   return (
-    <AssessmentAccordion
+    <AssessmentSelectionList
       title={title}
       summary={medicalSummary(value)}
       expanded={expanded}
@@ -547,7 +547,7 @@ function MedicalGroup({
           />
         )}
       </fieldset>
-    </AssessmentAccordion>
+    </AssessmentSelectionList>
   );
 }
 

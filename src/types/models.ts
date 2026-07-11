@@ -284,6 +284,8 @@ export interface TreatmentPlanItem {
   treatment: ToothTreatment;
   material?: string;
   notes?: string;
+  patient_facing_note?: string;
+  internal_note?: string;
   unit_price: number;
 }
 
@@ -293,6 +295,26 @@ export type TreatmentPlanStatus =
   | "approved"
   | "sent_to_patient"
   | "archived";
+
+export interface TreatmentStage {
+  stage_number: number;
+  title: string;
+  description?: string;
+  procedures: string[];
+  duration_or_stay?: string;
+  healing_period_after?: string;
+  patient_instructions?: string;
+}
+
+export interface TreatmentVisit {
+  visit_number: number;
+  title: string;
+  description?: string;
+  procedures: string[];
+  expected_stay?: string;
+  healing_period_after?: string;
+  patient_instructions?: string;
+}
 
 export interface TreatmentPlan extends BaseRecord {
   clinic_id: string;
@@ -307,6 +329,21 @@ export interface TreatmentPlan extends BaseRecord {
   dentist_id?: string;
   coordinator_id?: string;
   clinical_notes?: string;
+  clinical_summary?: string;
+  clinical_findings?: string[];
+  treatment_objectives?: string[];
+  patient_facing_notes?: string;
+  internal_clinical_notes?: string;
+  alternatives?: string[];
+  risks?: string[];
+  exclusions?: string[];
+  materials?: string[];
+  implant_systems?: string[];
+  temporary_solution?: string;
+  estimated_stay?: string;
+  treatment_timeline?: string;
+  treatment_stages?: TreatmentStage[];
+  visit_plan?: TreatmentVisit[];
   share_token?: string;
 }
 
@@ -332,6 +369,10 @@ export interface Quote extends BaseRecord {
   discount: number;
   payment_schedule: { label: string; amount: number; due: string }[];
   notes?: string;
+  valid_until?: string;
+  included_services?: string[];
+  excluded_services?: string[];
+  patient_message?: string;
   status?: QuoteStatus;
   share_token?: string;
 }
