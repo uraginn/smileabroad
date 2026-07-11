@@ -39,6 +39,7 @@ interface Store {
   updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>) => void;
   addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
+  addTask: (task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">) => Task;
   toggleTask: (id: string) => void;
 }
 
@@ -317,6 +318,17 @@ export const useMockStore = create<Store>()(
       },
       updateBranding: (clinic_id, patch) =>
         set((s) => ({ branding: s.branding.map((b) => (b.clinic_id === clinic_id ? { ...b, ...patch, updated_at: now() } : b)) })),
+      addTask: (task) => {
+        const rec: Task = {
+          ...task,
+          id: makeId("task"),
+          created_at: now(),
+          updated_at: now(),
+          created_by: task.assigned_to ?? "system",
+        };
+        set((s) => ({ tasks: [rec, ...s.tasks] }));
+        return rec;
+      },
       toggleTask: (id) =>
         set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, done: !t.done, updated_at: now() } : t)) })),
     }),

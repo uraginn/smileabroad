@@ -6,8 +6,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, Building2, Lock, Plus } from "lucide-react";
+import {
+  CalendarCheck2,
+  CheckSquare,
+  ClipboardList,
+  FileText,
+  Lock,
+  Mail,
+  MessageSquare,
+  Phone,
+  Plus,
+  Stethoscope,
+} from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
@@ -19,6 +32,7 @@ function PatientDetail() {
   const hydrated = useMockStoreHydrated();
   const navigate = useNavigate();
   const patient = useMockStore((s) => s.patients.find((p) => p.id === id));
+  const users = useMockStore((s) => s.users);
   const clinic = useMockStore((s) => s.clinics.find((c) => c.id === patient?.clinic_id));
   const application = useMockStore((s) =>
     s.applications.find(
@@ -46,6 +60,7 @@ function PatientDetail() {
   const allActivities = useMockStore((s) => s.activities);
   const allPlans = useMockStore((s) => s.treatmentPlans);
   const allQuotes = useMockStore((s) => s.quotes);
+  const allTasks = useMockStore((s) => s.tasks);
   const files = useMemo(
     () =>
       allFiles.filter(
@@ -62,6 +77,24 @@ function PatientDetail() {
   const internalNotes = useMemo(
     () => activities.filter((activity) => activity.kind === "note" && activity.internal),
     [activities],
+  );
+  const tasks = useMemo(
+    () =>
+      allTasks
+        .filter(
+          (task) =>
+            task.clinic_id === patient?.clinic_id &&
+            (task.lead_id === lead?.id ||
+              (!!patient?.user_id && task.patient_user_id === patient.user_id)),
+        )
+        .sort((a, b) => {
+          if (a.done !== b.done) return a.done ? 1 : -1;
+          if (a.due_at && b.due_at) return +new Date(a.due_at) - +new Date(b.due_at);
+          if (a.due_at) return -1;
+          if (b.due_at) return 1;
+          return +new Date(b.created_at) - +new Date(a.created_at);
+        }),
+    [allTasks, lead?.id, patient?.clinic_id, patient?.user_id],
   );
   const plans = useMemo(
     () =>
@@ -80,9 +113,106 @@ function PatientDetail() {
       ),
     [allQuotes, patient?.clinic_id, patient?.user_id],
   );
+
+  const clinicUsers = useMemo(
+    () => users.filter((user) => user.clinic_id === patient?.clinic_id),
+    [patient?.clinic_id, users],
+  );
+  const coordinator = useMemo(
+    () =>
+      clinicUsers.find((user) => user.id === lead?.assigned_to) ??
+      clinicUsers.find((user) => user.role === "coordinator"),
+    [clinicUsers, lead?.assigned_to],
+  );
+  const dentist = useMemo(
+    () => clinicUsers.find((user) => user.role === "dentist"),
+    [clinicUsers],
+  );
+
+  const activitiesNewestFirst = useMemo(
+    () => activities.slice().sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)),
+    [activities],
+  );
+  const nextFollowUp = useMemo(
+    () => tasks.find((task) => !task.done && !!task.due_at)?.due_at,
+    [tasks],
+  );
+
+  const assessmentTimeframe =
+    [assessment?.travel.earliest_date, assessment?.travel.latest_date].filter(Boolean).join(" - ") ||
+    assessment?.travel.treatment_timeline;
+  const warningText =
+    [assessment?.medical.complications, assessment?.medical.additional_notes]
+      .filter(Boolean)
+      .join("\n") || undefined;
+
+  const timelineEvents = useMemo(() => {
+    const events: Array<{ id: string; at: string; title: string; detail?: string }> = [];
+    if (lead) {
+      events.push({
+        id: `lead-${lead.id}`,
+        at: lead.created_at,
+        title: "Lead Created",
+        detail: `${lead.treatment} · ${lead.source}`,
+      });
+    }
+    if (assessment) {
+      events.push({
+        id: `assessment-${assessment.id}`,
+        at: assessment.created_at,
+        title: "Assessment Submitted",
+      });
+    }
+    if (roadmap) {
+      events.push({
+        id: `roadmap-${roadmap.id}`,
+        at: roadmap.created_at,
+        title: "Roadmap Generated",
+        detail: roadmap.estimated_treatment,
+      });
+    }
+    if (application) {
+      events.push({
+        id: `application-${application.id}`,
+        at: application.created_at,
+        title: "Applied to Clinic",
+        detail: application.status,
+      });
+    }
+    for (const activity of activities) {
+      events.push({
+        id: `activity-${activity.id}`,
+        at: activity.created_at,
+        title: activity.kind === "status_change" ? "Status Changed" : kindLabel(activity.kind),
+        detail: activity.body,
+      });
+    }
+    for (const plan of plans) {
+      events.push({
+        id: `plan-${plan.id}`,
+        at: plan.created_at,
+        title: "Treatment Plan Created",
+        detail: plan.title,
+      });
+    }
+    for (const quote of quotes) {
+      events.push({
+        id: `quote-${quote.id}`,
+        at: quote.created_at,
+        title: "Quote Sent",
+        detail: quote.id,
+      });
+    }
+    return events.sort((a, b) => +new Date(a.at) - +new Date(b.at));
+  }, [activities, application, assessment, lead, plans, quotes, roadmap]);
+
   const [internalNote, setInternalNote] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
   const addTreatmentPlan = useMockStore((s) => s.addTreatmentPlan);
   const addLeadActivity = useMockStore((s) => s.addLeadActivity);
+  const addTask = useMockStore((s) => s.addTask);
+  const toggleTask = useMockStore((s) => s.toggleTask);
   const activeUser = useAuth((s) => s.user);
 
   if (!hydrated) return null;
@@ -121,55 +251,124 @@ function PatientDetail() {
     toast.success("Internal note saved");
   };
 
+  const saveTask = () => {
+    const title = taskTitle.trim();
+    if (!title) return;
+    addTask({
+      clinic_id: patient.clinic_id,
+      lead_id: lead?.id,
+      patient_user_id: patient.user_id,
+      title,
+      due_at: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
+      assigned_to: coordinator?.id ?? activeUser?.id,
+      done: false,
+      status: "open",
+    });
+    setTaskTitle("");
+    setTaskDueDate("");
+    toast.success("Task added");
+  };
+
+  const patientName = `${patient.first_name} ${patient.last_name}`;
+
   return (
-    <div className="p-4 sm:p-6 max-w-6xl space-y-4">
+    <div className="p-4 sm:p-6 max-w-6xl space-y-6">
       <PageHeader
-        title={`${patient.first_name} ${patient.last_name}`}
+        title={patientName}
         description={`${patient.country} • ${patient.language ?? "Language not set"} • ${patient.email}`}
         actions={
-          <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
-            <Plus className="size-4 mr-1" /> Create treatment plan
-          </Button>
+          <>
+            <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
+              <Plus className="size-4 mr-1" /> Create Treatment Plan
+            </Button>
+            <Button asChild variant="outline" disabled={quotes.length === 0}>
+              <Link to="." hash="quotes">View Quotes</Link>
+            </Button>
+            <Button variant="outline" disabled>
+              <CalendarCheck2 className="size-4 mr-1" /> Schedule Appointment
+            </Button>
+          </>
         }
       />
 
       <Card>
         <CardContent className="p-4 sm:p-5">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Summary
-              title="Clinic"
-              value={clinic?.name ?? patient.clinic_id}
-              icon={<Building2 className="size-4" />}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <HeaderField label="Country" value={patient.country} />
+            <HeaderField label="Preferred language" value={patient.language} />
+            <HeaderField label="Lead source" value={lead?.source ?? patient.source} capitalize />
+            <HeaderField
+              label="Treatment interest"
+              value={patient.treatment_interest ?? assessment?.dental.treatment_interest}
             />
-            <Summary
-              title="Treatment interest"
-              value={
-                patient.treatment_interest ??
-                assessment?.dental.treatment_interest ??
-                "Not specified"
-              }
+            <HeaderField label="Coordinator" value={coordinator?.name} />
+            <HeaderField label="Dentist" value={dentist?.name ?? "Not assigned"} />
+            <HeaderField
+              label="Current CRM stage"
+              value={lead?.status?.replace(/_/g, " ") ?? "Not linked"}
+              capitalize
             />
-            <Summary title="Application" value={application?.status ?? "Not linked"} />
-            <Summary title="Roadmap" value={roadmap ? "Linked" : "Not linked"} />
+            <HeaderField label="Last activity" value={formatDateTime(lead?.last_activity_at)} />
+            <HeaderField label="Next follow-up" value={formatDateTime(nextFollowUp)} />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {lead?.status && (
-              <Badge variant="secondary" className="capitalize">
-                Lead: {lead.status.replace(/_/g, " ")}
-              </Badge>
-            )}
-            {patient.source && (
-              <Badge variant="outline" className="capitalize">
-                Source: {patient.source}
-              </Badge>
-            )}
-            {application?.id && (
-              <Badge variant="outline">Application {application.id.slice(0, 8)}</Badge>
-            )}
-            {roadmap?.id && <Badge variant="outline">Roadmap {roadmap.id.slice(0, 8)}</Badge>}
+            {clinic && <Badge variant="outline">{clinic.name}</Badge>}
+            {application?.status && <Badge variant="secondary">Application: {application.status}</Badge>}
+            {lead?.priority && <Badge variant="outline">Priority: {lead.priority}</Badge>}
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-5 space-y-3">
+            <h3 className="font-display font-semibold">Assessment</h3>
+            <DetailRows
+              rows={[
+                ["Treatment interest", assessment?.dental.treatment_interest],
+                ["Preferred destination", assessment?.travel.destination_country],
+                ["Preferred cities", assessment?.travel.preferred_cities?.join(", ")],
+                ["Travel timeframe", assessmentTimeframe],
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 space-y-3">
+            <h3 className="font-display font-semibold">Medical</h3>
+            <DetailRows
+              rows={[
+                ["Allergies", assessment?.medical.allergies],
+                ["Medications", assessment?.medical.medications],
+                ["Smoking", assessment ? (assessment.medical.smoking ? "Yes" : "No") : undefined],
+                ["Important warnings", warningText],
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 space-y-3">
+            <h3 className="font-display font-semibold">Files</h3>
+            {files.length === 0 ? (
+              <EmptyState title="No uploads yet" description="Uploaded file metadata will appear here." />
+            ) : (
+              <div className="space-y-2">
+                {files.slice(0, 3).map((file) => (
+                  <div key={file.id} className="rounded-lg border p-2.5">
+                    <p className="text-sm font-medium truncate">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {file.kind.replace(/_/g, " ")} · {formatBytes(file.size)}
+                    </p>
+                  </div>
+                ))}
+                {files.length > 3 && (
+                  <p className="text-xs text-muted-foreground">+{files.length - 3} more files</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Tabs defaultValue="overview">
         <TabsList className="mb-4 flex-wrap h-auto">
@@ -180,7 +379,7 @@ function PatientDetail() {
             ["files", "Files"],
             ["notes", "Notes"],
             ["tasks", "Tasks"],
-            ["plans", "Treatment Plans"],
+            ["treatment-plans", "Treatment Plans"],
             ["quotes", "Quotes"],
             ["activity", "Activity"],
           ].map(([value, label]) => (
@@ -205,19 +404,20 @@ function PatientDetail() {
             </Card>
             <Card>
               <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground">Status</p>
-                <Badge className="mt-2">Active</Badge>
+                <p className="text-xs text-muted-foreground">Open tasks</p>
+                <p className="text-2xl font-display font-semibold mt-1">
+                  {tasks.filter((task) => !task.done).length}
+                </p>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
         <TabsContent value="assessment">
           {!assessment ? (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                No assessment is linked to this patient.
-              </CardContent>
-            </Card>
+            <EmptyState
+              title="No assessment linked"
+              description="Assessment details will appear when available."
+            />
           ) : (
             <div className="grid lg:grid-cols-2 gap-4">
               <DetailCard
@@ -287,9 +487,10 @@ function PatientDetail() {
           <Card>
             <CardContent className="p-6">
               {!assessment ? (
-                <p className="text-sm text-muted-foreground">
-                  No medical information is linked to this patient.
-                </p>
+                <EmptyState
+                  title="No medical data linked"
+                  description="Medical details will appear when available."
+                />
               ) : (
                 <div className="space-y-5">
                   <div>
@@ -327,7 +528,10 @@ function PatientDetail() {
           <Card>
             <CardContent className="p-6">
               {files.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No uploaded files.</p>
+                <EmptyState
+                  title="No uploaded files"
+                  description="File metadata will appear here when uploads exist."
+                />
               ) : (
                 <div className="divide-y">
                   {files.map((file) => (
@@ -335,7 +539,7 @@ function PatientDetail() {
                       <div>
                         <p className="text-sm font-medium">{file.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {file.kind.replace(/_/g, " ")}
+                          {file.kind.replace(/_/g, " ")} · {formatDateTime(file.created_at)}
                         </p>
                       </div>
                       <Badge variant="outline">{file.mime}</Badge>
@@ -366,7 +570,12 @@ function PatientDetail() {
                   A CRM lead is required before notes can be saved.
                 </p>
               )}
-              {internalNotes.length > 0 && (
+              {internalNotes.length === 0 ? (
+                <EmptyState
+                  title="No internal notes"
+                  description="Add a note to keep clinic-only context on this patient."
+                />
+              ) : (
                 <div className="pt-4 border-t space-y-3">
                   {internalNotes
                     .slice()
@@ -386,20 +595,62 @@ function PatientDetail() {
         </TabsContent>
         <TabsContent value="tasks">
           <Card>
-            <CardContent className="p-6">
-              <EmptyState
-                title="No linked tasks yet"
-                description="Patient-specific task workflow is not configured in this mock screen."
-              />
+            <CardContent className="p-6 space-y-4">
+              <div className="grid md:grid-cols-[1fr_auto_auto] gap-2">
+                <Input
+                  placeholder="Add task"
+                  value={taskTitle}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                />
+                <Input
+                  type="date"
+                  value={taskDueDate}
+                  onChange={(event) => setTaskDueDate(event.target.value)}
+                />
+                <Button onClick={saveTask} disabled={!taskTitle.trim()}>
+                  <Plus className="size-4 mr-1" /> Add task
+                </Button>
+              </div>
+
+              {tasks.length === 0 ? (
+                <EmptyState title="No tasks" description="Add tasks to track follow-ups for this patient." />
+              ) : (
+                <div className="divide-y rounded-lg border">
+                  {tasks.map((task) => (
+                    <label
+                      key={task.id}
+                      className="flex items-center gap-3 p-3 cursor-pointer hover:bg-surface/70"
+                    >
+                      <Checkbox checked={task.done} onCheckedChange={() => toggleTask(task.id)} />
+                      <div className="flex-1 min-w-0">
+                        <p className={task.done ? "line-through text-muted-foreground" : ""}>
+                          {task.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {task.due_at ? `Due ${format(new Date(task.due_at), "MMM d, yyyy")}` : "No due date"}
+                        </p>
+                      </div>
+                      <Badge variant={task.done ? "outline" : "secondary"}>
+                        {task.done ? "Completed" : "Open"}
+                      </Badge>
+                    </label>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="plans">
+        <TabsContent value="treatment-plans">
           <div className="space-y-2">
             {plans.length === 0 ? (
               <EmptyState
                 title="No treatment plans yet"
                 description="Create a treatment plan to capture clinical scope and pricing assumptions."
+                action={
+                  <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
+                    <Plus className="size-4 mr-1" /> Create Treatment Plan
+                  </Button>
+                }
               />
             ) : (
               plans.map((p) => (
@@ -409,7 +660,7 @@ function PatientDetail() {
                       <div>
                         <p className="font-medium">{p.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {p.items.length} items · {p.visits} visits
+                          {p.items.length} items · {p.visits} visits · {formatDateTime(p.created_at)}
                         </p>
                       </div>
                       <Badge className="capitalize">{p.status ?? "draft"}</Badge>
@@ -421,7 +672,7 @@ function PatientDetail() {
           </div>
         </TabsContent>
         <TabsContent value="quotes">
-          <div className="space-y-2">
+          <div className="space-y-2" id="quotes">
             {quotes.length === 0 ? (
               <EmptyState
                 title="No quotes yet"
@@ -433,10 +684,15 @@ function PatientDetail() {
                   <Card className="hover:border-primary transition">
                     <CardContent className="p-4 flex items-center justify-between">
                       <div>
-                        <p className="font-medium">Quote {q.id.slice(0, 6)}</p>
-                        <p className="text-xs text-muted-foreground">{q.items.length} items</p>
+                        <p className="font-medium">Quote {q.id.slice(0, 8)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {q.items.length} items · {formatDateTime(q.created_at)}
+                        </p>
                       </div>
-                      <Badge>{q.currency}</Badge>
+                      <div className="text-right">
+                        <Badge className="capitalize">{q.status ?? "draft"}</Badge>
+                        <p className="text-sm mt-1 font-medium">{formatMoney(quoteGrandTotal(q), q.currency)}</p>
+                      </div>
                     </CardContent>
                   </Card>
                 </Link>
@@ -447,22 +703,26 @@ function PatientDetail() {
         <TabsContent value="activity">
           <Card>
             <CardContent className="p-6">
-              {activities.length === 0 ? (
+              {activitiesNewestFirst.length === 0 ? (
                 <EmptyState
                   title="No activity yet"
                   description="Lead status changes and notes will be listed once available."
                 />
               ) : (
                 <div className="space-y-3">
-                  {activities.map((activity) => (
+                  {activitiesNewestFirst.map((activity) => (
                     <div
                       key={activity.id}
                       className="flex gap-3 border-l-2 border-primary/30 pl-4 py-1"
                     >
+                      <div className="mt-0.5">{kindIcon(activity.kind)}</div>
                       <div className="flex-1">
                         <p className="text-sm">{activity.body}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {activity.kind.replace(/_/g, " ")}
+                        <p className="text-xs text-muted-foreground">
+                          {kindLabel(activity.kind)}
+                          {users.find((user) => user.id === activity.created_by)
+                            ? ` · ${users.find((user) => user.id === activity.created_by)?.name}`
+                            : ""}
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -477,22 +737,51 @@ function PatientDetail() {
         </TabsContent>
       </Tabs>
 
-      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <ArrowRight className="size-3" />
-        Patient and lead links remain clinic-scoped in mock selectors.
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <ClipboardList className="size-4 text-muted-foreground" />
+            <h3 className="font-display font-semibold">Timeline</h3>
+          </div>
+          {timelineEvents.length === 0 ? (
+            <EmptyState
+              title="No timeline events"
+              description="Timeline events will appear as patient records are created."
+            />
+          ) : (
+            <div className="space-y-3">
+              {timelineEvents.map((event) => (
+                <div key={event.id} className="flex gap-3 border-l-2 border-primary/30 pl-4 py-1">
+                  <p className="text-xs text-muted-foreground w-36 shrink-0">{formatDateTime(event.at)}</p>
+                  <div>
+                    <p className="text-sm font-medium">{event.title}</p>
+                    {event.detail && <p className="text-xs text-muted-foreground">{event.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function Summary({ title, value, icon }: { title: string; value: string; icon?: ReactNode }) {
+function HeaderField({
+  label,
+  value,
+  capitalize,
+}: {
+  label: string;
+  value?: string;
+  capitalize?: boolean;
+}) {
   return (
     <div className="rounded-lg border bg-surface/50 p-3">
-      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        {icon}
-        {title}
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-sm font-medium mt-1 line-clamp-2 ${capitalize ? "capitalize" : ""}`}>
+        {value ?? "Not available"}
       </p>
-      <p className="text-sm font-medium mt-1 line-clamp-2">{value}</p>
     </div>
   );
 }
@@ -524,4 +813,78 @@ function DetailRows({ rows }: { rows: DetailRow[] }) {
       ))}
     </dl>
   );
+}
+
+function kindLabel(kind: string) {
+  switch (kind) {
+    case "note":
+      return "Note";
+    case "status_change":
+      return "Status change";
+    case "email":
+      return "Email";
+    case "call":
+      return "Call";
+    case "task":
+      return "Task";
+    case "file":
+      return "File";
+    default:
+      return kind;
+  }
+}
+
+function kindIcon(kind: string): ReactNode {
+  const className = "size-4 text-muted-foreground";
+  switch (kind) {
+    case "note":
+      return <MessageSquare className={className} />;
+    case "status_change":
+      return <Stethoscope className={className} />;
+    case "email":
+      return <Mail className={className} />;
+    case "call":
+      return <Phone className={className} />;
+    case "task":
+      return <CheckSquare className={className} />;
+    case "file":
+      return <FileText className={className} />;
+    default:
+      return <MessageSquare className={className} />;
+  }
+}
+
+function quoteGrandTotal(totalQuote: {
+  items: Array<{ qty: number; unit_price: number }>;
+  hotel_total: number;
+  transfer_total: number;
+  discount: number;
+}) {
+  const itemsTotal = totalQuote.items.reduce((sum, item) => sum + item.qty * item.unit_price, 0);
+  return itemsTotal + totalQuote.hotel_total + totalQuote.transfer_total - totalQuote.discount;
+}
+
+function formatMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return format(date, "MMM d, yyyy HH:mm");
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
