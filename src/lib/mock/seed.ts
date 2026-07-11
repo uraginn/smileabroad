@@ -138,7 +138,9 @@ export const seedTreatmentPlans: TreatmentPlan[] = [
       { id: id("tpi"), tooth: 26, treatment: "implant", material: "Straumann", unit_price: 780 },
       { id: id("tpi"), tooth: 14, treatment: "pontic", unit_price: 250 },
     ],
-    visits: 2, healing_weeks: 12, share_token: "share_sofia_upper" },
+    clinical_findings: [], treatment_objectives: [], alternatives: [], risks: [], exclusions: [],
+    materials: [], implant_systems: [], treatment_stages: [], visit_plan: [],
+    visits: 2, healing_weeks: 12, status: "draft", share_token: "share_sofia_upper" },
 ];
 
 export const seedQuotes: Quote[] = [
@@ -157,6 +159,7 @@ export const seedQuotes: Quote[] = [
       { label: "Final delivery", amount: 1450, due: "Month 4" },
     ],
     notes: "Includes CBCT, all consultations, sedation and follow-up.",
+    included_services: [], excluded_services: [],
     share_token: "share_sofia_upper" },
 ];
 

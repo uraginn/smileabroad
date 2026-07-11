@@ -32,7 +32,10 @@ function Plans() {
         description="FDI-based plans prepared for clinic patients."
       />
       {plans.length === 0 ? (
-        <EmptyState title="No treatment plans" description="Create a treatment plan from a patient record to begin clinical planning." />
+        <EmptyState
+          title="No treatment plans"
+          description="Create a treatment plan from a patient record to begin clinical planning."
+        />
       ) : (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
@@ -51,21 +54,27 @@ function Plans() {
               <TableBody>
                 {plans.map((plan) => {
                   const patient = patients.find((item) => item.id === plan.clinic_patient_id);
-                  const estimatedTotal = plan.items.reduce((sum, item) => sum + item.unit_price, 0);
+                  const items = Array.isArray(plan.items) ? plan.items : [];
+                  const estimatedTotal = items.reduce(
+                    (sum, item) => sum + (Number(item.unit_price) || 0),
+                    0,
+                  );
+                  const updatedAt =
+                    plan.updated_at && !Number.isNaN(Date.parse(plan.updated_at))
+                      ? formatCrmDate(plan.updated_at)
+                      : "Not updated";
                   return (
                     <TableRow key={plan.id}>
                       <TableCell className="font-medium">{plan.title}</TableCell>
                       <TableCell>
                         {patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
                       </TableCell>
-                      <TableCell>{plan.items.length}</TableCell>
+                      <TableCell>{items.length}</TableCell>
                       <TableCell>{formatQuoteMoney(estimatedTotal, "EUR")}</TableCell>
                       <TableCell>
-                        <StatusBadge status={plan.status} />
+                        <StatusBadge status={plan.status ?? "draft"} />
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatCrmDate(plan.updated_at)}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{updatedAt}</TableCell>
                       <TableCell className="text-right">
                         <Link
                           to="/pro/treatment-plans/$id"

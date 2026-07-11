@@ -421,7 +421,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 5,
+      version: 6,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -465,13 +465,30 @@ export const useMockStore = create<Store>()(
         const treatmentPlans = (state.treatmentPlans ?? []).map((plan) => {
           const quote = (state.quotes ?? []).find((item) => item.treatment_plan_id === plan.id);
           const shareToken = plan.share_token ?? quote?.share_token ?? `share_${plan.id}`;
-          return plan.share_token === shareToken ? plan : { ...plan, share_token: shareToken };
+          return {
+            ...plan,
+            status: plan.status ?? "draft",
+            items: Array.isArray(plan.items) ? plan.items : [],
+            clinical_findings: Array.isArray(plan.clinical_findings) ? plan.clinical_findings : [],
+            treatment_objectives: Array.isArray(plan.treatment_objectives) ? plan.treatment_objectives : [],
+            alternatives: Array.isArray(plan.alternatives) ? plan.alternatives : [],
+            risks: Array.isArray(plan.risks) ? plan.risks : [],
+            exclusions: Array.isArray(plan.exclusions) ? plan.exclusions : [],
+            materials: Array.isArray(plan.materials) ? plan.materials : [],
+            implant_systems: Array.isArray(plan.implant_systems) ? plan.implant_systems : [],
+            treatment_stages: Array.isArray(plan.treatment_stages) ? plan.treatment_stages : [],
+            visit_plan: Array.isArray(plan.visit_plan) ? plan.visit_plan : [],
+            share_token: shareToken,
+          };
         });
         const quotes = (state.quotes ?? []).map((quote) => {
           const plan = treatmentPlans.find((item) => item.id === quote.treatment_plan_id);
-          return plan && !quote.share_token
-            ? { ...quote, share_token: plan.share_token }
-            : quote;
+          return {
+            ...quote,
+            included_services: Array.isArray(quote.included_services) ? quote.included_services : [],
+            excluded_services: Array.isArray(quote.excluded_services) ? quote.excluded_services : [],
+            share_token: quote.share_token ?? plan?.share_token,
+          };
         });
         return {
           ...state,
@@ -503,6 +520,6 @@ export const selectClinicLeads = (clinicId: string) => (s: Store) => s.leads.fil
 export const selectClinicPatients = (clinicId: string) => (s: Store) => s.patients.filter((p) => p.clinic_id === clinicId);
 export const selectClinicTasks = (clinicId: string) => (s: Store) => s.tasks.filter((t) => t.clinic_id === clinicId);
 export const selectClinicAppointments = (clinicId: string) => (s: Store) => s.appointments.filter((a) => a.clinic_id === clinicId);
-export const selectClinicPlans = (clinicId: string) => (s: Store) => s.treatmentPlans.filter((t) => t.clinic_id === clinicId);
+export const selectClinicPlans = (clinicId: string) => (s: Store) => (s.treatmentPlans ?? []).filter((t) => t.clinic_id === clinicId);
 export const selectClinicQuotes = (clinicId: string) => (s: Store) => s.quotes.filter((q) => q.clinic_id === clinicId);
 export const selectClinicBranding = (clinicId: string) => (s: Store) => s.branding.find((b) => b.clinic_id === clinicId);
