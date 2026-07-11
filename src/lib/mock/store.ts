@@ -38,6 +38,7 @@ interface Store {
   addTreatmentPlan: (tp: Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => TreatmentPlan;
   updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>, changedBy?: string) => void;
   addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
+  updateQuote: (id: string, patch: Partial<Quote>, changedBy?: string) => void;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
   addTask: (task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => Task;
   toggleTask: (id: string, changedBy?: string) => void;
@@ -341,18 +342,40 @@ export const useMockStore = create<Store>()(
             quote.clinic_id === q.clinic_id && quote.treatment_plan_id === q.treatment_plan_id,
         );
         if (existing) return existing;
-        const plan = get().treatmentPlans.find((item) => item.id === q.treatment_plan_id);
-        const shareToken = plan?.share_token ?? q.share_token ?? makeId("share");
-        const rec: Quote = { ...q, share_token: shareToken, id: makeId("q"), created_at: now(), updated_at: now(), created_by: q.patient_user_id };
+        const groupedItems = Array.from(q.items.reduce((groups, item) => {
+          const label = item.label.replace(/^Tooth \d+ · /, "");
+          const key = `${label}|${item.unit_price}`;
+          const existing = groups.get(key);
+          groups.set(key, existing ? { ...existing, qty: existing.qty + item.qty } : { ...item, label });
+          return groups;
+        }, new Map<string, Quote["items"][number]>()).values());
+        const rec: Quote = { ...q, items: groupedItems, status: q.status ?? "draft", share_token: undefined, id: makeId("q"), created_at: now(), updated_at: now(), created_by: q.patient_user_id };
         set((s) => ({
           quotes: [...s.quotes, rec],
-          treatmentPlans: s.treatmentPlans.map((item) =>
-            item.id === q.treatment_plan_id && item.share_token !== shareToken
-              ? { ...item, share_token: shareToken, updated_at: now() }
-              : item,
-          ),
         }));
         return rec;
+      },
+      updateQuote: (id, patch, changedBy = "system") => {
+        const quote = get().quotes.find((item) => item.id === id);
+        if (!quote) return;
+        const timestamp = now();
+        const nextStatus = patch.status ?? quote.status ?? "draft";
+        const shareToken = ["approved", "sent"].includes(nextStatus)
+          ? quote.share_token ?? makeId("share")
+          : quote.share_token;
+        const sentNow = nextStatus === "sent" && (quote.status ?? "draft") !== "sent";
+        const lead = get().leads.find((item) => item.clinic_id === quote.clinic_id && (item.clinic_patient_id === quote.clinic_patient_id || item.patient_user_id === quote.patient_user_id));
+        const activity: LeadActivity | undefined = sentNow && lead ? {
+          id: makeId("activity"), clinic_id: quote.clinic_id, lead_id: lead.id,
+          kind: "status_change", body: `Quote ${quote.id.slice(0, 8)} sent to patient.`, internal: true,
+          created_at: timestamp, updated_at: timestamp, created_by: changedBy,
+        } : undefined;
+        set((s) => ({
+          quotes: s.quotes.map((item) => item.id === id ? { ...item, ...patch, status: nextStatus, share_token: shareToken, updated_at: timestamp } : item),
+          treatmentPlans: shareToken ? s.treatmentPlans.map((plan) => plan.id === quote.treatment_plan_id ? { ...plan, share_token: shareToken, updated_at: timestamp } : plan) : s.treatmentPlans,
+          activities: activity ? [...s.activities, activity] : s.activities,
+          leads: lead ? s.leads.map((item) => item.id === lead.id ? { ...item, status: sentNow ? "quote_sent" : item.status, last_activity_at: timestamp, updated_at: timestamp } : item) : s.leads,
+        }));
       },
       updateBranding: (clinic_id, patch) =>
         set((s) => ({ branding: s.branding.map((b) => (b.clinic_id === clinic_id ? { ...b, ...patch, updated_at: now() } : b)) })),

@@ -25,6 +25,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
 
 export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDetail });
 
@@ -774,24 +775,25 @@ function PatientDetail() {
                 description="Once a treatment plan is priced, related quotes will appear here."
               />
             ) : (
-              quotes.map((q) => (
-                <Link key={q.id} to="/pro/quotes/$id" params={{ id: q.id }}>
-                  <Card className="hover:border-primary transition">
-                    <CardContent className="p-4 flex items-center justify-between">
+              quotes.map((q) => {
+                const quotePlan = plans.find((plan) => plan.id === q.treatment_plan_id);
+                return <Card key={q.id}>
+                    <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
                       <div>
                         <p className="font-medium">Quote {q.id.slice(0, 8)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {q.items.length} items · {formatDateTime(q.created_at)}
+                          {quotePlan?.title ?? "Treatment plan"} · Updated {formatDateTime(q.updated_at)}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="flex items-center gap-2">
                         <Badge className="capitalize">{q.status ?? "draft"}</Badge>
-                        <p className="text-sm mt-1 font-medium">{formatMoney(quoteGrandTotal(q), q.currency)}</p>
+                        <span className="text-sm font-medium">{formatQuoteMoney(calculateQuoteTotals(q).total, q.currency)}</span>
+                        <Button asChild size="sm" variant="outline"><Link to="/pro/quotes/$id" params={{ id: q.id }}>Open Quote</Link></Button>
+                        {q.share_token && <Button asChild size="sm" variant="ghost"><Link to="/shared/treatment-plan/$token" params={{ token: q.share_token }}>Preview</Link></Button>}
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
-              ))
+              })
             )}
           </div>
         </TabsContent>
@@ -953,28 +955,6 @@ function kindIcon(kind: string): ReactNode {
       return <FileText className={className} />;
     default:
       return <MessageSquare className={className} />;
-  }
-}
-
-function quoteGrandTotal(totalQuote: {
-  items: Array<{ qty: number; unit_price: number }>;
-  hotel_total: number;
-  transfer_total: number;
-  discount: number;
-}) {
-  const itemsTotal = totalQuote.items.reduce((sum, item) => sum + item.qty * item.unit_price, 0);
-  return itemsTotal + totalQuote.hotel_total + totalQuote.transfer_total - totalQuote.discount;
-}
-
-function formatMoney(amount: number, currency: string) {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${amount} ${currency}`;
   }
 }
 

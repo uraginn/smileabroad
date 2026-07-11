@@ -4,182 +4,90 @@ import { PageHeader } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ExternalLink, Building2, UserRound } from "lucide-react";
-import { calculateQuoteTotals } from "@/lib/quote";
-import type { ReactNode } from "react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ExternalLink, Plus, Trash2 } from "lucide-react";
+import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
+import type { Quote, QuoteCurrency, QuoteStatus } from "@/types/models";
+import { useState } from "react";
+import { useAuth } from "@/lib/auth/mock-auth";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/pro/quotes/$id")({ component: QuoteEditor });
 
 function QuoteEditor() {
   const { id } = Route.useParams();
+  const activeUser = useAuth((s) => s.user);
   const hydrated = useMockStoreHydrated();
-  const quote = useMockStore((s) => s.quotes.find((q) => q.id === id));
-  const clinic = useMockStore((s) => s.clinics.find((item) => item.id === quote?.clinic_id));
-  const patient = useMockStore((s) =>
-    s.patients.find((item) => item.id === quote?.clinic_patient_id),
-  );
-  const plan = useMockStore((s) =>
-    s.treatmentPlans.find((item) => item.id === quote?.treatment_plan_id),
-  );
+  const quote = useMockStore((s) => s.quotes.find((item) => item.id === id && item.clinic_id === activeUser?.clinic_id));
   if (!hydrated) return null;
   if (!quote) throw notFound();
-  const { subtotal, total } = calculateQuoteTotals(quote);
-  const c = quote.currency === "USD" ? "$" : "€";
-  return (
-    <div className="p-4 sm:p-6 max-w-5xl space-y-4">
-      <PageHeader
-        title={`Quote ${quote.id.slice(0, 8)}`}
-        description={quote.notes}
-        actions={
-          quote.share_token && (
-            <Button asChild variant="outline">
-              <Link to="/shared/treatment-plan/$token" params={{ token: quote.share_token }}>
-                <ExternalLink className="size-4 mr-1" /> Preview shared
-              </Link>
-            </Button>
-          )
-        }
-      />
-
-      <Card>
-        <CardContent className="p-4 sm:p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Meta
-            label="Clinic"
-            value={clinic?.name ?? quote.clinic_id}
-            icon={<Building2 className="size-4" />}
-          />
-          <Meta
-            label="Patient"
-            value={patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
-            icon={<UserRound className="size-4" />}
-          />
-          <Meta label="Treatment plan" value={plan?.title ?? quote.treatment_plan_id} />
-          <Meta label="Currency" value={quote.currency} />
-          <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-2">
-            <Badge variant="secondary" className="capitalize">
-              Status: {quote.status ?? "draft"}
-            </Badge>
-            {quote.share_token ? (
-              <Badge variant="outline">Shared link ready</Badge>
-            ) : (
-              <Badge variant="outline">Shared link unavailable</Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-6 space-y-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Unit</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {quote.items.map((i) => (
-                <TableRow key={i.id}>
-                  <TableCell>{i.label}</TableCell>
-                  <TableCell className="text-right">{i.qty}</TableCell>
-                  <TableCell className="text-right">
-                    {c}
-                    {i.unit_price}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {c}
-                    {(i.qty * i.unit_price).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="border-t pt-4 space-y-1 text-sm">
-            <Row k="Subtotal" v={`${c}${subtotal.toLocaleString()}`} />
-            <Row k="Hotel" v={`${c}${quote.hotel_total.toLocaleString()}`} />
-            <Row k="Transfers" v={`${c}${quote.transfer_total.toLocaleString()}`} />
-            <Row k="Discount" v={`- ${c}${quote.discount.toLocaleString()}`} />
-            <div className="pt-2 border-t flex justify-between font-display text-lg font-semibold">
-              <span>Total</span>
-              <span>
-                {c}
-                {total.toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">Payment schedule</h3>
-            {quote.payment_schedule.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No payment schedule defined for this draft quote.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {quote.payment_schedule.map((p, i) => (
-                  <div key={i} className="flex justify-between text-sm p-2 bg-surface rounded">
-                    <span>
-                      {p.label} <span className="text-muted-foreground">({p.due})</span>
-                    </span>
-                    <span>
-                      {c}
-                      {p.amount.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="border rounded-lg p-4 bg-surface/50">
-            <h3 className="text-sm font-semibold mb-2">Shared plan link area</h3>
-            {quote.share_token ? (
-              <Button asChild variant="outline" size="sm">
-                <Link to="/shared/treatment-plan/$token" params={{ token: quote.share_token }}>
-                  <ExternalLink className="size-4 mr-1" /> Open patient-facing preview
-                </Link>
-              </Button>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Shared token is not available for this quote yet.
-              </p>
-            )}
-          </div>
-
-          <p className="text-xs text-muted-foreground border-t pt-4">
-            Estimates are subject to clinical examination on arrival.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{k}</span>
-      <span>{v}</span>
-    </div>
-  );
+  return <QuoteForm quote={quote} actorId={activeUser?.id ?? "system"} />;
 }
 
-function Meta({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
-  return (
-    <div className="rounded-lg border p-3 bg-surface/50">
-      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        {icon}
-        {label}
-      </p>
-      <p className="text-sm font-medium mt-1 line-clamp-2">{value}</p>
-    </div>
-  );
+function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
+  const patient = useMockStore((s) => s.patients.find((item) => item.id === quote.clinic_patient_id || (item.clinic_id === quote.clinic_id && item.user_id === quote.patient_user_id)));
+  const plan = useMockStore((s) => s.treatmentPlans.find((item) => item.id === quote.treatment_plan_id && item.clinic_id === quote.clinic_id));
+  const updateQuote = useMockStore((s) => s.updateQuote);
+  const [currency, setCurrency] = useState<QuoteCurrency>(quote.currency);
+  const [hotelTotal, setHotelTotal] = useState(quote.hotel_total);
+  const [transferTotal, setTransferTotal] = useState(quote.transfer_total);
+  const [discount, setDiscount] = useState(quote.discount);
+  const [notes, setNotes] = useState(quote.notes ?? "");
+  const [status, setStatus] = useState<QuoteStatus>(quote.status ?? "draft");
+  const [payments, setPayments] = useState<Quote["payment_schedule"]>(quote.payment_schedule);
+  const draftQuote: Quote = { ...quote, currency, hotel_total: hotelTotal, transfer_total: transferTotal, discount, notes, status, payment_schedule: payments };
+  const { subtotal, total } = calculateQuoteTotals(draftQuote);
+  const paymentTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const setPayment = (index: number, patch: Partial<Quote["payment_schedule"][number]>) => setPayments((current) => current.map((payment, itemIndex) => itemIndex === index ? { ...payment, ...patch } : payment));
+  const save = () => {
+    updateQuote(quote.id, { currency, hotel_total: hotelTotal, transfer_total: transferTotal, discount, notes, status, payment_schedule: payments }, actorId);
+    toast.success("Quote saved");
+  };
+
+  return <div className="p-4 sm:p-6 max-w-5xl space-y-4">
+    <PageHeader title={`Quote ${quote.id.slice(0, 8)}`} description={plan?.title ?? "Treatment plan quote"} actions={<div className="flex gap-2">
+      {quote.share_token && <Button asChild variant="outline"><Link to="/shared/treatment-plan/$token" params={{ token: quote.share_token }}><ExternalLink className="size-4 mr-1" /> Preview shared</Link></Button>}
+      <Button onClick={save}>Save quote</Button>
+    </div>} />
+
+    <Card><CardContent className="p-4 sm:p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Meta label="Patient" value={patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"} />
+      <Meta label="Treatment plan" value={plan?.title ?? quote.treatment_plan_id} />
+      <Meta label="Items" value={`${quote.items.length}`} />
+      <Meta label="Updated" value={new Date(quote.updated_at).toLocaleString()} />
+      <div className="sm:col-span-2 lg:col-span-4 flex gap-2"><Badge variant="secondary" className="capitalize">{(quote.status ?? "draft").replace(/_/g, " ")}</Badge>{quote.share_token && <Badge variant="outline">Shared link ready</Badge>}</div>
+    </CardContent></Card>
+
+    <Card><CardContent className="p-6 space-y-5">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <Field label="Currency"><Select value={currency} onValueChange={(value) => setCurrency(value as QuoteCurrency)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["GBP", "EUR", "USD", "TRY"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></Field>
+        <MoneyInput label="Hotel total" value={hotelTotal} onChange={setHotelTotal} />
+        <MoneyInput label="Transfer total" value={transferTotal} onChange={setTransferTotal} />
+        <MoneyInput label="Discount" value={discount} onChange={setDiscount} />
+        <Field label="Status"><Select value={status} onValueChange={(value) => setStatus(value as QuoteStatus)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["draft", "approved", "sent", "viewed", "accepted", "declined", "expired"].map((value) => <SelectItem key={value} value={value}>{value.replace(/_/g, " ")}</SelectItem>)}</SelectContent></Select></Field>
+      </div>
+      <Field label="Notes"><Textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} /></Field>
+    </CardContent></Card>
+
+    <Card><CardContent className="p-6 space-y-4">
+      <h3 className="font-semibold">Treatment items</h3>
+      <Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Unit</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{quote.items.map((item) => <TableRow key={item.id}><TableCell>{item.label}</TableCell><TableCell className="text-right">{item.qty}</TableCell><TableCell className="text-right">{formatQuoteMoney(item.unit_price, currency)}</TableCell><TableCell className="text-right">{formatQuoteMoney(item.qty * item.unit_price, currency)}</TableCell></TableRow>)}</TableBody></Table>
+      <div className="border-t pt-3 space-y-1 text-sm"><Row label="Subtotal" value={formatQuoteMoney(subtotal, currency)} /><Row label="Hotel" value={formatQuoteMoney(hotelTotal, currency)} /><Row label="Transfers" value={formatQuoteMoney(transferTotal, currency)} /><Row label="Discount" value={`- ${formatQuoteMoney(discount, currency)}`} /><div className="border-t pt-2 mt-2"><Row label="Total" value={formatQuoteMoney(total, currency)} strong /></div></div>
+    </CardContent></Card>
+
+    <Card><CardContent className="p-6 space-y-4">
+      <div className="flex justify-between gap-3"><div><h3 className="font-semibold">Payment schedule</h3><p className="text-xs text-muted-foreground">Payments do not need to equal the quote total.</p></div><Button variant="outline" size="sm" onClick={() => setPayments((current) => [...current, { label: "Payment", amount: 0, due: "" }])}><Plus className="size-4 mr-1" /> Add payment</Button></div>
+      {paymentTotal > total && <p className="text-sm text-destructive">Payment schedule exceeds the quote total by {formatQuoteMoney(paymentTotal - total, currency)}.</p>}
+      {payments.length === 0 ? <p className="text-sm text-muted-foreground">No payment schedule defined.</p> : <div className="space-y-2">{payments.map((payment, index) => <div key={index} className="grid sm:grid-cols-[1fr_160px_1fr_auto] gap-2"><Input aria-label={`Payment ${index + 1} label`} value={payment.label} onChange={(event) => setPayment(index, { label: event.target.value })} /><Input aria-label={`Payment ${index + 1} amount`} type="number" min={0} value={payment.amount} onChange={(event) => setPayment(index, { amount: Number(event.target.value) || 0 })} /><Input aria-label={`Payment ${index + 1} due`} value={payment.due} onChange={(event) => setPayment(index, { due: event.target.value })} placeholder="Due description" /><Button size="icon" variant="ghost" onClick={() => setPayments((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-4" /></Button></div>)}</div>}
+    </CardContent></Card>
+  </div>;
 }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>; }
+function MoneyInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <Field label={label}><Input type="number" min={0} value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} /></Field>; }
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) { return <div className={`flex justify-between ${strong ? "font-semibold text-lg" : ""}`}><span className="text-muted-foreground">{label}</span><span>{value}</span></div>; }
+function Meta({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border p-3 bg-surface/50"><p className="text-xs text-muted-foreground">{label}</p><p className="text-sm font-medium mt-1 line-clamp-2">{value}</p></div>; }

@@ -316,18 +316,22 @@ export interface QuoteItem {
   unit_price: number;
 }
 
+export type QuoteCurrency = "GBP" | "EUR" | "USD" | "TRY";
+export type QuoteStatus = "draft" | "approved" | "sent" | "viewed" | "accepted" | "declined" | "expired";
+
 export interface Quote extends BaseRecord {
   clinic_id: string;
   patient_user_id: string;
   clinic_patient_id?: string;
   treatment_plan_id: string;
-  currency: string;
+  currency: QuoteCurrency;
   items: QuoteItem[];
   hotel_total: number;
   transfer_total: number;
   discount: number;
   payment_schedule: { label: string; amount: number; due: string }[];
   notes?: string;
+  status?: QuoteStatus;
   share_token?: string;
 }
 

@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useShallow } from "zustand/react/shallow";
-import { calculateQuoteTotals } from "@/lib/quote";
+import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
 
 export const Route = createFileRoute("/pro/quotes")({ component: Quotes });
 
@@ -27,7 +27,7 @@ function Quotes() {
   if (pathname !== "/pro/quotes") return <Outlet />;
   return (
     <div className="p-4 sm:p-6 space-y-4">
-      <PageHeader title="Quotes" description="Read-only quote records linked to treatment plans." />
+      <PageHeader title="Quotes" description="Quotes linked to clinic treatment plans." />
       {quotes.length === 0 ? (
         <EmptyState title="No quotes yet" />
       ) : (
@@ -49,8 +49,7 @@ function Quotes() {
               <TableBody>
                 {quotes.map((quote) => {
                   const { total } = calculateQuoteTotals(quote);
-                  const patient = patients.find((item) => item.id === quote.clinic_patient_id);
-                  const currency = quote.currency === "USD" ? "$" : "€";
+                  const patient = patients.find((item) => item.id === quote.clinic_patient_id || item.user_id === quote.patient_user_id);
                   return (
                     <TableRow key={quote.id}>
                       <TableCell className="font-medium">Quote {quote.id.slice(0, 8)}</TableCell>
@@ -60,8 +59,7 @@ function Quotes() {
                       <TableCell>{quote.items.length}</TableCell>
                       <TableCell>{quote.payment_schedule.length}</TableCell>
                       <TableCell>
-                        {currency}
-                        {total.toLocaleString()}
+                        {formatQuoteMoney(total, quote.currency)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="capitalize">
