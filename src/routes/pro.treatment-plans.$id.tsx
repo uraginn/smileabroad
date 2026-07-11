@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
-import { PageHeader } from "@/components/ui-bits";
+import { PageHeader, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { useState, type ReactNode } from "react";
 import { Trash2, ExternalLink, FileText, Building2, UserRound } from "lucide-react";
 import type { TreatmentPlanItem, ToothTreatment } from "@/types/models";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { formatQuoteMoney } from "@/lib/quote";
 
 export const Route = createFileRoute("/pro/treatment-plans/$id")({ component: PlanEditor });
 
@@ -40,7 +41,7 @@ function PlanEditor() {
   const clinicUsers = useMockStore((s) => s.users.filter((user) => user.clinic_id === activeUser?.clinic_id));
   const addQuote = useMockStore((s) => s.addQuote);
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
-  if (!hydrated) return null;
+  if (!hydrated) return <PageLoading label="Loading treatment plan" />;
   if (!plan) throw notFound();
 
   const actorId = activeUser?.clinic_id === plan.clinic_id ? activeUser.id : "system";
@@ -133,9 +134,7 @@ function PlanEditor() {
           <Meta label="Visits" value={`${plan.visits}`} />
           <Meta label="Healing" value={`${plan.healing_weeks} weeks`} />
           <div className="sm:col-span-2 lg:col-span-4">
-            <Badge variant="secondary" className="capitalize">
-              Status: {plan.status ?? "draft"}
-            </Badge>
+            <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">Status <StatusBadge status={plan.status} /></span>
           </div>
         </CardContent>
       </Card>
@@ -195,7 +194,7 @@ function PlanEditor() {
                 <div key={i.id} className="flex items-center gap-2 p-2 rounded border">
                   <Badge variant="secondary">{i.tooth}</Badge>
                   <span className="text-sm flex-1">{treatmentLabel(i.treatment)}</span>
-                  <span className="text-xs text-muted-foreground">€{i.unit_price}</span>
+                  <span className="text-xs text-muted-foreground">{formatQuoteMoney(i.unit_price, "EUR")}</span>
                   <Button size="icon" variant="ghost" onClick={() => removeItem(i.tooth)}>
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -209,7 +208,7 @@ function PlanEditor() {
             </div>
             <div className="pt-1 border-t flex justify-between">
               <span className="font-medium">Total</span>
-              <span className="font-display font-semibold">€{total.toLocaleString()}</span>
+              <span className="font-display font-semibold">{formatQuoteMoney(total, "EUR")}</span>
             </div>
           </CardContent>
         </Card>

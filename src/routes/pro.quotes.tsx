@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMockStore, selectClinicQuotes } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
-import { PageHeader, EmptyState } from "@/components/ui-bits";
+import { PageHeader, EmptyState, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -62,9 +62,7 @@ function Quotes() {
                         {formatQuoteMoney(total, quote.currency)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {quote.status ?? "draft"}
-                        </Badge>
+                        <StatusBadge status={quote.status} />
                       </TableCell>
                       <TableCell>
                         {quote.share_token ? <Badge variant="outline">Available</Badge> : "—"}

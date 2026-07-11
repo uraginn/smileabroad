@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
-import { PageHeader } from "@/components/ui-bits";
+import { PageHeader, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import type { Quote, QuoteCurrency, QuoteStatus } from "@/types/models";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { toast } from "sonner";
+import { formatCrmDate } from "@/lib/format";
 
 export const Route = createFileRoute("/pro/quotes/$id")({ component: QuoteEditor });
 
@@ -23,7 +24,7 @@ function QuoteEditor() {
   const activeUser = useAuth((s) => s.user);
   const hydrated = useMockStoreHydrated();
   const quote = useMockStore((s) => s.quotes.find((item) => item.id === id && item.clinic_id === activeUser?.clinic_id));
-  if (!hydrated) return null;
+  if (!hydrated) return <PageLoading label="Loading quote" />;
   if (!quote) throw notFound();
   return <QuoteForm quote={quote} actorId={activeUser?.id ?? "system"} />;
 }
@@ -58,8 +59,8 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
       <Meta label="Patient" value={patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"} />
       <Meta label="Treatment plan" value={plan?.title ?? quote.treatment_plan_id} />
       <Meta label="Items" value={`${quote.items.length}`} />
-      <Meta label="Updated" value={new Date(quote.updated_at).toLocaleString()} />
-      <div className="sm:col-span-2 lg:col-span-4 flex gap-2"><Badge variant="secondary" className="capitalize">{(quote.status ?? "draft").replace(/_/g, " ")}</Badge>{quote.share_token && <Badge variant="outline">Shared link ready</Badge>}</div>
+      <Meta label="Updated" value={formatCrmDate(quote.updated_at, true)} />
+      <div className="sm:col-span-2 lg:col-span-4 flex gap-2"><StatusBadge status={quote.status} />{quote.share_token && <Badge variant="outline">Shared link ready</Badge>}</div>
     </CardContent></Card>
 
     <Card><CardContent className="p-6 space-y-5">

@@ -1,9 +1,8 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMockStore, selectClinicPlans } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
-import { PageHeader, EmptyState } from "@/components/ui-bits";
+import { PageHeader, EmptyState, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -12,8 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format } from "date-fns";
 import { useShallow } from "zustand/react/shallow";
+import { formatCrmDate } from "@/lib/format";
+import { formatQuoteMoney } from "@/lib/quote";
 
 export const Route = createFileRoute("/pro/treatment-plans")({ component: Plans });
 
@@ -32,7 +32,7 @@ function Plans() {
         description="FDI-based plans prepared for clinic patients."
       />
       {plans.length === 0 ? (
-        <EmptyState title="No treatment plans yet" />
+        <EmptyState title="No treatment plans" description="Create a treatment plan from a patient record to begin clinical planning." />
       ) : (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
@@ -59,14 +59,12 @@ function Plans() {
                         {patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
                       </TableCell>
                       <TableCell>{plan.items.length}</TableCell>
-                      <TableCell>€{estimatedTotal.toLocaleString()}</TableCell>
+                      <TableCell>{formatQuoteMoney(estimatedTotal, "EUR")}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {plan.status ?? "draft"}
-                        </Badge>
+                        <StatusBadge status={plan.status} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {format(new Date(plan.updated_at), "MMM d, yyyy")}
+                        {formatCrmDate(plan.updated_at)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link
