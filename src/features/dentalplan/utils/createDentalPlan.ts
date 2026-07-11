@@ -34,6 +34,12 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
       medicalConditions: [],
       preferredCities: [],
     },
+    planningPreferences: overrides.planningPreferences ?? {
+      visits: { mode: "automatic", value: "1" },
+      visitDuration: { mode: "automatic", value: "Suggested from selected treatments" },
+      healingPeriod: { mode: "automatic", value: "No staged healing interval suggested" },
+      estimatedStay: { mode: "automatic", value: "Confirm after clinical review" },
+    },
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };

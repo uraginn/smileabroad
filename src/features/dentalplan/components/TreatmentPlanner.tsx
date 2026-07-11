@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import type {
   BridgeUnitRole,
   ConditionType,
@@ -25,6 +27,7 @@ import { TreatmentSelector } from "./TreatmentSelector";
 import { TreatmentSummary } from "./TreatmentSummary";
 import { ConditionSummary } from "./ConditionSummary";
 import { TreatmentLegend } from "./TreatmentLegend";
+import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { BridgeConfigurator } from "./BridgeConfigurator";
 
 export type TreatmentPlannerProps = {
@@ -52,6 +55,51 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
   const proposedSelection = useToothSelection();
   const selection = mode === "current" ? currentSelection : proposedSelection;
   const [bridgeTeeth, setBridgeTeeth] = useState<ToothNumber[] | null>(null);
+  const defaults = derivePlanDefaults(history.state);
+  useEffect(() => {
+    history.set(
+      (current) => {
+        const preferences = current.planningPreferences;
+        const next = {
+          ...preferences,
+          visits:
+            preferences.visits.mode === "automatic"
+              ? { ...preferences.visits, value: String(defaults.recommendedVisits) }
+              : preferences.visits,
+          visitDuration:
+            preferences.visitDuration.mode === "automatic"
+              ? { ...preferences.visitDuration, value: defaults.visitDurationSummary }
+              : preferences.visitDuration,
+          healingPeriod:
+            preferences.healingPeriod.mode === "automatic"
+              ? { ...preferences.healingPeriod, value: defaults.healingPeriodSummary }
+              : preferences.healingPeriod,
+          estimatedStay:
+            preferences.estimatedStay.mode === "automatic"
+              ? { ...preferences.estimatedStay, value: defaults.estimatedStaySummary ?? "" }
+              : preferences.estimatedStay,
+        };
+        if (JSON.stringify(next) === JSON.stringify(preferences)) return current;
+        return {
+          ...current,
+          planningPreferences: next,
+          travel: {
+            ...current.travel,
+            visits:
+              next.visits.mode === "automatic" ? defaults.recommendedVisits : current.travel.visits,
+          },
+        };
+      },
+      { commit: false },
+    );
+    // Derived suggestions update only automatic fields; custom overrides are retained.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    defaults.recommendedVisits,
+    defaults.visitDurationSummary,
+    defaults.healingPeriodSummary,
+    defaults.estimatedStaySummary,
+  ]);
   const applyConditionToSelection = useCallback(
     (condition: ConditionType) => {
       if (!selection.selected.length) {
@@ -342,6 +390,12 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           Proposed Treatment Plan
         </ModeButton>
       </div>
+      <p className="text-sm text-muted-foreground">
+        {mode === "current"
+          ? "Record the patient’s present dental condition. These observations are not priced procedures."
+          : "Plan procedures on top of the inherited current condition without changing the original diagnosis."}
+      </p>
+      <MedicalSafetyPanel plan={history.state} />
       {message && (
         <div
           role="alert"
@@ -370,7 +424,8 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
         <div className="space-y-4">
           <div className="rounded-lg border bg-card p-4">
             <div className="mb-2 text-xs text-muted-foreground">
-              Selected: {selection.selected.length ? selection.selected.join(", ") : "none"}
+              <Badge variant="secondary">{selection.selected.length} selected</Badge>
+              {selection.selected.length ? ` · ${selection.selected.join(", ")}` : ""}
             </div>
             {mode === "current" ? (
               <ConditionSelector
@@ -407,6 +462,142 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           onHighlight={highlightTeeth}
         />
       </div>
+      <PlanningDefaultsPanel
+        plan={history.state}
+        defaults={defaults}
+        onChange={(key, mode, value) =>
+          history.set(
+            (current) => ({
+              ...current,
+              planningPreferences: { ...current.planningPreferences, [key]: { mode, value } },
+              travel: {
+                ...current.travel,
+                ...(key === "visits" && Number(value) > 0 ? { visits: Number(value) } : {}),
+                ...(key === "visitDuration" ? { visitDuration: value } : {}),
+              },
+            }),
+            { commit: false },
+          )
+        }
+      />
+    </div>
+  );
+}
+function MedicalSafetyPanel({ plan }: { plan: DentalPlan }) {
+  const medical = plan.importedAssessment;
+  const hasDetails =
+    medical.medicalConditions.length ||
+    medical.medications ||
+    medical.allergies ||
+    medical.smoking ||
+    medical.pregnancy;
+  return (
+    <div
+      className={`rounded-lg border p-4 ${hasDetails ? "border-warning/50 bg-warning/10" : "bg-card"}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Patient safety information</p>
+        <div className="flex gap-2">
+          {medical.panoramicAvailable && <Badge variant="outline">Panoramic available</Badge>}
+          {medical.dentalPhotosAvailable && (
+            <Badge variant="outline">Dental photos available</Badge>
+          )}
+        </div>
+      </div>
+      {hasDetails ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {medical.medicalConditions.map((item) => (
+            <Badge key={item} variant="secondary">
+              {item}
+            </Badge>
+          ))}
+          {medical.medications && (
+            <Badge variant="outline">Medications: {medical.medications}</Badge>
+          )}
+          {medical.allergies && <Badge variant="outline">Allergies: {medical.allergies}</Badge>}
+          {medical.smoking && <Badge variant="destructive">Smoking reported</Badge>}
+          {medical.pregnancy && <Badge variant="outline">Pregnancy reported</Badge>}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">
+          No assessment medical details are available.
+        </p>
+      )}
+    </div>
+  );
+}
+function PlanningDefaultsPanel({
+  plan,
+  defaults,
+  onChange,
+}: {
+  plan: DentalPlan;
+  defaults: ReturnType<typeof derivePlanDefaults>;
+  onChange: (
+    key: keyof DentalPlan["planningPreferences"],
+    mode: "automatic" | "custom",
+    value: string,
+  ) => void;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-4">
+        <h3 className="font-semibold">Suggested visit and healing plan</h3>
+        <p className="text-xs text-muted-foreground">
+          Suggested from selected treatments — confirm clinically.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {(["visits", "visitDuration", "healingPeriod", "estimatedStay"] as const).map((key) => {
+          const preference = plan.planningPreferences[key];
+          const automatic =
+            key === "visits"
+              ? String(defaults.recommendedVisits)
+              : key === "visitDuration"
+                ? defaults.visitDurationSummary
+                : key === "healingPeriod"
+                  ? defaults.healingPeriodSummary
+                  : (defaults.estimatedStaySummary ?? "");
+          return (
+            <div key={key} className="space-y-2">
+              <p className="text-sm font-medium">{key.replace(/([A-Z])/g, " $1")}</p>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs ${preference.mode === "automatic" ? "bg-secondary" : ""}`}
+                  onClick={() => onChange(key, "automatic", automatic)}
+                >
+                  Automatic
+                </button>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs ${preference.mode === "custom" ? "bg-secondary" : ""}`}
+                  onClick={() => onChange(key, "custom", preference.value || automatic)}
+                >
+                  Custom
+                </button>
+              </div>
+              <Input
+                value={preference.mode === "automatic" ? automatic : preference.value}
+                disabled={preference.mode === "automatic"}
+                onChange={(event) => onChange(key, "custom", event.target.value)}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {defaults.reasons.length > 0 && (
+        <ul className="mt-4 list-disc pl-5 text-xs text-muted-foreground">
+          {defaults.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
+      {defaults.warnings.map((warning) => (
+        <p key={warning} className="mt-2 rounded bg-warning/15 p-2 text-sm">
+          {warning}
+        </p>
+      ))}
     </div>
   );
 }

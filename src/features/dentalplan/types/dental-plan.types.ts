@@ -131,6 +131,17 @@ export type DentalPlannerImportedAssessment = {
   preferredCities: string[];
   preferredTimeline?: string;
   treatmentInterest?: string;
+  smoking?: boolean;
+  pregnancy?: boolean;
+  panoramicAvailable?: boolean;
+  dentalPhotosAvailable?: boolean;
+};
+export type PlanningPreference = { mode: "automatic" | "custom"; value: string };
+export type DentalPlanningPreferences = {
+  visits: PlanningPreference;
+  visitDuration: PlanningPreference;
+  healingPeriod: PlanningPreference;
+  estimatedStay: PlanningPreference;
 };
 export type DentalPlannerTravel = {
   clinicId?: string;
@@ -164,6 +175,7 @@ export type DentalPlanData = {
   draftStep: number;
   finalized: boolean;
   importedAssessment: DentalPlannerImportedAssessment;
+  planningPreferences: DentalPlanningPreferences;
   createdAt: string;
   updatedAt: string;
 };
