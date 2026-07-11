@@ -1,38 +1,83 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { TREATMENTS, COUNTRIES, CITIES_BY_COUNTRY } from "@/lib/constants";
 import { useMockStore } from "@/lib/mock/store";
 import { generateRoadmap } from "@/lib/roadmap";
-import { ArrowRight, ArrowLeft, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  AssessmentInput,
+  AssessmentNavigation,
+  AssessmentOption,
+  AssessmentQuestion,
+  QuickAssessmentShell,
+  UploadCard,
+} from "@/components/quick-assessment/assessment-ui";
 
 export const Route = createFileRoute("/assessment/")({ component: Assessment });
 
-const STEPS = ["Treatment", "Country", "Cities", "Dental", "Personal", "Medical", "Travel", "Upload"] as const;
+const STEPS = [
+  "Treatment",
+  "Country",
+  "Cities",
+  "Timeline",
+  "Basic details",
+  "Medical safety",
+  "Uploads",
+] as const;
 const DRAFT_KEY = "smileabroad-assessment-draft-v1";
 const JOURNEY_KEY = "smileabroad-active-journey-v1";
+const TIMELINES = [
+  "As soon as possible",
+  "Within 1–3 months",
+  "Within 3–6 months",
+  "More than 6 months",
+  "I’m not sure yet",
+];
+const CONDITIONS = [
+  "Uncontrolled diabetes",
+  "Bleeding or clotting disorder",
+  "Osteoporosis",
+  "Autoimmune condition",
+  "Active cancer treatment",
+  "Previous radiotherapy to the head or neck",
+  "Severe heart condition",
+  "None of these",
+  "Other",
+];
+const MEDICATIONS = [
+  "Blood thinners",
+  "Bisphosphonates or osteoporosis medication",
+  "Steroids",
+  "Immunosuppressive medication",
+  "Chemotherapy medication",
+  "None of these",
+  "Other",
+];
+const ALLERGIES = [
+  "Penicillin or antibiotics",
+  "Local anaesthetic",
+  "Latex",
+  "Metal allergy",
+  "None of these",
+  "Other",
+];
+type MedicalGroup = { selected: string[]; other: string };
 
 function Assessment() {
   const navigate = useNavigate();
   const store = useMockStore();
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [submissionId, setSubmissionId] = useState("");
   const [step, setStep] = useState(0);
   const [treatment, setTreatment] = useState("");
   const [country, setCountry] = useState("");
   const [cities, setCities] = useState<string[]>([]);
-  const [dental, setDental] = useState({ chief: "", missing: "", budget: "", timeline: "" });
-  const [personal, setPersonal] = useState({ firstName: "", lastName: "", email: "", phone: "", dob: "" });
-  const [medical, setMedical] = useState({ conditions: [] as string[], meds: "", allergies: "", smoker: false, pregnant: false, notes: "" });
-  const [travel, setTravel] = useState({ from: "", earliest: "", latest: "", companions: 0, hotel: true, transfer: true });
+  const [timeline, setTimeline] = useState("");
+  const [personal, setPersonal] = useState({ firstName: "", lastName: "", age: "" });
+  const [conditions, setConditions] = useState<MedicalGroup>({ selected: [], other: "" });
+  const [medications, setMedications] = useState<MedicalGroup>({ selected: [], other: "" });
+  const [allergies, setAllergies] = useState<MedicalGroup>({ selected: [], other: "" });
+  const [uploads, setUploads] = useState({ dentalPhotos: false, panoramic: false });
 
   useEffect(() => {
     window.localStorage.removeItem("smileabroad-anonymous-submission");
@@ -41,9 +86,24 @@ function Assessment() {
       if (saved) {
         setSubmissionId(saved.submissionId || `anonymous_${crypto.randomUUID()}`);
         setStep(Math.max(0, Math.min(saved.step ?? 0, STEPS.length - 1)));
-        setTreatment(saved.treatment ?? ""); setCountry(saved.country ?? ""); setCities(saved.cities ?? []);
-        setDental((current) => ({ ...current, ...saved.dental })); setPersonal((current) => ({ ...current, ...saved.personal }));
-        setMedical((current) => ({ ...current, ...saved.medical })); setTravel((current) => ({ ...current, ...saved.travel }));
+        setTreatment(saved.treatment ?? "");
+        setCountry(saved.country ?? "");
+        setCities(Array.isArray(saved.cities) ? saved.cities : []);
+        setTimeline(
+          saved.timeline ?? saved.dental?.timeline ?? saved.travel?.treatment_timeline ?? "",
+        );
+        setPersonal({
+          firstName: saved.personal?.firstName ?? "",
+          lastName: saved.personal?.lastName ?? "",
+          age: String(saved.personal?.age ?? ""),
+        });
+        setConditions(normalizeGroup(saved.conditions, saved.medical?.conditions));
+        setMedications(normalizeGroup(saved.medications, saved.medical?.meds));
+        setAllergies(normalizeGroup(saved.allergies, saved.medical?.allergies));
+        setUploads({
+          dentalPhotos: !!(saved.uploads?.dentalPhotos ?? saved.uploads?.uploaded_dental_photos),
+          panoramic: !!(saved.uploads?.panoramic ?? saved.uploads?.uploaded_panoramic),
+        });
       } else setSubmissionId(`anonymous_${crypto.randomUUID()}`);
     } catch {
       setSubmissionId(`anonymous_${crypto.randomUUID()}`);
@@ -52,217 +112,398 @@ function Assessment() {
   }, []);
 
   useEffect(() => {
-    if (!draftHydrated || !submissionId) return;
-    window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ submissionId, step, treatment, country, cities, dental, personal, medical, travel,
-      uploads: { uploaded_panoramic: false, uploaded_smile_photo: false, uploaded_cbct: false, uploaded_dental_photos: false, uploaded_previous_plan: false, uploaded_previous_report: false },
-    }));
-  }, [cities, country, dental, draftHydrated, medical, personal, step, submissionId, treatment, travel]);
+    if (!draftHydrated || !submissionId || submitting) return;
+    window.localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        submissionId,
+        step,
+        treatment,
+        country,
+        cities,
+        timeline,
+        personal,
+        conditions,
+        medications,
+        allergies,
+        uploads,
+      }),
+    );
+  }, [
+    allergies,
+    cities,
+    conditions,
+    country,
+    draftHydrated,
+    medications,
+    personal,
+    step,
+    submissionId,
+    submitting,
+    timeline,
+    treatment,
+    uploads,
+  ]);
 
-  const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  const back = () => setStep((s) => Math.max(s - 1, 0));
-  const canNext = () => {
-    if (step === 0) return !!treatment;
-    if (step === 1) return !!country;
-    if (step === 2) return cities.length > 0;
-    if (step === 4) return personal.firstName && personal.email;
-    return true;
+  const age = Number(personal.age);
+  const canContinue =
+    step === 0
+      ? !!treatment
+      : step === 1
+        ? !!country
+        : step === 2
+          ? cities.length > 0
+          : step === 3
+            ? !!timeline
+            : step === 4
+              ? !!personal.firstName.trim() &&
+                !!personal.lastName.trim() &&
+                Number.isInteger(age) &&
+                age >= 1 &&
+                age <= 110
+              : true;
+  const back = () => setStep((current) => Math.max(0, current - 1));
+  const advance = () => {
+    if (canContinue) setStep((current) => Math.min(STEPS.length - 1, current + 1));
   };
 
   const submit = () => {
-    if (!submissionId) return;
-    const uid = submissionId;
+    if (!submissionId || submitting) return;
+    setSubmitting(true);
     const assessment = store.addAssessment({
-      patient_user_id: uid,
-      dental: {
-        treatment_interest: treatment,
-        concerns: dental.chief,
-        missing_teeth: dental.missing,
-      },
+      patient_user_id: submissionId,
+      dental: { treatment_interest: treatment },
       personal: {
-        first_name: personal.firstName,
-        last_name: personal.lastName,
-        date_of_birth: personal.dob,
-        email: personal.email,
-        phone: personal.phone,
+        first_name: personal.firstName.trim(),
+        last_name: personal.lastName.trim(),
+        age,
+        email: "",
       },
       medical: {
-        conditions: medical.conditions,
-        medications: medical.meds,
-        allergies: medical.allergies,
-        smoking: medical.smoker,
-        pregnancy: medical.pregnant,
-        additional_notes: medical.notes,
+        conditions: withOther(conditions),
+        medications: withOther(medications).join(", "),
+        allergies: withOther(allergies).join(", "),
+        medication_groups: withOther(medications),
+        allergy_groups: withOther(allergies),
+        smoking: false,
+        pregnancy: false,
       },
       travel: {
         destination_country: country,
         preferred_cities: cities,
-        travel_from: travel.from,
-        earliest_date: travel.earliest,
-        latest_date: travel.latest,
-        companions: travel.companions,
-        needs_hotel: travel.hotel,
-        needs_airport_transfer: travel.transfer,
-        budget: dental.budget,
-        treatment_timeline: dental.timeline,
+        companions: 0,
+        needs_hotel: false,
+        needs_airport_transfer: false,
+        treatment_timeline: timeline,
       },
       uploads: {
-        uploaded_panoramic: false,
+        uploaded_panoramic: uploads.panoramic,
         uploaded_smile_photo: false,
         uploaded_cbct: false,
-        uploaded_dental_photos: false,
+        uploaded_dental_photos: uploads.dentalPhotos,
         uploaded_previous_plan: false,
         uploaded_previous_report: false,
       },
       status: "submitted",
     });
-    const roadmap = store.addRoadmap({ ...generateRoadmap(assessment, uid), status: "ready" });
+    const roadmap = store.addRoadmap({
+      ...generateRoadmap(assessment, submissionId),
+      status: "ready",
+    });
     window.localStorage.removeItem(DRAFT_KEY);
-    window.localStorage.setItem(JOURNEY_KEY, JSON.stringify({ submissionId: uid, assessmentId: assessment.id, roadmapId: roadmap.id }));
+    window.localStorage.setItem(
+      JOURNEY_KEY,
+      JSON.stringify({ submissionId, assessmentId: assessment.id, roadmapId: roadmap.id }),
+    );
     navigate({ to: "/roadmap/$id", params: { id: roadmap.id } });
   };
 
-  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && step <= 2 && canNext()) { e.preventDefault(); next(); }
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.target instanceof HTMLButtonElement ||
+      (event.target instanceof HTMLInputElement && event.target.type === "file")
+    )
+      return;
+    event.preventDefault();
+    if (step === STEPS.length - 1) submit();
+    else advance();
   };
 
   return (
-    <div className="min-h-screen bg-surface" onKeyDown={onKey}>
-      <div className="container-app py-10 max-w-3xl">
-        <div className="mb-8">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Step {step + 1} of {STEPS.length}</span>
-            <span>{STEPS[step]}</span>
-          </div>
-          <Progress value={((step + 1) / STEPS.length) * 100} className="mt-2" />
-        </div>
-
-        <Card><CardContent className="p-8 min-h-[420px] flex flex-col">
-          {step === 0 && (
-            <Single title="What treatment are you interested in?" hint="Press Enter to continue">
-              <div className="flex flex-wrap gap-2">
-                {TREATMENTS.map((t) => (
-                  <button key={t} onClick={() => setTreatment(t)} className={cn("px-4 py-2 rounded-lg border text-sm transition-all", treatment === t ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:border-primary")}>{t}</button>
-                ))}
-              </div>
-              <Input className="mt-4" placeholder="Or type it yourself…" value={treatment} onChange={(e) => setTreatment(e.target.value)} />
-            </Single>
-          )}
-          {step === 1 && (
-            <Single title="Which country would you consider?" hint="Press Enter to continue">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {COUNTRIES.map((c) => (
-                  <button key={c} onClick={() => { setCountry(c); setCities([]); }} className={cn("px-4 py-3 rounded-lg border text-sm transition-all", country === c ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:border-primary")}>{c}</button>
-                ))}
-              </div>
-            </Single>
-          )}
-          {step === 2 && (
-            <Single title={`Which cities in ${country || "…"} would you consider?`} hint="Select one or more, press Enter to continue">
-              <div className="flex flex-wrap gap-2">
-                {(CITIES_BY_COUNTRY[country] ?? []).map((c) => {
-                  const active = cities.includes(c);
-                  return (
-                    <button key={c} onClick={() => setCities((cs) => active ? cs.filter((x) => x !== c) : [...cs, c])}
-                      className={cn("px-4 py-2 rounded-lg border text-sm transition-all inline-flex items-center gap-1.5", active ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:border-primary")}>
-                      {active && <Check className="size-3.5" />} {c}
-                    </button>
-                  );
-                })}
-              </div>
-            </Single>
-          )}
-          {step === 3 && (
-            <Group title="Dental information">
-              <Field label="What brings you here?"><Textarea rows={3} value={dental.chief} onChange={(e) => setDental({ ...dental, chief: e.target.value })} placeholder="Chief complaint or goal" /></Field>
-              <Field label="Missing or damaged teeth"><Input value={dental.missing} onChange={(e) => setDental({ ...dental, missing: e.target.value })} placeholder="e.g. molars on upper right" /></Field>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Budget range"><Input value={dental.budget} onChange={(e) => setDental({ ...dental, budget: e.target.value })} placeholder="e.g. €3,000–€6,000" /></Field>
-                <Field label="Preferred timeline"><Input value={dental.timeline} onChange={(e) => setDental({ ...dental, timeline: e.target.value })} placeholder="e.g. within 2 months" /></Field>
-              </div>
-            </Group>
-          )}
-          {step === 4 && (
-            <Group title="Personal information">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="First name"><Input value={personal.firstName} onChange={(e) => setPersonal({ ...personal, firstName: e.target.value })} /></Field>
-                <Field label="Last name"><Input value={personal.lastName} onChange={(e) => setPersonal({ ...personal, lastName: e.target.value })} /></Field>
-              </div>
-              <Field label="Email"><Input type="email" value={personal.email} onChange={(e) => setPersonal({ ...personal, email: e.target.value })} /></Field>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Phone"><Input value={personal.phone} onChange={(e) => setPersonal({ ...personal, phone: e.target.value })} /></Field>
-                <Field label="Date of birth"><Input type="date" value={personal.dob} onChange={(e) => setPersonal({ ...personal, dob: e.target.value })} /></Field>
-              </div>
-            </Group>
-          )}
-          {step === 5 && (
-            <Group title="Medical information">
-              <Field label="Existing conditions">
-                <div className="flex flex-wrap gap-2">
-                  {["Diabetes","Heart disease","High blood pressure","Osteoporosis","None"].map((c) => {
-                    const active = medical.conditions.includes(c);
-                    return <Badge key={c} variant={active ? "default" : "outline"} className="cursor-pointer" onClick={() => setMedical((m) => ({ ...m, conditions: active ? m.conditions.filter((x) => x !== c) : [...m.conditions, c] }))}>{c}</Badge>;
-                  })}
-                </div>
+    <QuickAssessmentShell step={step} total={STEPS.length} label={STEPS[step]}>
+      <div onKeyDown={onKeyDown} className="flex flex-1 flex-col">
+        {step === 0 && (
+          <AssessmentQuestion
+            title="What treatment are you interested in?"
+            description="Choose the closest option, or describe it in your own words."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {TREATMENTS.map((item) => (
+                <AssessmentOption
+                  key={item}
+                  selected={treatment === item}
+                  onClick={() => setTreatment(item)}
+                >
+                  {item}
+                </AssessmentOption>
+              ))}
+            </div>
+            <AssessmentInput
+              className="mt-4"
+              aria-label="Other treatment"
+              placeholder="Or type it yourself…"
+              value={treatment}
+              onChange={(event) => setTreatment(event.target.value)}
+            />
+          </AssessmentQuestion>
+        )}
+        {step === 1 && (
+          <AssessmentQuestion
+            title="Which country would you consider?"
+            description="This helps tailor your preliminary roadmap."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {COUNTRIES.map((item) => (
+                <AssessmentOption
+                  key={item}
+                  selected={country === item}
+                  onClick={() => {
+                    setCountry(item);
+                    setCities([]);
+                  }}
+                >
+                  {item}
+                </AssessmentOption>
+              ))}
+            </div>
+          </AssessmentQuestion>
+        )}
+        {step === 2 && (
+          <AssessmentQuestion
+            title={`Which cities in ${country || "your destination"} would you consider?`}
+            description="Select one or more cities."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(CITIES_BY_COUNTRY[country] ?? []).map((item) => (
+                <AssessmentOption
+                  key={item}
+                  multiple
+                  selected={cities.includes(item)}
+                  onClick={() =>
+                    setCities((current) =>
+                      current.includes(item)
+                        ? current.filter((city) => city !== item)
+                        : [...current, item],
+                    )
+                  }
+                >
+                  {item}
+                </AssessmentOption>
+              ))}
+            </div>
+          </AssessmentQuestion>
+        )}
+        {step === 3 && (
+          <AssessmentQuestion
+            title="When would you ideally like to start your treatment?"
+            description="Your answer helps make the preliminary planning timeline more useful."
+          >
+            <div className="grid gap-3">
+              {TIMELINES.map((item) => (
+                <AssessmentOption
+                  key={item}
+                  selected={timeline === item}
+                  onClick={() => setTimeline(item)}
+                >
+                  {item}
+                </AssessmentOption>
+              ))}
+            </div>
+          </AssessmentQuestion>
+        )}
+        {step === 4 && (
+          <AssessmentQuestion
+            title="A few basic details"
+            description="No account, email or phone number is needed for your preliminary roadmap."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="First name">
+                <AssessmentInput
+                  autoComplete="given-name"
+                  value={personal.firstName}
+                  onChange={(event) => setPersonal({ ...personal, firstName: event.target.value })}
+                />
               </Field>
-              <Field label="Medications"><Textarea rows={2} value={medical.meds} onChange={(e) => setMedical({ ...medical, meds: e.target.value })} /></Field>
-              <Field label="Allergies"><Textarea rows={2} value={medical.allergies} onChange={(e) => setMedical({ ...medical, allergies: e.target.value })} /></Field>
-              <div className="flex gap-6"><label className="flex items-center gap-2"><Checkbox checked={medical.smoker} onCheckedChange={(v) => setMedical({ ...medical, smoker: !!v })} /> Smoker</label><label className="flex items-center gap-2"><Checkbox checked={medical.pregnant} onCheckedChange={(v) => setMedical({ ...medical, pregnant: !!v })} /> Pregnant</label></div>
-            </Group>
-          )}
-          {step === 6 && (
-            <Group title="Travel information">
-              <Field label="Travelling from"><Input value={travel.from} onChange={(e) => setTravel({ ...travel, from: e.target.value })} placeholder="City, country" /></Field>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Earliest date"><Input type="date" value={travel.earliest} onChange={(e) => setTravel({ ...travel, earliest: e.target.value })} /></Field>
-                <Field label="Latest date"><Input type="date" value={travel.latest} onChange={(e) => setTravel({ ...travel, latest: e.target.value })} /></Field>
-              </div>
-              <Field label="Travel companions"><Input type="number" min={0} value={travel.companions} onChange={(e) => setTravel({ ...travel, companions: +e.target.value })} /></Field>
-              <div className="flex gap-6"><label className="flex items-center gap-2"><Checkbox checked={travel.hotel} onCheckedChange={(v) => setTravel({ ...travel, hotel: !!v })} /> I need hotel</label><label className="flex items-center gap-2"><Checkbox checked={travel.transfer} onCheckedChange={(v) => setTravel({ ...travel, transfer: !!v })} /> I need transfers</label></div>
-            </Group>
-          )}
-          {step === 7 && (
-            <Group title="Almost done — anything to upload?">
-              <p className="text-sm text-muted-foreground -mt-2">Optional. You can upload photos or X-rays now, or later from your dashboard.</p>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {["Dental photos","Panoramic X-ray","CBCT","Previous plan","Previous report"].map((k) => (
-                  <div key={k} className="border border-dashed rounded-lg p-4 text-sm text-muted-foreground hover:border-primary transition">📎 {k} <span className="text-xs">(optional)</span></div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">Uploads are mocked in this preview.</p>
-            </Group>
-          )}
-
-          <div className="mt-auto pt-8 flex items-center justify-between">
-            <Button variant="ghost" onClick={back} disabled={step === 0}><ArrowLeft className="size-4 mr-1" /> Back</Button>
-            {step < STEPS.length - 1 ? (
-              <Button onClick={next} disabled={!canNext()}>Continue <ArrowRight className="size-4 ml-1" /></Button>
-            ) : (
-              <Button onClick={submit} disabled={!draftHydrated || !submissionId}>Generate roadmap <ArrowRight className="size-4 ml-1" /></Button>
+              <Field label="Last name">
+                <AssessmentInput
+                  autoComplete="family-name"
+                  value={personal.lastName}
+                  onChange={(event) => setPersonal({ ...personal, lastName: event.target.value })}
+                />
+              </Field>
+              <Field label="Age">
+                <AssessmentInput
+                  inputMode="numeric"
+                  type="number"
+                  min={1}
+                  max={110}
+                  value={personal.age}
+                  onChange={(event) => setPersonal({ ...personal, age: event.target.value })}
+                />
+              </Field>
+            </div>
+            {personal.age && (!Number.isInteger(age) || age < 1 || age > 110) && (
+              <p className="mt-3 text-sm text-destructive">Enter an age between 1 and 110.</p>
             )}
-          </div>
-        </CardContent></Card>
+          </AssessmentQuestion>
+        )}
+        {step === 5 && (
+          <AssessmentQuestion
+            title="Medical safety"
+            description="This helps us highlight anything that may affect treatment planning."
+          >
+            <div className="space-y-7">
+              <MedicalGroup
+                title="Existing conditions"
+                options={CONDITIONS}
+                value={conditions}
+                onChange={setConditions}
+              />
+              <MedicalGroup
+                title="Medications"
+                options={MEDICATIONS}
+                value={medications}
+                onChange={setMedications}
+              />
+              <MedicalGroup
+                title="Allergies"
+                options={ALLERGIES}
+                value={allergies}
+                onChange={setAllergies}
+              />
+            </div>
+          </AssessmentQuestion>
+        )}
+        {step === 6 && (
+          <AssessmentQuestion
+            title="Add photos or an X-ray"
+            description="Photos and X-rays help create a more useful preliminary roadmap. You can continue without them."
+          >
+            <div className="space-y-4">
+              <UploadCard
+                title="Dental photos"
+                hint="Front, upper arch, lower arch or side photos. You can select multiple images."
+                accept="image/*"
+                multiple
+                selected={uploads.dentalPhotos}
+                onChange={(files) => setUploads({ ...uploads, dentalPhotos: !!files?.length })}
+              />
+              <UploadCard
+                title="Panoramic X-ray"
+                hint="Select one image or PDF if you already have one."
+                accept="image/*,.pdf,application/pdf"
+                selected={uploads.panoramic}
+                onChange={(files) => setUploads({ ...uploads, panoramic: !!files?.length })}
+              />
+            </div>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              Only selection metadata is saved in this preview; files are not uploaded.
+            </p>
+          </AssessmentQuestion>
+        )}
+        <AssessmentNavigation
+          first={step === 0}
+          last={step === STEPS.length - 1}
+          back={back}
+          next={step === STEPS.length - 1 ? submit : advance}
+          canContinue={!!canContinue && draftHydrated}
+          submitting={submitting}
+        />
       </div>
-    </div>
+    </QuickAssessmentShell>
   );
 }
 
-function Single({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex-1">
-      <h2 className="font-display text-3xl font-semibold">{title}</h2>
-      {hint && <p className="text-sm text-muted-foreground mt-1">{hint}</p>}
-      <div className="mt-6">{children}</div>
-    </div>
-  );
-}
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex-1 space-y-4">
-      <h2 className="font-display text-2xl font-semibold">{title}</h2>
-      {children}
-    </div>
-  );
-}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
+  return (
+    <label className="space-y-2">
+      <span className="block text-sm font-semibold">{label}</span>
+      {children}
+    </label>
+  );
+}
+function normalizeGroup(value: unknown, legacy: unknown): MedicalGroup {
+  if (value && typeof value === "object" && "selected" in value) {
+    const group = value as MedicalGroup;
+    return {
+      selected: Array.isArray(group.selected) ? group.selected : [],
+      other: group.other ?? "",
+    };
+  }
+  const selected = Array.isArray(legacy)
+    ? legacy
+    : typeof legacy === "string" && legacy
+      ? legacy
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
+  return { selected, other: "" };
+}
+function withOther(group: MedicalGroup) {
+  return group.selected.flatMap((item) =>
+    item === "Other" ? (group.other.trim() ? [`Other: ${group.other.trim()}`] : ["Other"]) : [item],
+  );
+}
+function MedicalGroup({
+  title,
+  options,
+  value,
+  onChange,
+}: {
+  title: string;
+  options: string[];
+  value: MedicalGroup;
+  onChange: (value: MedicalGroup) => void;
+}) {
+  const toggle = (option: string) =>
+    onChange({
+      ...value,
+      selected:
+        option === "None of these"
+          ? value.selected.includes(option)
+            ? []
+            : [option]
+          : value.selected.includes(option)
+            ? value.selected.filter((item) => item !== option)
+            : [...value.selected.filter((item) => item !== "None of these"), option],
+    });
+  return (
+    <fieldset>
+      <legend className="mb-3 text-sm font-semibold">{title}</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => (
+          <AssessmentOption
+            key={option}
+            multiple
+            selected={value.selected.includes(option)}
+            onClick={() => toggle(option)}
+          >
+            {option}
+          </AssessmentOption>
+        ))}
+      </div>
+      {value.selected.includes("Other") && (
+        <AssessmentInput
+          className="mt-3"
+          aria-label={`Other ${title.toLowerCase()}`}
+          placeholder="Add a short detail"
+          value={value.other}
+          onChange={(event) => onChange({ ...value, other: event.target.value })}
+        />
+      )}
+    </fieldset>
+  );
 }

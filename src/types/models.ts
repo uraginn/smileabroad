@@ -108,6 +108,8 @@ export interface AssessmentMedical {
   conditions: string[];
   medications?: string;
   allergies?: string;
+  medication_groups?: string[];
+  allergy_groups?: string[];
   diabetes?: boolean;
   blood_pressure?: boolean;
   heart_disease?: boolean;
