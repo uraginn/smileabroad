@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   CalendarCheck2,
@@ -130,11 +131,11 @@ function PatientDetail() {
   );
 
   const activitiesNewestFirst = useMemo(
-    () => activities.slice().sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)),
+    () => activities.slice().sort((a, b) => +new Date(b.occurred_at ?? b.created_at) - +new Date(a.occurred_at ?? a.created_at)),
     [activities],
   );
   const nextFollowUp = useMemo(
-    () => tasks.find((task) => !task.done && !!task.due_at)?.due_at,
+    () => tasks.find((task) => !task.done && !!task.due_at && task.category === "follow_up") ?? tasks.find((task) => !task.done && !!task.due_at),
     [tasks],
   );
 
@@ -182,7 +183,7 @@ function PatientDetail() {
     for (const activity of activities) {
       events.push({
         id: `activity-${activity.id}`,
-        at: activity.created_at,
+        at: activity.occurred_at ?? activity.created_at,
         title: activity.kind === "status_change" ? "Status Changed" : kindLabel(activity.kind),
         detail: activity.body,
       });
@@ -209,6 +210,14 @@ function PatientDetail() {
   const [internalNote, setInternalNote] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [taskAssignee, setTaskAssignee] = useState("");
+  const [communicationType, setCommunicationType] = useState<"whatsapp" | "call" | "email" | "in_person">("whatsapp");
+  const [communicationSummary, setCommunicationSummary] = useState("");
+  const [communicationAt, setCommunicationAt] = useState(() => format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
+  const [followUpAssignee, setFollowUpAssignee] = useState("");
   const addTreatmentPlan = useMockStore((s) => s.addTreatmentPlan);
   const addLeadActivity = useMockStore((s) => s.addLeadActivity);
   const addTask = useMockStore((s) => s.addTask);
@@ -260,13 +269,40 @@ function PatientDetail() {
       patient_user_id: patient.user_id,
       title,
       due_at: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
-      assigned_to: coordinator?.id ?? activeUser?.id,
+      assigned_to: taskAssignee || coordinator?.id || activeUser?.id,
+      priority: taskPriority,
+      category: "task",
       done: false,
-      status: "open",
-    });
+    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
     setTaskTitle("");
     setTaskDueDate("");
     toast.success("Task added");
+  };
+
+  const saveCommunication = () => {
+    const body = communicationSummary.trim();
+    if (!body || !lead || !communicationAt) return;
+    addLeadActivity({
+      clinic_id: patient.clinic_id, lead_id: lead.id, kind: communicationType,
+      body, internal: true, occurred_at: new Date(communicationAt).toISOString(),
+      created_by: activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+    });
+    setCommunicationSummary("");
+    toast.success("Communication recorded");
+  };
+
+  const saveFollowUp = () => {
+    const note = followUpNote.trim();
+    if (!followUpDate || !note) return;
+    addTask({
+      clinic_id: patient.clinic_id, lead_id: lead?.id, patient_user_id: patient.user_id,
+      title: note, due_at: new Date(followUpDate).toISOString(),
+      assigned_to: followUpAssignee || coordinator?.id || activeUser?.id,
+      priority: "medium", category: "follow_up", done: false,
+    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
+    setFollowUpDate("");
+    setFollowUpNote("");
+    toast.success("Follow-up scheduled");
   };
 
   const patientName = `${patient.first_name} ${patient.last_name}`;
@@ -309,12 +345,32 @@ function PatientDetail() {
               capitalize
             />
             <HeaderField label="Last activity" value={formatDateTime(lead?.last_activity_at)} />
-            <HeaderField label="Next follow-up" value={formatDateTime(nextFollowUp)} />
+            <HeaderField label="Next follow-up" value={formatDateTime(nextFollowUp?.due_at)} />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {clinic && <Badge variant="outline">{clinic.name}</Badge>}
             {application?.status && <Badge variant="secondary">Application: {application.status}</Badge>}
             {lead?.priority && <Badge variant="outline">Priority: {lead.priority}</Badge>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20">
+        <CardContent className="p-4 sm:p-5 space-y-3">
+          <div>
+            <p className="font-display font-semibold">Next follow-up</p>
+            <p className="text-sm text-muted-foreground">
+              {nextFollowUp ? `${formatDateTime(nextFollowUp.due_at)} · ${nextFollowUp.title}` : "No follow-up scheduled"}
+            </p>
+          </div>
+          <div className="grid md:grid-cols-[auto_1fr_200px_auto] gap-2">
+            <Input type="datetime-local" aria-label="Follow-up date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
+            <Input aria-label="Follow-up note" placeholder="Short follow-up note" value={followUpNote} onChange={(event) => setFollowUpNote(event.target.value)} />
+            <Select value={followUpAssignee || "auto"} onValueChange={(value) => setFollowUpAssignee(value === "auto" ? "" : value)}>
+              <SelectTrigger aria-label="Follow-up assignee"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="auto">Default coordinator</SelectItem>{clinicUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Button onClick={saveFollowUp} disabled={!followUpDate || !followUpNote.trim()}>Set follow-up</Button>
           </div>
         </CardContent>
       </Card>
@@ -378,6 +434,7 @@ function PatientDetail() {
             ["medical", "Medical"],
             ["files", "Files"],
             ["notes", "Notes"],
+            ["communication", "Communication"],
             ["tasks", "Tasks"],
             ["treatment-plans", "Treatment Plans"],
             ["quotes", "Quotes"],
@@ -593,10 +650,32 @@ function PatientDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="communication">
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Lock className="size-4" /> Communication records are clinic-only manual entries.
+              </div>
+              <div className="grid md:grid-cols-[180px_220px_1fr_auto] gap-2">
+                <Select value={communicationType} onValueChange={(value) => setCommunicationType(value as typeof communicationType)}>
+                  <SelectTrigger aria-label="Communication type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="call">Phone Call</SelectItem>
+                    <SelectItem value="email">Email</SelectItem><SelectItem value="in_person">In Person</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input type="datetime-local" aria-label="Communication date" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} />
+                <Input aria-label="Communication summary" placeholder="Short summary" value={communicationSummary} onChange={(event) => setCommunicationSummary(event.target.value)} />
+                <Button onClick={saveCommunication} disabled={!lead || !communicationAt || !communicationSummary.trim()}>Add record</Button>
+              </div>
+              {!lead && <p className="text-xs text-muted-foreground">A CRM lead is required before communication can be recorded.</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
         <TabsContent value="tasks">
           <Card>
             <CardContent className="p-6 space-y-4">
-              <div className="grid md:grid-cols-[1fr_auto_auto] gap-2">
+              <div className="grid md:grid-cols-2 xl:grid-cols-[1fr_auto_150px_200px_auto] gap-2">
                 <Input
                   placeholder="Add task"
                   value={taskTitle}
@@ -607,6 +686,14 @@ function PatientDetail() {
                   value={taskDueDate}
                   onChange={(event) => setTaskDueDate(event.target.value)}
                 />
+                <Select value={taskPriority} onValueChange={(value) => setTaskPriority(value as typeof taskPriority)}>
+                  <SelectTrigger aria-label="Task priority"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem></SelectContent>
+                </Select>
+                <Select value={taskAssignee || "auto"} onValueChange={(value) => setTaskAssignee(value === "auto" ? "" : value)}>
+                  <SelectTrigger aria-label="Task assignee"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="auto">Default coordinator</SelectItem>{clinicUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent>
+                </Select>
                 <Button onClick={saveTask} disabled={!taskTitle.trim()}>
                   <Plus className="size-4 mr-1" /> Add task
                 </Button>
@@ -621,13 +708,15 @@ function PatientDetail() {
                       key={task.id}
                       className="flex items-center gap-3 p-3 cursor-pointer hover:bg-surface/70"
                     >
-                      <Checkbox checked={task.done} onCheckedChange={() => toggleTask(task.id)} />
+                      <Checkbox checked={task.done} onCheckedChange={() => toggleTask(task.id, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system")} />
                       <div className="flex-1 min-w-0">
                         <p className={task.done ? "line-through text-muted-foreground" : ""}>
                           {task.title}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {task.due_at ? `Due ${format(new Date(task.due_at), "MMM d, yyyy")}` : "No due date"}
+                          {` · ${(task.priority ?? "medium").replace(/^./, (letter) => letter.toUpperCase())} priority`}
+                          {task.assigned_to && ` · ${users.find((user) => user.id === task.assigned_to)?.name ?? "Assigned"}`}
                         </p>
                       </div>
                       <Badge variant={task.done ? "outline" : "secondary"}>
@@ -726,7 +815,7 @@ function PatientDetail() {
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(activity.created_at), "MMM d, HH:mm")}
+                        {format(new Date(activity.occurred_at ?? activity.created_at), "MMM d, HH:mm")}
                       </p>
                     </div>
                   ))}
@@ -824,7 +913,11 @@ function kindLabel(kind: string) {
     case "email":
       return "Email";
     case "call":
-      return "Call";
+      return "Phone call";
+    case "whatsapp":
+      return "WhatsApp";
+    case "in_person":
+      return "In person";
     case "task":
       return "Task";
     case "file":
@@ -845,6 +938,9 @@ function kindIcon(kind: string): ReactNode {
       return <Mail className={className} />;
     case "call":
       return <Phone className={className} />;
+    case "whatsapp":
+    case "in_person":
+      return <MessageSquare className={className} />;
     case "task":
       return <CheckSquare className={className} />;
     case "file":

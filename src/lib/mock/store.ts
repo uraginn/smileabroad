@@ -39,8 +39,8 @@ interface Store {
   updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>) => void;
   addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
-  addTask: (task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">) => Task;
-  toggleTask: (id: string) => void;
+  addTask: (task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => Task;
+  toggleTask: (id: string, changedBy?: string) => void;
 }
 
 type LegacyAssessment = Assessment & {
@@ -318,19 +318,43 @@ export const useMockStore = create<Store>()(
       },
       updateBranding: (clinic_id, patch) =>
         set((s) => ({ branding: s.branding.map((b) => (b.clinic_id === clinic_id ? { ...b, ...patch, updated_at: now() } : b)) })),
-      addTask: (task) => {
+      addTask: (task, createdBy = "system") => {
+        const timestamp = now();
         const rec: Task = {
           ...task,
           id: makeId("task"),
-          created_at: now(),
-          updated_at: now(),
-          created_by: task.assigned_to ?? "system",
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
         };
-        set((s) => ({ tasks: [rec, ...s.tasks] }));
+        const activity: LeadActivity | undefined = task.lead_id ? {
+          id: makeId("activity"), clinic_id: task.clinic_id, lead_id: task.lead_id,
+          kind: "task", body: task.category === "follow_up" ? `Follow-up scheduled: ${task.title}` : `Task created: ${task.title}`,
+          internal: true, created_at: timestamp, updated_at: timestamp, created_by: createdBy,
+        } : undefined;
+        set((s) => ({
+          tasks: [rec, ...s.tasks],
+          activities: activity ? [...s.activities, activity] : s.activities,
+          leads: activity ? s.leads.map((lead) => lead.id === task.lead_id ? { ...lead, last_activity_at: timestamp, updated_at: timestamp } : lead) : s.leads,
+        }));
         return rec;
       },
-      toggleTask: (id) =>
-        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, done: !t.done, updated_at: now() } : t)) })),
+      toggleTask: (id, changedBy = "system") => {
+        const task = get().tasks.find((item) => item.id === id);
+        if (!task) return;
+        const timestamp = now();
+        const done = !task.done;
+        const activity: LeadActivity | undefined = task.lead_id ? {
+          id: makeId("activity"), clinic_id: task.clinic_id, lead_id: task.lead_id,
+          kind: "task", body: `Task ${done ? "completed" : "reopened"}: ${task.title}`,
+          internal: true, created_at: timestamp, updated_at: timestamp, created_by: changedBy,
+        } : undefined;
+        set((s) => ({
+          tasks: s.tasks.map((item) => item.id === id ? { ...item, done, updated_at: timestamp } : item),
+          activities: activity ? [...s.activities, activity] : s.activities,
+          leads: activity ? s.leads.map((lead) => lead.id === task.lead_id ? { ...lead, last_activity_at: timestamp, updated_at: timestamp } : lead) : s.leads,
+        }));
+      },
     }),
     {
       name: "smileabroad-mock-v1",

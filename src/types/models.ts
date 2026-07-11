@@ -234,9 +234,10 @@ export interface Lead extends BaseRecord {
 export interface LeadActivity extends BaseRecord {
   clinic_id: string;
   lead_id: string;
-  kind: "note" | "status_change" | "email" | "call" | "task" | "file";
+  kind: "note" | "status_change" | "whatsapp" | "email" | "call" | "in_person" | "task" | "file";
   body: string;
   internal: boolean;
+  occurred_at?: string;
 }
 
 export interface Task extends BaseRecord {
@@ -246,6 +247,8 @@ export interface Task extends BaseRecord {
   title: string;
   due_at?: string;
   assigned_to?: string;
+  priority?: "low" | "medium" | "high";
+  category?: "task" | "follow_up";
   done: boolean;
 }
 
