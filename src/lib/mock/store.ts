@@ -29,6 +29,8 @@ interface Store {
   files: UploadedFile[];
   activities: LeadActivity[];
 
+  addPatient: (patient: Omit<Patient, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => Patient;
+  updatePatient: (id: string, patch: Partial<Patient>) => void;
   addAssessment: (a: Omit<Assessment, "id" | "created_at" | "updated_at" | "created_by">) => Assessment;
   addFile: (f: Omit<UploadedFile, "id" | "created_at" | "updated_at" | "created_by">) => UploadedFile;
   addRoadmap: (r: Omit<Roadmap, "id" | "created_at" | "updated_at" | "created_by">) => Roadmap;
@@ -141,6 +143,15 @@ export const useMockStore = create<Store>()(
       files: seedFiles,
       activities: seedActivities,
 
+      addPatient: (patient, createdBy = "system") => {
+        const timestamp = now();
+        const rec: Patient = { ...patient, id: makeId("pt"), created_at: timestamp, updated_at: timestamp, created_by: createdBy };
+        set((s) => ({ patients: [...s.patients, rec] }));
+        return rec;
+      },
+      updatePatient: (id, patch) => set((s) => ({
+        patients: s.patients.map((patient) => patient.id === id ? { ...patient, ...patch, id: patient.id, updated_at: now() } : patient),
+      })),
       addAssessment: (a) => {
         const rec: Assessment = { ...a, id: makeId("as"), created_at: now(), updated_at: now(), created_by: a.patient_user_id };
         set((s) => ({ assessments: [...s.assessments, rec] }));

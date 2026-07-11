@@ -61,8 +61,13 @@ function DentalPlanRoute() {
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const addQuote = useMockStore((state) => state.addQuote);
   const updateQuote = useMockStore((state) => state.updateQuote);
+  const addPatient = useMockStore((state) => state.addPatient);
+  const updatePatient = useMockStore((state) => state.updatePatient);
   const existingPlan = plans.find(
     (item) => item.id === search.treatmentPlanId && item.clinic_id === user?.clinic_id,
+  );
+  const contextQuote = quotes.find(
+    (quote) => quote.treatment_plan_id === existingPlan?.id && quote.clinic_id === user?.clinic_id,
   );
   const lead = leads.find(
     (item) => item.id === search.leadId && item.clinic_id === user?.clinic_id,
@@ -129,6 +134,28 @@ function DentalPlanRoute() {
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user?.clinic_id,
       );
     const embedded = existingPlan?.dental_plan_data as DentalPlanData | undefined;
+    const importedCommercial = contextQuote
+      ? {
+          currency: contextQuote.currency,
+          items: contextQuote.items.map((item, index) => ({
+            treatmentId: embedded?.proposedTreatments[index]?.id ?? item.id,
+            label: item.label,
+            qty: item.qty,
+            unitPrice: item.unit_price,
+          })),
+          hotelTotal: contextQuote.hotel_total,
+          transferTotal: contextQuote.transfer_total,
+          otherServiceTotal: 0,
+          discountType: contextQuote.discount > 0 ? ("fixed" as const) : ("none" as const),
+          discountValue: contextQuote.discount,
+          paymentSchedule: contextQuote.payment_schedule.map((item) => ({
+            ...item,
+            id: crypto.randomUUID(),
+          })),
+          validUntil: contextQuote.valid_until,
+          commercialNotes: contextQuote.notes,
+        }
+      : undefined;
     if (embedded?.currentConditions)
       return createDentalPlan({
         ...embedded,
@@ -168,6 +195,7 @@ function DentalPlanRoute() {
           planTitle: existingPlan?.title ?? embedded.patient.planTitle,
         },
         importedAssessment,
+        commercial: embedded.commercial ?? importedCommercial,
       });
     return createDentalPlan({
       name: existingPlan?.title ?? "Dental treatment plan",
@@ -204,14 +232,17 @@ function DentalPlanRoute() {
         currency: "EUR",
       },
       importedAssessment,
+      commercial: importedCommercial,
       travel: {
         visits: existingPlan?.visits ?? 1,
         healingWeeks: existingPlan?.healing_weeks ?? 0,
-        hotelRequired: false,
+        hotelRequired: (contextQuote?.hotel_total ?? 0) > 0,
+        hotelIncluded: (contextQuote?.hotel_total ?? 0) > 0,
         hotelNights: 0,
-        airportTransfer: false,
+        airportTransfer: (contextQuote?.transfer_total ?? 0) > 0,
+        transferIncluded: (contextQuote?.transfer_total ?? 0) > 0,
         localTransfer: false,
-        includedServices: [],
+        includedServices: contextQuote?.included_services ?? [],
         guarantees: [],
         patientFacingNotes: existingPlan?.patient_facing_notes,
         internalNotes: existingPlan?.internal_clinical_notes,
@@ -229,6 +260,7 @@ function DentalPlanRoute() {
     lead,
     caseFiles,
     importedAssessment,
+    contextQuote,
   ]);
   if (
     !hydrated &&
@@ -238,12 +270,50 @@ function DentalPlanRoute() {
   const finalize = async (value: DentalPlanData) => {
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
-    const linkedPatient =
+    let linkedPatient =
       patient ??
       patients.find(
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user.clinic_id,
       );
-    if (!linkedPatient) throw new Error("Clinic patient not found or belongs to another clinic.");
+    if (!linkedPatient) {
+      const duplicate = patients.find(
+        (item) =>
+          item.clinic_id === user.clinic_id &&
+          item.email.toLowerCase() === value.patient.email?.toLowerCase(),
+      );
+      linkedPatient =
+        duplicate ??
+        addPatient(
+          {
+            clinic_id: user.clinic_id,
+            first_name: value.patient.firstName,
+            last_name: value.patient.lastName,
+            email: value.patient.email ?? "",
+            phone: value.patient.phone,
+            country: value.patient.country ?? "",
+            city: value.patient.city,
+            date_of_birth: value.patient.dateOfBirth,
+            language: value.patient.preferredLanguage,
+            whatsapp: value.patient.whatsapp,
+            source: "manual",
+            assessment_id: value.patient.assessmentId,
+            roadmap_id: value.patient.roadmapId,
+            treatment_interest: value.patient.treatmentInterest,
+          },
+          user.id,
+        );
+    } else
+      updatePatient(linkedPatient.id, {
+        first_name: value.patient.firstName,
+        last_name: value.patient.lastName,
+        email: value.patient.email ?? linkedPatient.email,
+        phone: value.patient.phone,
+        country: value.patient.country ?? linkedPatient.country,
+        city: value.patient.city,
+        date_of_birth: value.patient.dateOfBirth,
+        language: value.patient.preferredLanguage,
+        whatsapp: value.patient.whatsapp,
+      });
     const items: TreatmentPlanItem[] = value.proposedTreatments.flatMap((treatment) =>
       treatment.toothNumbers.map((tooth) => ({
         id: `dpi_${treatment.id}_${tooth}`,
@@ -251,11 +321,13 @@ function DentalPlanRoute() {
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
         notes: treatment.notes,
         unit_price:
+          value.commercial.items.find((price) => price.treatmentId === treatment.id)?.unitPrice ??
           existingPlan?.items.find(
             (item) =>
               item.tooth === tooth &&
               item.treatment === (treatmentMap[treatment.treatmentType] ?? "crown"),
-          )?.unit_price ?? 0,
+          )?.unit_price ??
+          0,
       })),
     );
     const patch = {
@@ -308,15 +380,48 @@ function DentalPlanRoute() {
       qty: 1,
       unit_price: item.unit_price,
     }));
+    if (value.commercial.otherServiceTotal > 0)
+      quoteItems.push({
+        id: "qi_other_services",
+        label: "Other services",
+        qty: 1,
+        unit_price: value.commercial.otherServiceTotal,
+      });
+    const beforeDiscount =
+      quoteItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
+      value.commercial.hotelTotal +
+      value.commercial.transferTotal +
+      0;
+    const discount =
+      value.commercial.discountType === "percentage"
+        ? Math.min(
+            beforeDiscount,
+            (beforeDiscount * Math.min(100, Math.max(0, value.commercial.discountValue))) / 100,
+          )
+        : value.commercial.discountType === "fixed"
+          ? Math.min(beforeDiscount, Math.max(0, value.commercial.discountValue))
+          : 0;
+    const commercialPatch = {
+      items: quoteItems,
+      currency: value.commercial.currency,
+      hotel_total: value.travel.hotelIncluded ? value.commercial.hotelTotal : 0,
+      transfer_total: value.travel.transferIncluded ? value.commercial.transferTotal : 0,
+      discount,
+      payment_schedule: value.commercial.paymentSchedule.map(({ label, amount, due }) => ({
+        label,
+        amount,
+        due,
+      })),
+      valid_until: value.commercial.validUntil,
+      included_services: value.travel.includedServices,
+      notes: value.commercial.commercialNotes,
+    };
     let quote;
     if (existingQuote) {
       updateQuote(
         existingQuote.id,
         {
-          items: quoteItems,
-          currency: value.patient.currency,
-          included_services: value.travel.includedServices,
-          notes: value.travel.patientFacingNotes,
+          ...commercialPatch,
         },
         user.id,
       );
@@ -327,15 +432,8 @@ function DentalPlanRoute() {
         patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
         clinic_patient_id: linkedPatient.id,
         treatment_plan_id: plan.id,
-        currency: value.patient.currency,
-        items: quoteItems,
-        hotel_total: 0,
-        transfer_total: 0,
-        discount: 0,
-        payment_schedule: [],
-        included_services: value.travel.includedServices,
+        ...commercialPatch,
         excluded_services: [],
-        notes: value.travel.patientFacingNotes,
         status: "draft",
       });
     navigate({ to: "/pro/quotes/$id", params: { id: quote.id } });

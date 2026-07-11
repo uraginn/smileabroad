@@ -149,19 +149,48 @@ export type DentalPlannerTravel = {
   visitDuration?: string;
   healingWeeks: number;
   hotelRequired: boolean;
+  hotelIncluded: boolean;
   hotelName?: string;
   roomType?: string;
   hotelNights: number;
   boardType?: string;
   companion?: string;
+  companionIncluded?: boolean;
+  hotelDescription?: string;
+  hotelImageMetadata?: string;
   airportTransfer: boolean;
+  airportPickup?: boolean;
+  airportDropoff?: boolean;
   localTransfer: boolean;
+  transferIncluded?: boolean;
+  transferNote?: string;
   includedServices: string[];
   guarantees: string[];
   treatmentDates?: string;
+  firstVisitDate?: string;
+  secondVisitDate?: string;
+  datesFlexible?: boolean;
   timelineNotes?: string;
   patientFacingNotes?: string;
   internalNotes?: string;
+};
+export type DentalPricingItem = {
+  treatmentId: string;
+  label: string;
+  qty: number;
+  unitPrice: number;
+};
+export type DentalPlannerCommercial = {
+  currency: "GBP" | "EUR" | "USD" | "TRY";
+  items: DentalPricingItem[];
+  hotelTotal: number;
+  transferTotal: number;
+  otherServiceTotal: number;
+  discountType: "none" | "fixed" | "percentage";
+  discountValue: number;
+  paymentSchedule: Array<{ id: string; label: string; amount: number; due: string }>;
+  validUntil?: string;
+  commercialNotes?: string;
 };
 export type DentalPlanData = {
   id: string;
@@ -176,6 +205,7 @@ export type DentalPlanData = {
   finalized: boolean;
   importedAssessment: DentalPlannerImportedAssessment;
   planningPreferences: DentalPlanningPreferences;
+  commercial: DentalPlannerCommercial;
   createdAt: string;
   updatedAt: string;
 };

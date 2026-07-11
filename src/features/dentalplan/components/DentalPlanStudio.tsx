@@ -15,12 +15,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CountryCombobox } from "./CountryCombobox";
+import { TravelServicesStep } from "./TravelServicesStep";
+import { PricingStep } from "./PricingStep";
+import { FinalReviewStep } from "./FinalReviewStep";
 import { TreatmentPlanner } from "./TreatmentPlanner";
 import { DentalChart } from "./DentalChart";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { createDentalPlan } from "../utils/createDentalPlan";
 import { LocalStorageDentalPlanRepository } from "../adapters/LocalStorageDentalPlanRepository";
 import { useAutoSave } from "../hooks/useAutoSave";
+import { toast } from "sonner";
+import { validatePlanForFinalize } from "../rules/clinicalRules";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 const STEPS = [
   "Patient & Case Information",
   "Clinical Planning",
@@ -73,6 +89,11 @@ function PlannerShell({
     setResult("Draft saved.");
   };
   const finalize = async () => {
+    const hardConflicts = validatePlanForFinalize(plan);
+    if (hardConflicts.length) {
+      setResult(`Resolve before finalizing: ${hardConflicts.join(" ")}`);
+      return;
+    }
     if (context?.mode !== "crm" || !onFinalize) {
       change({ finalized: true });
       save();
@@ -83,6 +104,7 @@ function PlannerShell({
     try {
       const ids = await onFinalize({ ...plan, finalized: true });
       change({ finalized: true });
+      toast.success("Treatment plan finalized and quote prepared");
       setResult(`Treatment plan ${ids.treatmentPlanId} saved. Opening quote…`);
     } catch (error) {
       setResult(error instanceof Error ? error.message : "Finalization failed.");
@@ -139,19 +161,9 @@ function PlannerShell({
         )}
         {step === 0 && <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />}{" "}
         {step === 1 && <TreatmentPlanner value={plan} onChange={setPlan} readOnly={readOnly} />}{" "}
-        {step === 2 && <TravelStep plan={plan} change={change} />}{" "}
-        {step === 3 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Pricing & Commercial Details</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Pricing remains in the existing Quote workflow and will be expanded in its dedicated
-              phase.
-            </CardContent>
-          </Card>
-        )}
-        {step === 4 && <ReviewStep plan={plan} />}
+        {step === 2 && <TravelServicesStep plan={plan} change={change} />}{" "}
+        {step === 3 && <PricingStep plan={plan} change={change} />}
+        {step === 4 && <FinalReviewStep plan={plan} />}
         <div className="flex justify-between">
           <Button
             variant="outline"
@@ -163,9 +175,26 @@ function PlannerShell({
           {step < 4 ? (
             <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
           ) : (
-            <Button onClick={finalize} disabled={finalizing}>
-              {finalizing ? "Finalizing…" : "Finalize and open quote"}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button disabled={finalizing || !plan.proposedTreatments.length}>
+                  {finalizing ? "Finalizing…" : "Finalize and open quote"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Finalize this clinical plan?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This saves the existing CRM Treatment Plan and creates or updates its linked
+                    Quote.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={finalize}>Finalize and open quote</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </main>

@@ -145,3 +145,37 @@ const warning = (code: string, message: string, teeth: number[]): DentalRuleResu
 });
 export const archForSelection = (teeth: ToothNumber[]) =>
   teeth.length ? getArch(teeth[0]) : "upper";
+export function validatePlanForFinalize(plan: DentalPlan): string[] {
+  const errors: string[] = [];
+  const naturalOnly = new Set([
+    "composite-bonding",
+    "veneer",
+    "composite-filling",
+    "root-canal-treatment",
+    "zirconium-crown",
+    "emax-crown",
+    "porcelain-crown",
+    "temporary-crown",
+  ]);
+  for (const treatment of plan.proposedTreatments)
+    for (const tooth of treatment.toothNumbers) {
+      const current = plan.currentConditions[tooth]?.conditions ?? [];
+      if (
+        (current.includes("missing") || current.includes("extraction-required")) &&
+        naturalOnly.has(treatment.treatmentType)
+      )
+        errors.push(
+          `Tooth ${tooth}: ${treatment.treatmentType} conflicts with a missing or extraction-indicated position.`,
+        );
+    }
+  for (const group of plan.treatmentGroups)
+    if (
+      group.generatedTreatmentIds.some(
+        (id) => !plan.proposedTreatments.some((item) => item.id === id),
+      )
+    )
+      errors.push(
+        `${group.type} group ${group.id.slice(0, 8)} contains missing linked treatment items.`,
+      );
+  return [...new Set(errors)];
+}
