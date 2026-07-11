@@ -4,6 +4,7 @@ import { TREATMENTS, COUNTRIES, CITIES_BY_COUNTRY } from "@/lib/constants";
 import { useMockStore } from "@/lib/mock/store";
 import { generateRoadmap } from "@/lib/roadmap";
 import {
+  AssessmentAccordion,
   AssessmentInput,
   AssessmentNavigation,
   AssessmentOption,
@@ -70,6 +71,7 @@ function Assessment() {
   const [submissionId, setSubmissionId] = useState("");
   const [step, setStep] = useState(0);
   const [treatment, setTreatment] = useState("");
+  const [customTreatmentOpen, setCustomTreatmentOpen] = useState(false);
   const [country, setCountry] = useState("");
   const [cities, setCities] = useState<string[]>([]);
   const [timeline, setTimeline] = useState("");
@@ -77,6 +79,7 @@ function Assessment() {
   const [conditions, setConditions] = useState<MedicalGroup>({ selected: [], other: "" });
   const [medications, setMedications] = useState<MedicalGroup>({ selected: [], other: "" });
   const [allergies, setAllergies] = useState<MedicalGroup>({ selected: [], other: "" });
+  const [openMedicalGroup, setOpenMedicalGroup] = useState("conditions");
   const [uploads, setUploads] = useState({ dentalPhotos: false, panoramic: false });
 
   useEffect(() => {
@@ -87,6 +90,7 @@ function Assessment() {
         setSubmissionId(saved.submissionId || `anonymous_${crypto.randomUUID()}`);
         setStep(Math.max(0, Math.min(saved.step ?? 0, STEPS.length - 1)));
         setTreatment(saved.treatment ?? "");
+        setCustomTreatmentOpen(!!saved.treatment && !TREATMENTS.includes(saved.treatment));
         setCountry(saved.country ?? "");
         setCities(Array.isArray(saved.cities) ? saved.cities : []);
         setTimeline(
@@ -239,24 +243,40 @@ function Assessment() {
             title="What treatment are you interested in?"
             description="Choose the closest option, or describe it in your own words."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {TREATMENTS.map((item) => (
                 <AssessmentOption
                   key={item}
                   selected={treatment === item}
-                  onClick={() => setTreatment(item)}
+                  onClick={() => {
+                    setTreatment(item);
+                    setCustomTreatmentOpen(false);
+                  }}
                 >
                   {item}
                 </AssessmentOption>
               ))}
             </div>
-            <AssessmentInput
-              className="mt-4"
-              aria-label="Other treatment"
-              placeholder="Or type it yourself…"
-              value={treatment}
-              onChange={(event) => setTreatment(event.target.value)}
-            />
+            <div className="mt-3 border-t pt-3">
+              <button
+                type="button"
+                aria-expanded={customTreatmentOpen}
+                onClick={() => setCustomTreatmentOpen((current) => !current)}
+                className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                {customTreatmentOpen ? "Hide other treatment" : "Other treatment"}
+              </button>
+              {customTreatmentOpen && (
+                <AssessmentInput
+                  className="mt-2"
+                  autoFocus
+                  aria-label="Other treatment"
+                  placeholder="Type another treatment"
+                  value={TREATMENTS.includes(treatment) ? "" : treatment}
+                  onChange={(event) => setTreatment(event.target.value)}
+                />
+              )}
+            </div>
           </AssessmentQuestion>
         )}
         {step === 1 && (
@@ -264,7 +284,7 @@ function Assessment() {
             title="Which country would you consider?"
             description="This helps tailor your preliminary roadmap."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {COUNTRIES.map((item) => (
                 <AssessmentOption
                   key={item}
@@ -285,7 +305,7 @@ function Assessment() {
             title={`Which cities in ${country || "your destination"} would you consider?`}
             description="Select one or more cities."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {(CITIES_BY_COUNTRY[country] ?? []).map((item) => (
                 <AssessmentOption
                   key={item}
@@ -310,7 +330,7 @@ function Assessment() {
             title="When would you ideally like to start your treatment?"
             description="Your answer helps make the preliminary planning timeline more useful."
           >
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {TIMELINES.map((item) => (
                 <AssessmentOption
                   key={item}
@@ -328,7 +348,7 @@ function Assessment() {
             title="A few basic details"
             description="No account, email or phone number is needed for your preliminary roadmap."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="First name">
                 <AssessmentInput
                   autoComplete="given-name"
@@ -364,24 +384,36 @@ function Assessment() {
             title="Medical safety"
             description="This helps us highlight anything that may affect treatment planning."
           >
-            <div className="space-y-7">
+            <div className="space-y-2">
               <MedicalGroup
                 title="Existing conditions"
                 options={CONDITIONS}
                 value={conditions}
                 onChange={setConditions}
+                expanded={openMedicalGroup === "conditions"}
+                onToggle={() =>
+                  setOpenMedicalGroup((current) => (current === "conditions" ? "" : "conditions"))
+                }
               />
               <MedicalGroup
                 title="Medications"
                 options={MEDICATIONS}
                 value={medications}
                 onChange={setMedications}
+                expanded={openMedicalGroup === "medications"}
+                onToggle={() =>
+                  setOpenMedicalGroup((current) => (current === "medications" ? "" : "medications"))
+                }
               />
               <MedicalGroup
                 title="Allergies"
                 options={ALLERGIES}
                 value={allergies}
                 onChange={setAllergies}
+                expanded={openMedicalGroup === "allergies"}
+                onToggle={() =>
+                  setOpenMedicalGroup((current) => (current === "allergies" ? "" : "allergies"))
+                }
               />
             </div>
           </AssessmentQuestion>
@@ -462,11 +494,15 @@ function MedicalGroup({
   options,
   value,
   onChange,
+  expanded,
+  onToggle,
 }: {
   title: string;
   options: string[];
   value: MedicalGroup;
   onChange: (value: MedicalGroup) => void;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const toggle = (option: string) =>
     onChange({
@@ -481,29 +517,46 @@ function MedicalGroup({
             : [...value.selected.filter((item) => item !== "None of these"), option],
     });
   return (
-    <fieldset>
-      <legend className="mb-3 text-sm font-semibold">{title}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {options.map((option) => (
-          <AssessmentOption
-            key={option}
-            multiple
-            selected={value.selected.includes(option)}
-            onClick={() => toggle(option)}
-          >
-            {option}
-          </AssessmentOption>
-        ))}
-      </div>
-      {value.selected.includes("Other") && (
-        <AssessmentInput
-          className="mt-3"
-          aria-label={`Other ${title.toLowerCase()}`}
-          placeholder="Add a short detail"
-          value={value.other}
-          onChange={(event) => onChange({ ...value, other: event.target.value })}
-        />
-      )}
-    </fieldset>
+    <AssessmentAccordion
+      title={title}
+      summary={medicalSummary(value)}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      <fieldset>
+        <legend className="sr-only">{title}</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {options.map((option) => (
+            <AssessmentOption
+              key={option}
+              multiple
+              selected={value.selected.includes(option)}
+              onClick={() => toggle(option)}
+            >
+              {option}
+            </AssessmentOption>
+          ))}
+        </div>
+        {value.selected.includes("Other") && (
+          <AssessmentInput
+            className="mt-2"
+            aria-label={`Other ${title.toLowerCase()}`}
+            placeholder="Add a short detail"
+            value={value.other}
+            onChange={(event) => onChange({ ...value, other: event.target.value })}
+          />
+        )}
+      </fieldset>
+    </AssessmentAccordion>
   );
+}
+
+function medicalSummary(group: MedicalGroup) {
+  if (group.selected.length === 0) return "None selected";
+  if (group.selected.length === 1) {
+    return group.selected[0] === "Other" && group.other.trim()
+      ? `Other: ${group.other.trim()}`
+      : group.selected[0];
+  }
+  return `${group.selected.length} selected`;
 }
