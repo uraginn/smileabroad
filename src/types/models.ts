@@ -188,6 +188,9 @@ export interface UploadedFile extends BaseRecord {
 
 export type LeadStatus =
   | "new_lead"
+  | "awaiting_images"
+  | "doctor_review"
+  | "follow_up"
   | "assessment_submitted"
   | "awaiting_review"
   | "contacted"
@@ -222,7 +225,7 @@ export interface Lead extends BaseRecord {
   treatment: string;
   budget?: string;
   assigned_to?: string;
-  priority: "low" | "medium" | "high";
+  priority: "low" | "medium" | "high" | "urgent";
   source: "assessment" | "referral" | "manual" | "campaign";
   status: LeadStatus;
   last_activity_at: string;

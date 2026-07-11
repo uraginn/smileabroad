@@ -21,11 +21,12 @@ export const CITIES_BY_COUNTRY: Record<string, string[]> = {
 
 export const LEAD_STATUSES = [
   { value: "new_lead", label: "New Lead" },
-  { value: "assessment_submitted", label: "Assessment Submitted" },
-  { value: "awaiting_review", label: "Awaiting Review" },
   { value: "contacted", label: "Contacted" },
+  { value: "awaiting_images", label: "Awaiting Images" },
+  { value: "doctor_review", label: "Doctor Review" },
   { value: "treatment_planning", label: "Treatment Planning" },
   { value: "quote_sent", label: "Quote Sent" },
+  { value: "follow_up", label: "Follow-up" },
   { value: "negotiation", label: "Negotiation" },
   { value: "booked", label: "Booked" },
   { value: "treatment_started", label: "Treatment Started" },

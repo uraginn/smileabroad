@@ -334,7 +334,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 4,
+      version: 5,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -360,6 +360,11 @@ export const useMockStore = create<Store>()(
           );
           return {
             ...lead,
+            status: lead.status === "assessment_submitted"
+              ? "new_lead"
+              : lead.status === "awaiting_review"
+                ? "doctor_review"
+                : lead.status,
             clinic_patient_id: lead.clinic_patient_id ?? clinicPatient?.id,
             clinic_application_id: lead.clinic_application_id ?? application?.id,
             assessment_id: lead.assessment_id ?? application?.assessment_id,
