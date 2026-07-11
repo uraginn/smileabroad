@@ -24,8 +24,19 @@ export interface SidebarItem {
   label: string;
   icon: LucideIcon;
   badge?: string | number;
-  group?: "operations" | "settings";
+  group?: "overview" | "sales" | "clinical" | "clinic";
 }
+
+const SIDEBAR_GROUPS: Array<{
+  key: NonNullable<SidebarItem["group"]>;
+  title: string;
+  order: number;
+}> = [
+  { key: "overview", title: "Overview", order: 1 },
+  { key: "sales", title: "Sales & Patients", order: 2 },
+  { key: "clinical", title: "Clinical", order: 3 },
+  { key: "clinic", title: "Clinic Management", order: 4 },
+];
 
 export function SidebarShell({
   items,
@@ -50,34 +61,37 @@ export function SidebarShell({
       ),
     [items, pathname],
   );
-  const grouped = useMemo(() => {
-    const operations: SidebarItem[] = [];
-    const settings: SidebarItem[] = [];
-    items.forEach((item) => {
-      if (item.group === "settings" || ["Branding", "Settings"].includes(item.label)) {
-        settings.push(item);
-      } else {
-        operations.push(item);
-      }
-    });
-    return { operations, settings };
-  }, [items]);
+  const grouped = useMemo(
+    () =>
+      SIDEBAR_GROUPS.map((group) => ({
+        ...group,
+        items: items.filter((item) => item.group === group.key),
+      })).filter((group) => group.items.length > 0),
+    [items],
+  );
+
+  const ungroupedItems = useMemo(() => items.filter((item) => item.group == null), [items]);
 
   const navList = (
     <>
-      <NavGroup
-        title="Operations"
-        items={grouped.operations}
-        pathname={pathname}
-        collapsed={collapsed}
-        onNavigate={() => setMobileOpen(false)}
-      />
-      {grouped.settings.length > 0 && (
-        <>
-          <Separator className="bg-sidebar-border/70 my-3" />
+      {grouped.map((group, index) => (
+        <div key={group.key}>
+          {index > 0 && <Separator className="bg-sidebar-border/70 my-3" />}
           <NavGroup
-            title="Configuration"
-            items={grouped.settings}
+            title={group.title}
+            items={group.items}
+            pathname={pathname}
+            collapsed={collapsed}
+            onNavigate={() => setMobileOpen(false)}
+          />
+        </div>
+      ))}
+      {ungroupedItems.length > 0 && (
+        <>
+          {grouped.length > 0 && <Separator className="bg-sidebar-border/70 my-3" />}
+          <NavGroup
+            title="Navigation"
+            items={ungroupedItems}
             pathname={pathname}
             collapsed={collapsed}
             onNavigate={() => setMobileOpen(false)}

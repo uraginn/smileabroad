@@ -18,6 +18,7 @@ import { Route as PublicIndexRouteImport } from './routes/_public.index'
 import { Route as RoadmapIdRouteImport } from './routes/roadmap.$id'
 import { Route as ProTreatmentPlansRouteImport } from './routes/pro.treatment-plans'
 import { Route as ProTemplatesRouteImport } from './routes/pro.templates'
+import { Route as ProTeamRouteImport } from './routes/pro.team'
 import { Route as ProTasksRouteImport } from './routes/pro.tasks'
 import { Route as ProSettingsRouteImport } from './routes/pro.settings'
 import { Route as ProQuotesRouteImport } from './routes/pro.quotes'
@@ -93,6 +94,11 @@ const ProTreatmentPlansRoute = ProTreatmentPlansRouteImport.update({
 const ProTemplatesRoute = ProTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => ProRoute,
+} as any)
+const ProTeamRoute = ProTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
   getParentRoute: () => ProRoute,
 } as any)
 const ProTasksRoute = ProTasksRouteImport.update({
@@ -289,6 +295,7 @@ export interface FileRoutesByFullPath {
   '/pro/quotes': typeof ProQuotesRouteWithChildren
   '/pro/settings': typeof ProSettingsRoute
   '/pro/tasks': typeof ProTasksRoute
+  '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
   '/pro/treatment-plans': typeof ProTreatmentPlansRouteWithChildren
   '/roadmap/$id': typeof RoadmapIdRoute
@@ -330,6 +337,7 @@ export interface FileRoutesByTo {
   '/pro/quotes': typeof ProQuotesRouteWithChildren
   '/pro/settings': typeof ProSettingsRoute
   '/pro/tasks': typeof ProTasksRoute
+  '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
   '/pro/treatment-plans': typeof ProTreatmentPlansRouteWithChildren
   '/roadmap/$id': typeof RoadmapIdRoute
@@ -374,6 +382,7 @@ export interface FileRoutesById {
   '/pro/quotes': typeof ProQuotesRouteWithChildren
   '/pro/settings': typeof ProSettingsRoute
   '/pro/tasks': typeof ProTasksRoute
+  '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
   '/pro/treatment-plans': typeof ProTreatmentPlansRouteWithChildren
   '/roadmap/$id': typeof RoadmapIdRoute
@@ -419,6 +428,7 @@ export interface FileRouteTypes {
     | '/pro/quotes'
     | '/pro/settings'
     | '/pro/tasks'
+    | '/pro/team'
     | '/pro/templates'
     | '/pro/treatment-plans'
     | '/roadmap/$id'
@@ -460,6 +470,7 @@ export interface FileRouteTypes {
     | '/pro/quotes'
     | '/pro/settings'
     | '/pro/tasks'
+    | '/pro/team'
     | '/pro/templates'
     | '/pro/treatment-plans'
     | '/roadmap/$id'
@@ -503,6 +514,7 @@ export interface FileRouteTypes {
     | '/pro/quotes'
     | '/pro/settings'
     | '/pro/tasks'
+    | '/pro/team'
     | '/pro/templates'
     | '/pro/treatment-plans'
     | '/roadmap/$id'
@@ -588,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/pro/templates'
       preLoaderRoute: typeof ProTemplatesRouteImport
+      parentRoute: typeof ProRoute
+    }
+    '/pro/team': {
+      id: '/pro/team'
+      path: '/team'
+      fullPath: '/pro/team'
+      preLoaderRoute: typeof ProTeamRouteImport
       parentRoute: typeof ProRoute
     }
     '/pro/tasks': {
@@ -939,6 +958,7 @@ interface ProRouteChildren {
   ProQuotesRoute: typeof ProQuotesRouteWithChildren
   ProSettingsRoute: typeof ProSettingsRoute
   ProTasksRoute: typeof ProTasksRoute
+  ProTeamRoute: typeof ProTeamRoute
   ProTemplatesRoute: typeof ProTemplatesRoute
   ProTreatmentPlansRoute: typeof ProTreatmentPlansRouteWithChildren
 }
@@ -952,6 +972,7 @@ const ProRouteChildren: ProRouteChildren = {
   ProQuotesRoute: ProQuotesRouteWithChildren,
   ProSettingsRoute: ProSettingsRoute,
   ProTasksRoute: ProTasksRoute,
+  ProTeamRoute: ProTeamRoute,
   ProTemplatesRoute: ProTemplatesRoute,
   ProTreatmentPlansRoute: ProTreatmentPlansRouteWithChildren,
 }
