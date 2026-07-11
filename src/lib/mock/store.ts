@@ -56,7 +56,35 @@ type LegacyAssessment = Assessment & {
 
 function migrateAssessment(assessment: LegacyAssessment): Assessment {
   if (assessment.dental && assessment.personal && assessment.medical && assessment.travel && assessment.uploads) {
-    return assessment;
+    return {
+      ...assessment,
+      dental: { ...assessment.dental, treatment_interest: assessment.dental.treatment_interest ?? "" },
+      personal: { ...assessment.personal, first_name: assessment.personal.first_name ?? "", email: assessment.personal.email ?? "" },
+      medical: {
+        ...assessment.medical,
+        conditions: Array.isArray(assessment.medical.conditions) ? assessment.medical.conditions : [],
+        medication_groups: Array.isArray(assessment.medical.medication_groups) ? assessment.medical.medication_groups : [],
+        allergy_groups: Array.isArray(assessment.medical.allergy_groups) ? assessment.medical.allergy_groups : [],
+        smoking: assessment.medical.smoking ?? false,
+        pregnancy: assessment.medical.pregnancy ?? false,
+      },
+      travel: {
+        ...assessment.travel,
+        destination_country: assessment.travel.destination_country ?? "",
+        preferred_cities: Array.isArray(assessment.travel.preferred_cities) ? assessment.travel.preferred_cities : [],
+        companions: assessment.travel.companions ?? 0,
+        needs_hotel: assessment.travel.needs_hotel ?? false,
+        needs_airport_transfer: assessment.travel.needs_airport_transfer ?? false,
+      },
+      uploads: {
+        uploaded_panoramic: assessment.uploads.uploaded_panoramic ?? false,
+        uploaded_smile_photo: assessment.uploads.uploaded_smile_photo ?? false,
+        uploaded_cbct: assessment.uploads.uploaded_cbct ?? false,
+        uploaded_dental_photos: assessment.uploads.uploaded_dental_photos ?? false,
+        uploaded_previous_plan: assessment.uploads.uploaded_previous_plan ?? false,
+        uploaded_previous_report: assessment.uploads.uploaded_previous_report ?? false,
+      },
+    };
   }
 
   return {
@@ -421,7 +449,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 6,
+      version: 7,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -476,8 +504,18 @@ export const useMockStore = create<Store>()(
             exclusions: Array.isArray(plan.exclusions) ? plan.exclusions : [],
             materials: Array.isArray(plan.materials) ? plan.materials : [],
             implant_systems: Array.isArray(plan.implant_systems) ? plan.implant_systems : [],
-            treatment_stages: Array.isArray(plan.treatment_stages) ? plan.treatment_stages : [],
-            visit_plan: Array.isArray(plan.visit_plan) ? plan.visit_plan : [],
+            treatment_stages: Array.isArray(plan.treatment_stages)
+              ? plan.treatment_stages.map((stage) => ({
+                  ...stage,
+                  procedures: Array.isArray(stage.procedures) ? stage.procedures : [],
+                }))
+              : [],
+            visit_plan: Array.isArray(plan.visit_plan)
+              ? plan.visit_plan.map((visit) => ({
+                  ...visit,
+                  procedures: Array.isArray(visit.procedures) ? visit.procedures : [],
+                }))
+              : [],
             share_token: shareToken,
           };
         });
@@ -485,6 +523,8 @@ export const useMockStore = create<Store>()(
           const plan = treatmentPlans.find((item) => item.id === quote.treatment_plan_id);
           return {
             ...quote,
+            items: Array.isArray(quote.items) ? quote.items : [],
+            payment_schedule: Array.isArray(quote.payment_schedule) ? quote.payment_schedule : [],
             included_services: Array.isArray(quote.included_services) ? quote.included_services : [],
             excluded_services: Array.isArray(quote.excluded_services) ? quote.excluded_services : [],
             share_token: quote.share_token ?? plan?.share_token,
@@ -492,6 +532,15 @@ export const useMockStore = create<Store>()(
         });
         return {
           ...state,
+          clinics: (state.clinics ?? seedClinics).map((clinic) => ({
+            ...clinic,
+            languages: Array.isArray(clinic.languages) ? clinic.languages : [],
+          })),
+          branding: (state.branding ?? seedBranding).map((item) => ({
+            ...item,
+            doctors: Array.isArray(item.doctors) ? item.doctors : [],
+            guarantees: Array.isArray(item.guarantees) ? item.guarantees : [],
+          })),
           assessments: (state.assessments ?? []).map((assessment) =>
             migrateAssessment(assessment as LegacyAssessment),
           ),
@@ -499,6 +548,12 @@ export const useMockStore = create<Store>()(
           leads,
           treatmentPlans,
           quotes,
+          roadmaps: (state.roadmaps ?? []).map((roadmap) => ({
+            ...roadmap,
+            recommended_clinic_ids: Array.isArray(roadmap.recommended_clinic_ids)
+              ? roadmap.recommended_clinic_ids
+              : [],
+          })),
         };
       },
     },

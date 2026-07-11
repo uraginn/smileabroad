@@ -48,8 +48,8 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
   const patient = useMockStore((s) =>
     s.patients.find(
       (item) =>
-        item.id === quote.clinic_patient_id ||
-        (item.clinic_id === quote.clinic_id && item.user_id === quote.patient_user_id),
+        item.clinic_id === quote.clinic_id &&
+        (item.id === quote.clinic_patient_id || item.user_id === quote.patient_user_id),
     ),
   );
   const plan = useMockStore((s) =>

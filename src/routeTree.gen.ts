@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProRouteImport } from './routes/pro'
 import { Route as PatientRouteImport } from './routes/patient'
+import { Route as DentalplanRouteImport } from './routes/dentalplan'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as PublicRouteImport } from './routes/_public'
 import { Route as AssessmentIndexRouteImport } from './routes/assessment.index'
@@ -56,6 +57,11 @@ const ProRoute = ProRouteImport.update({
 const PatientRoute = PatientRouteImport.update({
   id: '/patient',
   path: '/patient',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DentalplanRoute = DentalplanRouteImport.update({
+  id: '/dentalplan',
+  path: '/dentalplan',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -242,6 +248,7 @@ const PublicClinicsSlugRoute = PublicClinicsSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/dentalplan': typeof DentalplanRoute
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/about': typeof PublicAboutRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/admin': typeof AdminRouteWithChildren
+  '/dentalplan': typeof DentalplanRoute
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/about': typeof PublicAboutRoute
@@ -321,6 +329,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_public': typeof PublicRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
+  '/dentalplan': typeof DentalplanRoute
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/_public/about': typeof PublicAboutRoute
@@ -363,6 +372,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/dentalplan'
     | '/patient'
     | '/pro'
     | '/about'
@@ -401,6 +411,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/admin'
+    | '/dentalplan'
     | '/patient'
     | '/pro'
     | '/about'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_public'
     | '/admin'
+    | '/dentalplan'
     | '/patient'
     | '/pro'
     | '/_public/about'
@@ -482,6 +494,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   PublicRoute: typeof PublicRouteWithChildren
   AdminRoute: typeof AdminRouteWithChildren
+  DentalplanRoute: typeof DentalplanRoute
   PatientRoute: typeof PatientRouteWithChildren
   ProRoute: typeof ProRouteWithChildren
   ConfirmationIdRoute: typeof ConfirmationIdRoute
@@ -504,6 +517,13 @@ declare module '@tanstack/react-router' {
       path: '/patient'
       fullPath: '/patient'
       preLoaderRoute: typeof PatientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dentalplan': {
+      id: '/dentalplan'
+      path: '/dentalplan'
+      fullPath: '/dentalplan'
+      preLoaderRoute: typeof DentalplanRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -897,6 +917,7 @@ const ProRouteWithChildren = ProRoute._addFileChildren(ProRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   PublicRoute: PublicRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
+  DentalplanRoute: DentalplanRoute,
   PatientRoute: PatientRouteWithChildren,
   ProRoute: ProRouteWithChildren,
   ConfirmationIdRoute: ConfirmationIdRoute,
