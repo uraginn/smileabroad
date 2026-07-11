@@ -30,9 +30,10 @@ export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDe
 
 function PatientDetail() {
   const { id } = Route.useParams();
+  const activeUser = useAuth((s) => s.user);
   const hydrated = useMockStoreHydrated();
   const navigate = useNavigate();
-  const patient = useMockStore((s) => s.patients.find((p) => p.id === id));
+  const patient = useMockStore((s) => s.patients.find((p) => p.id === id && p.clinic_id === activeUser?.clinic_id));
   const users = useMockStore((s) => s.users);
   const clinic = useMockStore((s) => s.clinics.find((c) => c.id === patient?.clinic_id));
   const application = useMockStore((s) =>
@@ -222,7 +223,6 @@ function PatientDetail() {
   const addLeadActivity = useMockStore((s) => s.addLeadActivity);
   const addTask = useMockStore((s) => s.addTask);
   const toggleTask = useMockStore((s) => s.toggleTask);
-  const activeUser = useAuth((s) => s.user);
 
   if (!hydrated) return null;
   if (!patient) throw notFound();
@@ -242,7 +242,7 @@ function PatientDetail() {
       visits: roadmap?.estimated_visits ?? 1,
       healing_weeks: roadmap?.healing_weeks ?? 0,
       status: "draft",
-    });
+    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
     navigate({ to: "/pro/treatment-plans/$id", params: { id: plan.id } });
   };
   const saveInternalNote = () => {
@@ -742,21 +742,27 @@ function PatientDetail() {
                 }
               />
             ) : (
-              plans.map((p) => (
-                <Link key={p.id} to="/pro/treatment-plans/$id" params={{ id: p.id }}>
-                  <Card className="hover:border-primary transition">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{p.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.items.length} items · {p.visits} visits · {formatDateTime(p.created_at)}
-                        </p>
-                      </div>
-                      <Badge className="capitalize">{p.status ?? "draft"}</Badge>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))
+              plans.map((p) => {
+                const planDentist = clinicUsers.find((user) => user.id === p.dentist_id);
+                const estimatedTotal = p.items.reduce((sum, item) => sum + item.unit_price, 0);
+                return <Card key={p.id}>
+                  <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium">{p.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Created {formatDateTime(p.created_at)} · Updated {formatDateTime(p.updated_at)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} items · €{estimatedTotal.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="capitalize">{(p.status ?? "draft").replace(/_/g, " ")}</Badge>
+                      <Button asChild variant="outline" size="sm"><Link to="/pro/treatment-plans/$id" params={{ id: p.id }}>Open Plan</Link></Button>
+                    </div>
+                  </CardContent>
+                </Card>;
+              })
             )}
           </div>
         </TabsContent>

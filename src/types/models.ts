@@ -286,6 +286,13 @@ export interface TreatmentPlanItem {
   unit_price: number;
 }
 
+export type TreatmentPlanStatus =
+  | "draft"
+  | "awaiting_doctor_review"
+  | "approved"
+  | "sent_to_patient"
+  | "archived";
+
 export interface TreatmentPlan extends BaseRecord {
   clinic_id: string;
   patient_user_id: string;
@@ -295,6 +302,10 @@ export interface TreatmentPlan extends BaseRecord {
   items: TreatmentPlanItem[];
   visits: number;
   healing_weeks: number;
+  status?: TreatmentPlanStatus;
+  dentist_id?: string;
+  coordinator_id?: string;
+  clinical_notes?: string;
   share_token?: string;
 }
 

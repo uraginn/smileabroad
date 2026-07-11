@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { DentalDiagram } from "@/components/dental-diagram";
@@ -20,24 +21,32 @@ import {
 import { useState, type ReactNode } from "react";
 import { Trash2, ExternalLink, FileText, Building2, UserRound } from "lucide-react";
 import type { TreatmentPlanItem, ToothTreatment } from "@/types/models";
+import { useAuth } from "@/lib/auth/mock-auth";
 
 export const Route = createFileRoute("/pro/treatment-plans/$id")({ component: PlanEditor });
 
 function PlanEditor() {
   const { id } = Route.useParams();
+  const activeUser = useAuth((s) => s.user);
   const navigate = useNavigate();
   const hydrated = useMockStoreHydrated();
-  const plan = useMockStore((s) => s.treatmentPlans.find((t) => t.id === id));
+  const plan = useMockStore((s) => s.treatmentPlans.find((t) => t.id === id && t.clinic_id === activeUser?.clinic_id));
   const clinic = useMockStore((s) => s.clinics.find((item) => item.id === plan?.clinic_id));
   const patient = useMockStore((s) =>
     s.patients.find((item) => item.id === plan?.clinic_patient_id),
   );
   const existingQuote = useMockStore((s) => s.quotes.find((q) => q.treatment_plan_id === id));
   const update = useMockStore((s) => s.updateTreatmentPlan);
+  const clinicUsers = useMockStore((s) => s.users.filter((user) => user.clinic_id === activeUser?.clinic_id));
   const addQuote = useMockStore((s) => s.addQuote);
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   if (!hydrated) return null;
   if (!plan) throw notFound();
+
+  const actorId = activeUser?.clinic_id === plan.clinic_id ? activeUser.id : "system";
+  const canApprove = ["dentist", "clinic_owner", "clinic_admin"].includes(activeUser?.role ?? "");
+  const dentists = clinicUsers.filter((user) => user.role === "dentist");
+  const coordinators = clinicUsers.filter((user) => ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role));
 
   const activeItem = plan.items.find((i) => i.tooth === selectedTooth);
   const setItemForTooth = (t: number, patch: Partial<TreatmentPlanItem>) => {
@@ -59,6 +68,7 @@ function PlanEditor() {
     setSelectedTooth(null);
   };
   const total = plan.items.reduce((s, i) => s + i.unit_price, 0);
+  const changeStatus = (status: "draft" | "awaiting_doctor_review" | "approved") => update(plan.id, { status }, actorId);
   const openOrCreateQuote = () => {
     const quote =
       existingQuote ??
@@ -127,6 +137,26 @@ function PlanEditor() {
               Status: {plan.status ?? "draft"}
             </Badge>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="font-display font-semibold">Plan workflow</h3><p className="text-xs text-muted-foreground">Clinic-only metadata and approval status.</p></div>
+            <div className="flex flex-wrap gap-2">
+              {(plan.status ?? "draft") === "draft" && <Button size="sm" onClick={() => changeStatus("awaiting_doctor_review")}>Send for Doctor Review</Button>}
+              {(plan.status ?? "draft") === "awaiting_doctor_review" && canApprove && <Button size="sm" onClick={() => changeStatus("approved")}>Approve Plan</Button>}
+              {(plan.status ?? "draft") !== "draft" && <Button size="sm" variant="outline" onClick={() => changeStatus("draft")}>Return to Draft</Button>}
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="space-y-1.5"><Label>Status</Label><Select value={plan.status ?? "draft"} onValueChange={(value) => update(plan.id, { status: value as NonNullable<typeof plan.status> }, actorId)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="awaiting_doctor_review">Awaiting Doctor Review</SelectItem>{(canApprove || plan.status === "approved") && <SelectItem value="approved">Approved</SelectItem>}<SelectItem value="sent_to_patient">Sent to Patient</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Dentist</Label><Select value={plan.dentist_id ?? "unassigned"} onValueChange={(value) => update(plan.id, { dentist_id: value === "unassigned" ? undefined : value }, actorId)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unassigned">Not assigned</SelectItem>{dentists.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Coordinator</Label><Select value={plan.coordinator_id ?? "unassigned"} onValueChange={(value) => update(plan.id, { coordinator_id: value === "unassigned" ? undefined : value }, actorId)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unassigned">Not assigned</SelectItem>{coordinators.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Visits</Label><Input type="number" min={1} value={plan.visits} onChange={(event) => update(plan.id, { visits: Math.max(1, Number(event.target.value) || 1) }, actorId)} /></div>
+          </div>
+          <div className="space-y-1.5"><Label>Clinical notes (internal)</Label><Textarea value={plan.clinical_notes ?? ""} onChange={(event) => update(plan.id, { clinical_notes: event.target.value }, actorId)} placeholder="Internal clinical notes" /></div>
         </CardContent>
       </Card>
 

@@ -35,8 +35,8 @@ interface Store {
   applyToClinic: (input: { clinic_id: string; patient_user_id: string; assessment_id: string; roadmap_id: string; patient_name: string; patient_country: string; treatment: string; message?: string }) => ClinicApplication;
   addLeadActivity: (activity: Omit<LeadActivity, "id" | "created_at" | "updated_at">) => LeadActivity;
   updateLeadStatus: (id: string, status: LeadStatus, changedBy?: string) => void;
-  addTreatmentPlan: (tp: Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by">) => TreatmentPlan;
-  updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>) => void;
+  addTreatmentPlan: (tp: Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => TreatmentPlan;
+  updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>, changedBy?: string) => void;
   addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
   addTask: (task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">, createdBy?: string) => Task;
@@ -290,13 +290,51 @@ export const useMockStore = create<Store>()(
           activities: [...s.activities, activity],
         }));
       },
-      addTreatmentPlan: (tp) => {
-        const rec: TreatmentPlan = { ...tp, id: makeId("tp"), created_at: now(), updated_at: now(), created_by: tp.patient_user_id };
-        set((s) => ({ treatmentPlans: [...s.treatmentPlans, rec] }));
+      addTreatmentPlan: (tp, createdBy = "system") => {
+        const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const existingDraft = get().treatmentPlans.find((plan) =>
+          plan.clinic_id === tp.clinic_id &&
+          plan.clinic_patient_id === tp.clinic_patient_id &&
+          (plan.status ?? "draft") === "draft" && plan.items.length === 0 &&
+          +new Date(plan.created_at) >= recentCutoff,
+        );
+        if (existingDraft) return existingDraft;
+        const timestamp = now();
+        const rec: TreatmentPlan = { ...tp, status: tp.status ?? "draft", id: makeId("tp"), created_at: timestamp, updated_at: timestamp, created_by: createdBy };
+        const lead = get().leads.find((item) => item.clinic_id === tp.clinic_id && (item.clinic_patient_id === tp.clinic_patient_id || item.patient_user_id === tp.patient_user_id));
+        const activity: LeadActivity | undefined = lead ? {
+          id: makeId("activity"), clinic_id: tp.clinic_id, lead_id: lead.id, kind: "note",
+          body: `Treatment plan created: ${rec.title}`, internal: true,
+          created_at: timestamp, updated_at: timestamp, created_by: createdBy,
+        } : undefined;
+        const shouldMoveLead = lead && ["new_lead", "contacted", "awaiting_images", "doctor_review", "assessment_submitted", "awaiting_review"].includes(lead.status);
+        set((s) => ({
+          treatmentPlans: [...s.treatmentPlans, rec],
+          activities: activity ? [...s.activities, activity] : s.activities,
+          leads: lead ? s.leads.map((item) => item.id === lead.id ? {
+            ...item, status: shouldMoveLead ? "treatment_planning" : item.status,
+            last_activity_at: timestamp, updated_at: timestamp,
+          } : item) : s.leads,
+        }));
         return rec;
       },
-      updateTreatmentPlan: (id, patch) =>
-        set((s) => ({ treatmentPlans: s.treatmentPlans.map((t) => (t.id === id ? { ...t, ...patch, updated_at: now() } : t)) })),
+      updateTreatmentPlan: (id, patch, changedBy = "system") => {
+        const plan = get().treatmentPlans.find((item) => item.id === id);
+        if (!plan) return;
+        const timestamp = now();
+        const statusChanged = patch.status && patch.status !== (plan.status ?? "draft");
+        const lead = statusChanged ? get().leads.find((item) => item.clinic_id === plan.clinic_id && (item.clinic_patient_id === plan.clinic_patient_id || item.patient_user_id === plan.patient_user_id)) : undefined;
+        const activity: LeadActivity | undefined = lead ? {
+          id: makeId("activity"), clinic_id: plan.clinic_id, lead_id: lead.id, kind: "status_change",
+          body: `Treatment plan status changed from ${(plan.status ?? "draft").replace(/_/g, " ")} to ${patch.status!.replace(/_/g, " ")}.`,
+          internal: true, created_at: timestamp, updated_at: timestamp, created_by: changedBy,
+        } : undefined;
+        set((s) => ({
+          treatmentPlans: s.treatmentPlans.map((item) => item.id === id ? { ...item, ...patch, updated_at: timestamp } : item),
+          activities: activity ? [...s.activities, activity] : s.activities,
+          leads: lead ? s.leads.map((item) => item.id === lead.id ? { ...item, last_activity_at: timestamp, updated_at: timestamp } : item) : s.leads,
+        }));
+      },
       addQuote: (q) => {
         const existing = get().quotes.find(
           (quote) =>

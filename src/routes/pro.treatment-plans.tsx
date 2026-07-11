@@ -42,8 +42,7 @@ function Plans() {
                   <TableHead>Plan</TableHead>
                   <TableHead>Patient</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead>Visits</TableHead>
-                  <TableHead>Healing</TableHead>
+                  <TableHead>Estimated total</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Updated</TableHead>
                   <TableHead />
@@ -52,6 +51,7 @@ function Plans() {
               <TableBody>
                 {plans.map((plan) => {
                   const patient = patients.find((item) => item.id === plan.clinic_patient_id);
+                  const estimatedTotal = plan.items.reduce((sum, item) => sum + item.unit_price, 0);
                   return (
                     <TableRow key={plan.id}>
                       <TableCell className="font-medium">{plan.title}</TableCell>
@@ -59,8 +59,7 @@ function Plans() {
                         {patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
                       </TableCell>
                       <TableCell>{plan.items.length}</TableCell>
-                      <TableCell>{plan.visits}</TableCell>
-                      <TableCell>{plan.healing_weeks} weeks</TableCell>
+                      <TableCell>€{estimatedTotal.toLocaleString()}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="capitalize">
                           {plan.status ?? "draft"}
@@ -75,7 +74,7 @@ function Plans() {
                           params={{ id: plan.id }}
                           className="text-sm text-primary hover:underline"
                         >
-                          Open
+                          Open planner
                         </Link>
                       </TableCell>
                     </TableRow>
