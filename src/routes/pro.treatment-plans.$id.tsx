@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Trash2,
   ExternalLink,
@@ -51,8 +51,10 @@ function PlanEditor() {
   );
   const existingQuote = useMockStore((s) => s.quotes.find((q) => q.treatment_plan_id === id));
   const update = useMockStore((s) => s.updateTreatmentPlan);
-  const clinicUsers = useMockStore((s) =>
-    s.users.filter((user) => user.clinic_id === activeUser?.clinic_id),
+  const users = useMockStore((s) => s.users);
+  const clinicUsers = useMemo(
+    () => users.filter((user) => user.clinic_id === activeUser?.clinic_id),
+    [users, activeUser?.clinic_id],
   );
   const addQuote = useMockStore((s) => s.addQuote);
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
