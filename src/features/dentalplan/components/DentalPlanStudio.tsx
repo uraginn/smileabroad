@@ -5,6 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { CountryCombobox } from "./CountryCombobox";
 import { TreatmentPlanner } from "./TreatmentPlanner";
 import { DentalChart } from "./DentalChart";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
@@ -12,10 +22,11 @@ import { createDentalPlan } from "../utils/createDentalPlan";
 import { LocalStorageDentalPlanRepository } from "../adapters/LocalStorageDentalPlanRepository";
 import { useAutoSave } from "../hooks/useAutoSave";
 const STEPS = [
-  "Patient Information",
+  "Patient & Case Information",
   "Clinical Planning",
-  "Travel and Services",
-  "Review and Finalize",
+  "Travel, Visits & Services",
+  "Pricing & Commercial Details",
+  "Review & Finalize",
 ];
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
   const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
@@ -41,6 +52,7 @@ function PlannerShell({
   onFinalize,
   readOnly,
   context,
+  clinicUsers = [],
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
@@ -54,7 +66,7 @@ function PlannerShell({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
-  const step = Math.max(0, Math.min(3, plan.draftStep));
+  const step = Math.max(0, Math.min(4, plan.draftStep));
   const save = () => {
     repository.savePlan(plan);
     onSave?.(plan);
@@ -105,14 +117,18 @@ function PlannerShell({
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-6">
-        <ol className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <ol className="flex gap-2 overflow-x-auto pb-2">
           {STEPS.map((label, index) => (
-            <li
-              key={label}
-              className={`rounded-lg border px-3 py-2 text-sm ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "bg-secondary" : "bg-card"}`}
-            >
-              <span className="mr-2 font-semibold">{index + 1}</span>
-              {label}
+            <li key={label} className="min-w-[180px] flex-1">
+              <button
+                type="button"
+                onClick={() => change({ draftStep: index })}
+                aria-current={index === step ? "step" : undefined}
+                className={`h-full w-full rounded-lg border px-3 py-2 text-left text-sm ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "bg-secondary" : "bg-card hover:bg-muted"}`}
+              >
+                <span className="mr-2 font-semibold">{index + 1}</span>
+                {label}
+              </button>
             </li>
           ))}
         </ol>
@@ -121,10 +137,21 @@ function PlannerShell({
             {result}
           </div>
         )}
-        {step === 0 && <PatientStep plan={plan} change={change} />}{" "}
+        {step === 0 && <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />}{" "}
         {step === 1 && <TreatmentPlanner value={plan} onChange={setPlan} readOnly={readOnly} />}{" "}
         {step === 2 && <TravelStep plan={plan} change={change} />}{" "}
-        {step === 3 && <ReviewStep plan={plan} />}
+        {step === 3 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pricing & Commercial Details</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Pricing remains in the existing Quote workflow and will be expanded in its dedicated
+              phase.
+            </CardContent>
+          </Card>
+        )}
+        {step === 4 && <ReviewStep plan={plan} />}
         <div className="flex justify-between">
           <Button
             variant="outline"
@@ -133,7 +160,7 @@ function PlannerShell({
           >
             Back
           </Button>
-          {step < 3 ? (
+          {step < 4 ? (
             <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
           ) : (
             <Button onClick={finalize} disabled={finalizing}>
@@ -148,85 +175,186 @@ function PlannerShell({
 function PatientStep({
   plan,
   change,
+  clinicUsers,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
+  clinicUsers: Array<{ id: string; name: string; role: string }>;
 }) {
   const update = (patch: Partial<DentalPlan["patient"]>) =>
     change({
       patient: { ...plan.patient, ...patch },
       patientName: patch.fullName ?? plan.patientName,
-      name: patch.planTitle ?? plan.name,
     });
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Patient information</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Field label="Patient full name">
-          <Input
-            value={plan.patient.fullName}
-            onChange={(e) => update({ fullName: e.target.value })}
-          />
-        </Field>
-        <Field label="Date of birth">
-          <Input
-            type="date"
-            value={plan.patient.dateOfBirth ?? ""}
-            onChange={(e) => update({ dateOfBirth: e.target.value })}
-          />
-        </Field>
-        <Field label="Country">
-          <Input
-            value={plan.patient.country ?? ""}
-            onChange={(e) => update({ country: e.target.value })}
-          />
-        </Field>
-        <Field label="Email">
-          <Input
-            value={plan.patient.email ?? ""}
-            onChange={(e) => update({ email: e.target.value })}
-          />
-        </Field>
-        <Field label="Phone">
-          <Input
-            value={plan.patient.phone ?? ""}
-            onChange={(e) => update({ phone: e.target.value })}
-          />
-        </Field>
-        <Field label="Treatment interest">
-          <Input
-            value={plan.patient.treatmentInterest ?? ""}
-            onChange={(e) => update({ treatmentInterest: e.target.value })}
-          />
-        </Field>
-        <Field label="Plan title">
-          <Input
-            value={plan.patient.planTitle}
-            onChange={(e) => update({ planTitle: e.target.value })}
-          />
-        </Field>
-        <Field label="Preparation date">
-          <Input
-            type="date"
-            value={plan.patient.preparationDate}
-            onChange={(e) => update({ preparationDate: e.target.value })}
-          />
-        </Field>
-        <Field label="Currency">
-          <select
-            className="h-9 w-full rounded-md border bg-background px-3"
-            value={plan.patient.currency}
-            onChange={(e) => update({ currency: e.target.value as typeof plan.patient.currency })}
-          >
-            {["EUR", "GBP", "USD", "TRY"].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </Field>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Patient identity</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Field label="First name">
+            <Input
+              value={plan.patient.firstName}
+              onChange={(e) =>
+                update({
+                  firstName: e.target.value,
+                  fullName: `${e.target.value} ${plan.patient.lastName}`.trim(),
+                })
+              }
+            />
+          </Field>
+          <Field label="Last name">
+            <Input
+              value={plan.patient.lastName}
+              onChange={(e) =>
+                update({
+                  lastName: e.target.value,
+                  fullName: `${plan.patient.firstName} ${e.target.value}`.trim(),
+                })
+              }
+            />
+          </Field>
+          <Field label="Date of birth">
+            <Input
+              type="date"
+              value={plan.patient.dateOfBirth ?? ""}
+              onChange={(e) => update({ dateOfBirth: e.target.value })}
+            />
+          </Field>
+          <Field label="Age">
+            <Input
+              type="number"
+              min={0}
+              value={plan.patient.age ?? ""}
+              onChange={(e) => update({ age: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </Field>
+          <Field label="Country">
+            <CountryCombobox
+              value={plan.patient.country ?? ""}
+              onChange={(country) => update({ country })}
+            />
+          </Field>
+          <Field label="City">
+            <Input
+              value={plan.patient.city ?? ""}
+              onChange={(e) => update({ city: e.target.value })}
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              value={plan.patient.email ?? ""}
+              onChange={(e) => update({ email: e.target.value })}
+            />
+          </Field>
+          <Field label="Phone">
+            <Input
+              value={plan.patient.phone ?? ""}
+              onChange={(e) => update({ phone: e.target.value })}
+            />
+          </Field>
+          <Field label="WhatsApp">
+            <Input
+              value={plan.patient.whatsapp ?? ""}
+              onChange={(e) => update({ whatsapp: e.target.value })}
+            />
+          </Field>
+          <Field label="Preferred language">
+            <Input
+              value={plan.patient.preferredLanguage ?? ""}
+              onChange={(e) => update({ preferredLanguage: e.target.value })}
+            />
+          </Field>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Case context</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Patient source">
+              <Badge variant="secondary" className="h-9 w-fit items-center">
+                {plan.patient.source ?? "Manual"}
+              </Badge>
+            </Field>
+            <Field label="Assigned dentist">
+              <TeamSelect
+                value={plan.patient.dentistId}
+                users={clinicUsers.filter((user) => user.role === "dentist")}
+                placeholder="Select dentist"
+                onChange={(dentistId) => update({ dentistId })}
+              />
+            </Field>
+            <Field label="Assigned coordinator">
+              <TeamSelect
+                value={plan.patient.coordinatorId}
+                users={clinicUsers.filter((user) =>
+                  ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role),
+                )}
+                placeholder="Select coordinator"
+                onChange={(coordinatorId) => update({ coordinatorId })}
+              />
+            </Field>
+          </div>
+          <Separator />
+          <div className="flex flex-wrap gap-2">
+            {plan.patient.assessmentId && <Badge variant="outline">Assessment available</Badge>}
+            {plan.patient.roadmapId && <Badge variant="outline">Roadmap available</Badge>}
+            {plan.patient.applicationId && (
+              <Badge variant="outline">Clinic application available</Badge>
+            )}
+            {plan.patient.leadId && <Badge variant="outline">CRM lead linked</Badge>}
+            {!plan.patient.assessmentId && !plan.patient.roadmapId && !plan.patient.leadId && (
+              <span className="text-sm text-muted-foreground">
+                No originating digital case references.
+              </span>
+            )}
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Uploaded case files</p>
+            <div className="flex flex-wrap gap-2">
+              {plan.patient.uploadedFiles.length ? (
+                plan.patient.uploadedFiles.map((file, index) => (
+                  <Badge key={`${file.kind}-${index}`} variant="secondary">
+                    {file.kind.replace(/_/g, " ")}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">No uploaded files available.</span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+function TeamSelect({
+  value,
+  users,
+  placeholder,
+  onChange,
+}: {
+  value?: string;
+  users: Array<{ id: string; name: string }>;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {users.map((user) => (
+          <SelectItem key={user.id} value={user.id}>
+            {user.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 function TravelStep({

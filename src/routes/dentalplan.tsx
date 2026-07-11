@@ -7,12 +7,19 @@ import { useAuth } from "@/lib/auth/mock-auth";
 import { treatmentLabel } from "@/lib/dental";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
 
-type Search = { patientId?: string; treatmentPlanId?: string };
+type Search = {
+  patientId?: string;
+  treatmentPlanId?: string;
+  leadId?: string;
+  assessmentId?: string;
+};
 export const Route = createFileRoute("/dentalplan")({
   validateSearch: (search: Record<string, unknown>): Search => ({
     patientId: typeof search.patientId === "string" ? search.patientId : undefined,
     treatmentPlanId:
       typeof search.treatmentPlanId === "string" ? search.treatmentPlanId : undefined,
+    leadId: typeof search.leadId === "string" ? search.leadId : undefined,
+    assessmentId: typeof search.assessmentId === "string" ? search.assessmentId : undefined,
   }),
   head: () => ({ meta: [{ title: "DentalPlan Studio — SmileAbroad" }] }),
   component: DentalPlanRoute,
@@ -44,17 +51,72 @@ function DentalPlanRoute() {
   const patients = useMockStore((state) => state.patients);
   const plans = useMockStore((state) => state.treatmentPlans);
   const quotes = useMockStore((state) => state.quotes);
+  const leads = useMockStore((state) => state.leads);
+  const assessments = useMockStore((state) => state.assessments);
+  const roadmaps = useMockStore((state) => state.roadmaps);
+  const applications = useMockStore((state) => state.applications);
+  const files = useMockStore((state) => state.files);
+  const users = useMockStore((state) => state.users);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const addQuote = useMockStore((state) => state.addQuote);
   const updateQuote = useMockStore((state) => state.updateQuote);
-  const patient = patients.find(
-    (item) => item.id === search.patientId && item.clinic_id === user?.clinic_id,
-  );
   const existingPlan = plans.find(
     (item) => item.id === search.treatmentPlanId && item.clinic_id === user?.clinic_id,
   );
-  const crmMode = !!user && !!user.clinic_id && !!(patient || existingPlan);
+  const lead = leads.find(
+    (item) => item.id === search.leadId && item.clinic_id === user?.clinic_id,
+  );
+  const application = applications.find(
+    (item) => item.id === lead?.clinic_application_id && item.clinic_id === user?.clinic_id,
+  );
+  const patient = patients.find(
+    (item) =>
+      item.clinic_id === user?.clinic_id &&
+      (item.id === search.patientId ||
+        item.id === lead?.clinic_patient_id ||
+        item.id === application?.clinic_patient_id ||
+        item.id === existingPlan?.clinic_patient_id),
+  );
+  const assessment = assessments.find(
+    (item) =>
+      item.id ===
+      (search.assessmentId ??
+        lead?.assessment_id ??
+        patient?.assessment_id ??
+        application?.assessment_id),
+  );
+  const roadmap = roadmaps.find(
+    (item) => item.id === (lead?.roadmap_id ?? patient?.roadmap_id ?? application?.roadmap_id),
+  );
+  const crmMode = !!user && !!user.clinic_id && !!(patient || existingPlan || lead || assessment);
+  const caseFiles = useMemo(
+    () =>
+      [
+        ...files
+          .filter((file) => file.patient_user_id === (patient?.user_id ?? patient?.id))
+          .map((file) => ({ kind: file.kind, name: file.name })),
+        ...Object.entries(assessment?.uploads ?? {})
+          .filter(([, available]) => available)
+          .map(([kind]) => ({ kind, name: kind.replace(/_/g, " ") })),
+      ].filter(
+        (file, index, array) =>
+          array.findIndex((candidate) => candidate.kind === file.kind) === index,
+      ),
+    [files, patient?.user_id, patient?.id, assessment?.uploads],
+  );
+  const importedAssessment = useMemo(
+    () => ({
+      medicalConditions: assessment?.medical.conditions ?? [],
+      medications: assessment?.medical.medications,
+      allergies: assessment?.medical.allergies,
+      destinationCountry: assessment?.travel.destination_country,
+      preferredCities: assessment?.travel.preferred_cities ?? [],
+      preferredTimeline: assessment?.travel.treatment_timeline,
+      treatmentInterest: assessment?.dental.treatment_interest,
+    }),
+    [assessment],
+  );
   const initial = useMemo(() => {
     if (!crmMode) return undefined;
     const linkedPatient =
@@ -69,36 +131,75 @@ function DentalPlanRoute() {
         patient: {
           ...embedded.patient,
           patientId: linkedPatient?.id,
+          firstName:
+            linkedPatient?.first_name ??
+            assessment?.personal.first_name ??
+            embedded.patient.firstName,
+          lastName:
+            linkedPatient?.last_name ?? assessment?.personal.last_name ?? embedded.patient.lastName,
           fullName: linkedPatient
             ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
             : embedded.patient.fullName,
           country: linkedPatient?.country ?? embedded.patient.country,
+          city: linkedPatient?.city ?? assessment?.personal.city ?? embedded.patient.city,
           email: linkedPatient?.email ?? embedded.patient.email,
           phone: linkedPatient?.phone ?? embedded.patient.phone,
+          whatsapp:
+            linkedPatient?.whatsapp ?? assessment?.personal.whatsapp ?? embedded.patient.whatsapp,
+          preferredLanguage:
+            linkedPatient?.language ??
+            assessment?.personal.preferred_language ??
+            embedded.patient.preferredLanguage,
+          age: assessment?.personal.age ?? embedded.patient.age,
+          source: lead?.source ?? linkedPatient?.source ?? embedded.patient.source,
+          assessmentId: assessment?.id ?? embedded.patient.assessmentId,
+          roadmapId: roadmap?.id ?? embedded.patient.roadmapId,
+          applicationId: application?.id ?? embedded.patient.applicationId,
+          leadId: lead?.id ?? embedded.patient.leadId,
+          uploadedFiles: caseFiles,
           treatmentInterest:
             linkedPatient?.treatment_interest ?? embedded.patient.treatmentInterest,
           dentistId: existingPlan?.dentist_id,
           coordinatorId: existingPlan?.coordinator_id,
           planTitle: existingPlan?.title ?? embedded.patient.planTitle,
         },
+        importedAssessment,
       });
     return createDentalPlan({
       name: existingPlan?.title ?? "Dental treatment plan",
-      patientName: linkedPatient ? `${linkedPatient.first_name} ${linkedPatient.last_name}` : "",
+      patientName: linkedPatient
+        ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
+        : `${assessment?.personal.first_name ?? ""} ${assessment?.personal.last_name ?? ""}`.trim(),
       patient: {
         patientId: linkedPatient?.id,
-        fullName: linkedPatient ? `${linkedPatient.first_name} ${linkedPatient.last_name}` : "",
+        firstName: linkedPatient?.first_name ?? assessment?.personal.first_name ?? "",
+        lastName: linkedPatient?.last_name ?? assessment?.personal.last_name ?? "",
+        fullName: linkedPatient
+          ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
+          : `${assessment?.personal.first_name ?? ""} ${assessment?.personal.last_name ?? ""}`.trim(),
         dateOfBirth: linkedPatient?.date_of_birth,
-        country: linkedPatient?.country,
-        email: linkedPatient?.email,
-        phone: linkedPatient?.phone,
-        treatmentInterest: linkedPatient?.treatment_interest,
+        age: assessment?.personal.age,
+        country: linkedPatient?.country ?? assessment?.personal.country,
+        city: linkedPatient?.city ?? assessment?.personal.city,
+        email: linkedPatient?.email ?? assessment?.personal.email,
+        phone: linkedPatient?.phone ?? assessment?.personal.phone,
+        whatsapp: linkedPatient?.whatsapp ?? assessment?.personal.whatsapp,
+        preferredLanguage: linkedPatient?.language ?? assessment?.personal.preferred_language,
+        treatmentInterest:
+          linkedPatient?.treatment_interest ?? assessment?.dental.treatment_interest,
+        source: lead?.source ?? linkedPatient?.source ?? "manual",
+        assessmentId: assessment?.id,
+        roadmapId: roadmap?.id,
+        applicationId: application?.id,
+        leadId: lead?.id,
+        uploadedFiles: caseFiles,
         dentistId: existingPlan?.dentist_id,
         coordinatorId: existingPlan?.coordinator_id,
         planTitle: existingPlan?.title ?? "Dental treatment plan",
         preparationDate: new Date().toISOString().slice(0, 10),
         currency: "EUR",
       },
+      importedAssessment,
       travel: {
         visits: existingPlan?.visits ?? 1,
         healingWeeks: existingPlan?.healing_weeks ?? 0,
@@ -112,8 +213,24 @@ function DentalPlanRoute() {
         internalNotes: existingPlan?.internal_clinical_notes,
       },
     });
-  }, [crmMode, patient, existingPlan, patients, user?.clinic_id]);
-  if (!hydrated && search.patientId) return <div className="p-8">Loading CRM context…</div>;
+  }, [
+    crmMode,
+    patient,
+    existingPlan,
+    patients,
+    user?.clinic_id,
+    assessment,
+    roadmap,
+    application,
+    lead,
+    caseFiles,
+    importedAssessment,
+  ]);
+  if (
+    !hydrated &&
+    (search.patientId || search.treatmentPlanId || search.leadId || search.assessmentId)
+  )
+    return <div className="p-8">Loading CRM context…</div>;
   const finalize = async (value: DentalPlanData) => {
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
@@ -229,6 +346,9 @@ function DentalPlanRoute() {
         treatmentPlanId: existingPlan?.id,
       }}
       initialValue={initial}
+      clinicUsers={users
+        .filter((member) => member.clinic_id === user?.clinic_id)
+        .map(({ id, name, role }) => ({ id, name, role }))}
       onFinalize={finalize}
     />
   );

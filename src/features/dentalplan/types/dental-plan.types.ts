@@ -100,16 +100,37 @@ export type DentalTreatmentGroup = {
 export type DentalPlannerPatient = {
   patientId?: string;
   fullName: string;
+  firstName: string;
+  lastName: string;
+  age?: number;
   dateOfBirth?: string;
   country?: string;
+  city?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
+  preferredLanguage?: string;
   treatmentInterest?: string;
+  source?: string;
   dentistId?: string;
   coordinatorId?: string;
+  assessmentId?: string;
+  roadmapId?: string;
+  applicationId?: string;
+  leadId?: string;
+  uploadedFiles: Array<{ kind: string; name: string }>;
   planTitle: string;
   preparationDate: string;
   currency: "GBP" | "EUR" | "USD" | "TRY";
+};
+export type DentalPlannerImportedAssessment = {
+  medicalConditions: string[];
+  medications?: string;
+  allergies?: string;
+  destinationCountry?: string;
+  preferredCities: string[];
+  preferredTimeline?: string;
+  treatmentInterest?: string;
 };
 export type DentalPlannerTravel = {
   clinicId?: string;
@@ -142,6 +163,7 @@ export type DentalPlanData = {
   travel: DentalPlannerTravel;
   draftStep: number;
   finalized: boolean;
+  importedAssessment: DentalPlannerImportedAssessment;
   createdAt: string;
   updatedAt: string;
 };
@@ -154,6 +176,7 @@ export interface DentalPlanStudioProps {
   onSave?: (value: DentalPlanData) => void;
   onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string; quoteId: string }>;
   readOnly?: boolean;
+  clinicUsers?: Array<{ id: string; name: string; role: string }>;
 }
 export interface DentalPlannerContext {
   mode: "standalone" | "crm";

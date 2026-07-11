@@ -8,11 +8,15 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
     currentConditions: overrides.currentConditions ?? {},
     proposedTreatments: overrides.proposedTreatments ?? [],
     treatmentGroups: overrides.treatmentGroups ?? [],
-    patient: overrides.patient ?? {
+    patient: {
+      firstName: "",
+      lastName: "",
+      uploadedFiles: [],
       fullName: overrides.patientName ?? "",
       planTitle: overrides.name ?? "Untitled Plan",
       preparationDate: now.slice(0, 10),
       currency: "EUR",
+      ...(overrides.patient ?? {}),
     },
     travel: overrides.travel ?? {
       visits: 1,
@@ -26,6 +30,10 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
     },
     draftStep: overrides.draftStep ?? 0,
     finalized: overrides.finalized ?? false,
+    importedAssessment: overrides.importedAssessment ?? {
+      medicalConditions: [],
+      preferredCities: [],
+    },
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };
