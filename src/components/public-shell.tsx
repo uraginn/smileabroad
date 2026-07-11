@@ -1,6 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Logo } from "@/components/logo";
-import { RoleSwitcher } from "@/components/role-switcher";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -38,9 +37,8 @@ export function PublicHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/login" className="hidden sm:inline-flex text-sm font-medium text-muted-foreground hover:text-foreground px-3 py-2">Log in</Link>
-          <Button asChild size="sm" className="hidden sm:inline-flex"><Link to="/start">Start free</Link></Button>
-          <RoleSwitcher />
+          <Link to="/login" className="hidden sm:inline-flex text-sm font-medium text-muted-foreground hover:text-foreground px-3 py-2">Clinic login</Link>
+          <Button asChild size="sm" className="hidden sm:inline-flex"><Link to="/assessment">Start assessment</Link></Button>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="lg:hidden"><Menu /></Button>
@@ -50,8 +48,8 @@ export function PublicHeader() {
                 {NAV.map((n) => (
                   <Link key={n.to} to={n.to} className="px-3 py-2 rounded-md hover:bg-secondary">{n.label}</Link>
                 ))}
-                <Link to="/login" className="px-3 py-2 rounded-md hover:bg-secondary">Log in</Link>
-                <Link to="/start" className="px-3 py-2 rounded-md bg-primary text-primary-foreground mt-2 text-center">Start free</Link>
+                <Link to="/login" className="px-3 py-2 rounded-md hover:bg-secondary">Clinic login</Link>
+                <Link to="/assessment" className="px-3 py-2 rounded-md bg-primary text-primary-foreground mt-2 text-center">Start assessment</Link>
               </div>
             </SheetContent>
           </Sheet>
@@ -79,8 +77,8 @@ export function PublicFooter() {
         ]} />
         <FooterCol title="Clinics" links={[
           ["For clinics", "/for-clinics"],
-          ["Join the network", "/register"],
-          ["Login", "/login"],
+          ["Join the network", "/for-clinics"],
+          ["Clinic login", "/login"],
         ]} />
         <FooterCol title="Company" links={[
           ["About", "/about"],

@@ -9,7 +9,6 @@ import type { Role } from "@/types/models";
 import { UserCog } from "lucide-react";
 
 const roleLabels: Record<Role, string> = {
-  patient: "Patient",
   clinic_owner: "Clinic Owner",
   clinic_admin: "Clinic Admin",
   coordinator: "Coordinator",
@@ -19,7 +18,6 @@ const roleLabels: Record<Role, string> = {
 };
 
 const roleRoutes: Record<Role, string> = {
-  patient: "/patient/dashboard",
   clinic_owner: "/pro/dashboard",
   clinic_admin: "/pro/dashboard",
   coordinator: "/pro/dashboard",

@@ -506,15 +506,3 @@ export const selectClinicAppointments = (clinicId: string) => (s: Store) => s.ap
 export const selectClinicPlans = (clinicId: string) => (s: Store) => s.treatmentPlans.filter((t) => t.clinic_id === clinicId);
 export const selectClinicQuotes = (clinicId: string) => (s: Store) => s.quotes.filter((q) => q.clinic_id === clinicId);
 export const selectClinicBranding = (clinicId: string) => (s: Store) => s.branding.find((b) => b.clinic_id === clinicId);
-
-// Patient-scoped selectors. Missing identity deliberately returns no records.
-export const selectPatientAssessments = (patientUserId?: string) => (s: Store) =>
-  patientUserId ? s.assessments.filter((a) => a.patient_user_id === patientUserId) : [];
-export const selectPatientRoadmaps = (patientUserId?: string) => (s: Store) =>
-  patientUserId ? s.roadmaps.filter((r) => r.patient_user_id === patientUserId) : [];
-export const selectPatientApplications = (patientUserId?: string) => (s: Store) =>
-  patientUserId ? s.applications.filter((a) => a.patient_user_id === patientUserId) : [];
-export const selectPatientPlans = (patientUserId?: string) => (s: Store) =>
-  patientUserId ? s.treatmentPlans.filter((p) => p.patient_user_id === patientUserId) : [];
-export const selectPatientQuotes = (patientUserId?: string) => (s: Store) =>
-  patientUserId ? s.quotes.filter((q) => q.patient_user_id === patientUserId) : [];

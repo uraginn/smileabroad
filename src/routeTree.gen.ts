@@ -27,12 +27,8 @@ import { Route as ProLeadsRouteImport } from './routes/pro.leads'
 import { Route as ProDashboardRouteImport } from './routes/pro.dashboard'
 import { Route as ProBrandingRouteImport } from './routes/pro.branding'
 import { Route as ProAppointmentsRouteImport } from './routes/pro.appointments'
-import { Route as PatientRoadmapsRouteImport } from './routes/patient.roadmaps'
-import { Route as PatientProfileRouteImport } from './routes/patient.profile'
-import { Route as PatientOffersRouteImport } from './routes/patient.offers'
-import { Route as PatientMessagesRouteImport } from './routes/patient.messages'
-import { Route as PatientDashboardRouteImport } from './routes/patient.dashboard'
-import { Route as PatientApplicationsRouteImport } from './routes/patient.applications'
+import { Route as PatientSplatRouteImport } from './routes/patient.$'
+import { Route as ConfirmationIdRouteImport } from './routes/confirmation.$id'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
@@ -141,35 +137,15 @@ const ProAppointmentsRoute = ProAppointmentsRouteImport.update({
   path: '/appointments',
   getParentRoute: () => ProRoute,
 } as any)
-const PatientRoadmapsRoute = PatientRoadmapsRouteImport.update({
-  id: '/roadmaps',
-  path: '/roadmaps',
+const PatientSplatRoute = PatientSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
   getParentRoute: () => PatientRoute,
 } as any)
-const PatientProfileRoute = PatientProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => PatientRoute,
-} as any)
-const PatientOffersRoute = PatientOffersRouteImport.update({
-  id: '/offers',
-  path: '/offers',
-  getParentRoute: () => PatientRoute,
-} as any)
-const PatientMessagesRoute = PatientMessagesRouteImport.update({
-  id: '/messages',
-  path: '/messages',
-  getParentRoute: () => PatientRoute,
-} as any)
-const PatientDashboardRoute = PatientDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => PatientRoute,
-} as any)
-const PatientApplicationsRoute = PatientApplicationsRouteImport.update({
-  id: '/applications',
-  path: '/applications',
-  getParentRoute: () => PatientRoute,
+const ConfirmationIdRoute = ConfirmationIdRouteImport.update({
+  id: '/confirmation/$id',
+  path: '/confirmation/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
@@ -281,12 +257,8 @@ export interface FileRoutesByFullPath {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
-  '/patient/applications': typeof PatientApplicationsRoute
-  '/patient/dashboard': typeof PatientDashboardRoute
-  '/patient/messages': typeof PatientMessagesRoute
-  '/patient/offers': typeof PatientOffersRoute
-  '/patient/profile': typeof PatientProfileRoute
-  '/patient/roadmaps': typeof PatientRoadmapsRoute
+  '/confirmation/$id': typeof ConfirmationIdRoute
+  '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
   '/pro/dashboard': typeof ProDashboardRoute
@@ -323,12 +295,8 @@ export interface FileRoutesByTo {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
-  '/patient/applications': typeof PatientApplicationsRoute
-  '/patient/dashboard': typeof PatientDashboardRoute
-  '/patient/messages': typeof PatientMessagesRoute
-  '/patient/offers': typeof PatientOffersRoute
-  '/patient/profile': typeof PatientProfileRoute
-  '/patient/roadmaps': typeof PatientRoadmapsRoute
+  '/confirmation/$id': typeof ConfirmationIdRoute
+  '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
   '/pro/dashboard': typeof ProDashboardRoute
@@ -368,12 +336,8 @@ export interface FileRoutesById {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
-  '/patient/applications': typeof PatientApplicationsRoute
-  '/patient/dashboard': typeof PatientDashboardRoute
-  '/patient/messages': typeof PatientMessagesRoute
-  '/patient/offers': typeof PatientOffersRoute
-  '/patient/profile': typeof PatientProfileRoute
-  '/patient/roadmaps': typeof PatientRoadmapsRoute
+  '/confirmation/$id': typeof ConfirmationIdRoute
+  '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
   '/pro/dashboard': typeof ProDashboardRoute
@@ -414,12 +378,8 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/settings'
     | '/admin/users'
-    | '/patient/applications'
-    | '/patient/dashboard'
-    | '/patient/messages'
-    | '/patient/offers'
-    | '/patient/profile'
-    | '/patient/roadmaps'
+    | '/confirmation/$id'
+    | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
     | '/pro/dashboard'
@@ -456,12 +416,8 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/settings'
     | '/admin/users'
-    | '/patient/applications'
-    | '/patient/dashboard'
-    | '/patient/messages'
-    | '/patient/offers'
-    | '/patient/profile'
-    | '/patient/roadmaps'
+    | '/confirmation/$id'
+    | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
     | '/pro/dashboard'
@@ -500,12 +456,8 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/settings'
     | '/admin/users'
-    | '/patient/applications'
-    | '/patient/dashboard'
-    | '/patient/messages'
-    | '/patient/offers'
-    | '/patient/profile'
-    | '/patient/roadmaps'
+    | '/confirmation/$id'
+    | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
     | '/pro/dashboard'
@@ -532,6 +484,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   PatientRoute: typeof PatientRouteWithChildren
   ProRoute: typeof ProRouteWithChildren
+  ConfirmationIdRoute: typeof ConfirmationIdRoute
   RoadmapIdRoute: typeof RoadmapIdRoute
   AssessmentIndexRoute: typeof AssessmentIndexRoute
   SharedTreatmentPlanTokenRoute: typeof SharedTreatmentPlanTokenRoute
@@ -665,47 +618,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProAppointmentsRouteImport
       parentRoute: typeof ProRoute
     }
-    '/patient/roadmaps': {
-      id: '/patient/roadmaps'
-      path: '/roadmaps'
-      fullPath: '/patient/roadmaps'
-      preLoaderRoute: typeof PatientRoadmapsRouteImport
+    '/patient/$': {
+      id: '/patient/$'
+      path: '/$'
+      fullPath: '/patient/$'
+      preLoaderRoute: typeof PatientSplatRouteImport
       parentRoute: typeof PatientRoute
     }
-    '/patient/profile': {
-      id: '/patient/profile'
-      path: '/profile'
-      fullPath: '/patient/profile'
-      preLoaderRoute: typeof PatientProfileRouteImport
-      parentRoute: typeof PatientRoute
-    }
-    '/patient/offers': {
-      id: '/patient/offers'
-      path: '/offers'
-      fullPath: '/patient/offers'
-      preLoaderRoute: typeof PatientOffersRouteImport
-      parentRoute: typeof PatientRoute
-    }
-    '/patient/messages': {
-      id: '/patient/messages'
-      path: '/messages'
-      fullPath: '/patient/messages'
-      preLoaderRoute: typeof PatientMessagesRouteImport
-      parentRoute: typeof PatientRoute
-    }
-    '/patient/dashboard': {
-      id: '/patient/dashboard'
-      path: '/dashboard'
-      fullPath: '/patient/dashboard'
-      preLoaderRoute: typeof PatientDashboardRouteImport
-      parentRoute: typeof PatientRoute
-    }
-    '/patient/applications': {
-      id: '/patient/applications'
-      path: '/applications'
-      fullPath: '/patient/applications'
-      preLoaderRoute: typeof PatientApplicationsRouteImport
-      parentRoute: typeof PatientRoute
+    '/confirmation/$id': {
+      id: '/confirmation/$id'
+      path: '/confirmation/$id'
+      fullPath: '/confirmation/$id'
+      preLoaderRoute: typeof ConfirmationIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/users': {
       id: '/admin/users'
@@ -894,21 +819,11 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface PatientRouteChildren {
-  PatientApplicationsRoute: typeof PatientApplicationsRoute
-  PatientDashboardRoute: typeof PatientDashboardRoute
-  PatientMessagesRoute: typeof PatientMessagesRoute
-  PatientOffersRoute: typeof PatientOffersRoute
-  PatientProfileRoute: typeof PatientProfileRoute
-  PatientRoadmapsRoute: typeof PatientRoadmapsRoute
+  PatientSplatRoute: typeof PatientSplatRoute
 }
 
 const PatientRouteChildren: PatientRouteChildren = {
-  PatientApplicationsRoute: PatientApplicationsRoute,
-  PatientDashboardRoute: PatientDashboardRoute,
-  PatientMessagesRoute: PatientMessagesRoute,
-  PatientOffersRoute: PatientOffersRoute,
-  PatientProfileRoute: PatientProfileRoute,
-  PatientRoadmapsRoute: PatientRoadmapsRoute,
+  PatientSplatRoute: PatientSplatRoute,
 }
 
 const PatientRouteWithChildren =
@@ -984,6 +899,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   PatientRoute: PatientRouteWithChildren,
   ProRoute: ProRouteWithChildren,
+  ConfirmationIdRoute: ConfirmationIdRoute,
   RoadmapIdRoute: RoadmapIdRoute,
   AssessmentIndexRoute: AssessmentIndexRoute,
   SharedTreatmentPlanTokenRoute: SharedTreatmentPlanTokenRoute,

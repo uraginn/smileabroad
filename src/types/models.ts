@@ -1,5 +1,4 @@
 export type Role =
-  | "patient"
   | "clinic_owner"
   | "clinic_admin"
   | "coordinator"
@@ -54,7 +53,7 @@ export interface Clinic extends BaseRecord {
 export interface ClinicMember extends BaseRecord {
   clinic_id: string;
   user_id: string;
-  role: Exclude<Role, "patient" | "platform_admin">;
+  role: Exclude<Role, "platform_admin">;
 }
 
 export interface Patient extends BaseRecord {

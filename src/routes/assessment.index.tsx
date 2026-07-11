@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TREATMENTS, COUNTRIES, CITIES_BY_COUNTRY } from "@/lib/constants";
 import { useMockStore } from "@/lib/mock/store";
-import { useAuth } from "@/lib/auth/mock-auth";
 import { generateRoadmap } from "@/lib/roadmap";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,11 +17,14 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/assessment/")({ component: Assessment });
 
 const STEPS = ["Treatment", "Country", "Cities", "Dental", "Personal", "Medical", "Travel", "Upload"] as const;
+const DRAFT_KEY = "smileabroad-assessment-draft-v1";
+const JOURNEY_KEY = "smileabroad-active-journey-v1";
 
 function Assessment() {
   const navigate = useNavigate();
-  const { user, loginAs } = useAuth();
   const store = useMockStore();
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const [submissionId, setSubmissionId] = useState("");
   const [step, setStep] = useState(0);
   const [treatment, setTreatment] = useState("");
   const [country, setCountry] = useState("");
@@ -31,6 +33,30 @@ function Assessment() {
   const [personal, setPersonal] = useState({ firstName: "", lastName: "", email: "", phone: "", dob: "" });
   const [medical, setMedical] = useState({ conditions: [] as string[], meds: "", allergies: "", smoker: false, pregnant: false, notes: "" });
   const [travel, setTravel] = useState({ from: "", earliest: "", latest: "", companions: 0, hotel: true, transfer: true });
+
+  useEffect(() => {
+    window.localStorage.removeItem("smileabroad-anonymous-submission");
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? "null");
+      if (saved) {
+        setSubmissionId(saved.submissionId || `anonymous_${crypto.randomUUID()}`);
+        setStep(Math.max(0, Math.min(saved.step ?? 0, STEPS.length - 1)));
+        setTreatment(saved.treatment ?? ""); setCountry(saved.country ?? ""); setCities(saved.cities ?? []);
+        setDental((current) => ({ ...current, ...saved.dental })); setPersonal((current) => ({ ...current, ...saved.personal }));
+        setMedical((current) => ({ ...current, ...saved.medical })); setTravel((current) => ({ ...current, ...saved.travel }));
+      } else setSubmissionId(`anonymous_${crypto.randomUUID()}`);
+    } catch {
+      setSubmissionId(`anonymous_${crypto.randomUUID()}`);
+    }
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated || !submissionId) return;
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ submissionId, step, treatment, country, cities, dental, personal, medical, travel,
+      uploads: { uploaded_panoramic: false, uploaded_smile_photo: false, uploaded_cbct: false, uploaded_dental_photos: false, uploaded_previous_plan: false, uploaded_previous_report: false },
+    }));
+  }, [cities, country, dental, draftHydrated, medical, personal, step, submissionId, treatment, travel]);
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -43,8 +69,8 @@ function Assessment() {
   };
 
   const submit = () => {
-    if (!user) loginAs("patient");
-    const uid = useAuth.getState().user!.id;
+    if (!submissionId) return;
+    const uid = submissionId;
     const assessment = store.addAssessment({
       patient_user_id: uid,
       dental: {
@@ -90,6 +116,8 @@ function Assessment() {
       status: "submitted",
     });
     const roadmap = store.addRoadmap({ ...generateRoadmap(assessment, uid), status: "ready" });
+    window.localStorage.removeItem(DRAFT_KEY);
+    window.localStorage.setItem(JOURNEY_KEY, JSON.stringify({ submissionId: uid, assessmentId: assessment.id, roadmapId: roadmap.id }));
     navigate({ to: "/roadmap/$id", params: { id: roadmap.id } });
   };
 
@@ -209,7 +237,7 @@ function Assessment() {
             {step < STEPS.length - 1 ? (
               <Button onClick={next} disabled={!canNext()}>Continue <ArrowRight className="size-4 ml-1" /></Button>
             ) : (
-              <Button onClick={submit}>Generate roadmap <ArrowRight className="size-4 ml-1" /></Button>
+              <Button onClick={submit} disabled={!draftHydrated || !submissionId}>Generate roadmap <ArrowRight className="size-4 ml-1" /></Button>
             )}
           </div>
         </CardContent></Card>

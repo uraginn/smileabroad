@@ -16,7 +16,7 @@ function ForClinics() {
           <p className="text-xs uppercase tracking-[0.2em] text-accent font-medium">For clinics</p>
           <h1 className="mt-3 font-display text-5xl font-semibold tracking-tight">Turn international interest into booked treatments.</h1>
           <p className="mt-5 text-lg text-muted-foreground">Join a curated network of verified clinics. Receive pre-qualified leads, close them in your own CRM, and delight patients with branded plans.</p>
-          <div className="mt-6 flex gap-3"><Button asChild size="lg"><Link to="/register">Apply to join</Link></Button><Button asChild size="lg" variant="outline"><Link to="/login">Clinic login</Link></Button></div>
+          <div className="mt-6 flex flex-wrap gap-3"><Button size="lg" disabled title="Clinic self-onboarding is not available yet">Clinic onboarding coming soon</Button><Button asChild size="lg" variant="outline"><Link to="/login">Clinic login</Link></Button></div>
         </div>
       </section>
       <section className="container-app py-20 grid md:grid-cols-2 lg:grid-cols-4 gap-6">

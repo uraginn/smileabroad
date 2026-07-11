@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Navigate, Outlet } from "@tanstack/react-router";
 import { SidebarShell } from "@/components/sidebar-shell";
 import {
   LayoutDashboard,
@@ -13,6 +13,8 @@ import {
   Palette,
   UserRound,
 } from "lucide-react";
+import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
+import { PageLoading } from "@/components/ui-bits";
 
 export const Route = createFileRoute("/pro")({ component: ProLayout });
 
@@ -39,6 +41,10 @@ const items = [
 ];
 
 function ProLayout() {
+  const hydrated = useAuthHydrated();
+  const user = useAuth((state) => state.user);
+  if (!hydrated) return <PageLoading label="Loading clinic workspace" />;
+  if (!user || user.role === "platform_admin") return <Navigate to="/login" replace />;
   return (
     <SidebarShell items={items} section="Clinic CRM">
       <Outlet />

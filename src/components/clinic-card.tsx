@@ -6,9 +6,9 @@ import { CheckCircle2, Clock, Star, Hotel, Car, ShieldCheck, Languages } from "l
 import type { Clinic } from "@/types/models";
 
 export function ClinicCard({
-  clinic, onApply,
+  clinic, onApply, roadmapId,
 }: {
-  clinic: Clinic; onApply?: (id: string) => void;
+  clinic: Clinic; onApply?: (id: string) => void; roadmapId?: string;
 }) {
   return (
     <Card className="overflow-hidden group hover:shadow-lg transition-shadow p-0 gap-0">
@@ -47,7 +47,7 @@ export function ClinicCard({
             <p className="font-display text-lg font-semibold">{clinic.price_range.currency === "USD" ? "$" : "€"}{clinic.price_range.min}<span className="text-xs text-muted-foreground font-normal"> / unit</span></p>
           </div>
           <div className="flex gap-2">
-            <Button asChild size="sm" variant="outline"><Link to="/clinics/$slug" params={{ slug: clinic.slug }}>View</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link to="/clinics/$slug" params={{ slug: clinic.slug }} search={{ roadmap: roadmapId }}>View</Link></Button>
             {onApply && <Button size="sm" onClick={() => onApply(clinic.id)}>Apply</Button>}
           </div>
         </div>

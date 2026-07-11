@@ -5,11 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Star, ShieldCheck, Hotel, Car, Clock, CheckCircle2, Languages } from "lucide-react";
 
-export const Route = createFileRoute("/_public/clinics/$slug")({ component: ClinicDetail });
+export const Route = createFileRoute("/_public/clinics/$slug")({
+  validateSearch: (search: Record<string, unknown>) => ({ roadmap: typeof search.roadmap === "string" ? search.roadmap : undefined }),
+  component: ClinicDetail,
+});
 
 function ClinicDetail() {
   const { slug } = Route.useParams();
+  const { roadmap: roadmapId } = Route.useSearch();
   const clinic = useMockStore((s) => s.clinics.find((c) => c.slug === slug));
+  const roadmap = useMockStore((s) => roadmapId ? s.roadmaps.find((item) => item.id === roadmapId) : undefined);
+  const assessment = useMockStore((s) => roadmap ? s.assessments.find((item) => item.id === roadmap.assessment_id) : undefined);
   const branding = useMockStore((s) => s.branding.find((b) => b.clinic_id === clinic?.id));
   if (!clinic) throw notFound();
   return (
@@ -56,7 +62,7 @@ function ClinicDetail() {
           <Card className="sticky top-20"><CardContent className="p-6">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">From</p>
             <p className="font-display text-3xl font-semibold">{clinic.price_range.currency === "USD" ? "$" : "€"}{clinic.price_range.min}<span className="text-base text-muted-foreground font-normal"> / unit</span></p>
-            <Button asChild className="w-full mt-4" size="lg"><Link to="/assessment">Start assessment</Link></Button>
+            {roadmap && assessment ? <Button asChild className="w-full mt-4" size="lg"><Link to="/roadmap/$id" params={{ id: roadmap.id }}>Return to clinic selection</Link></Button> : <Button asChild className="w-full mt-4" size="lg"><Link to="/assessment">Start assessment</Link></Button>}
             <Button asChild variant="outline" className="w-full mt-2"><Link to="/clinics">Compare clinics</Link></Button>
           </CardContent></Card>
         </div>

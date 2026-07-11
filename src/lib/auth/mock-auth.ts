@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Role } from "@/types/models";
+import { useEffect, useState } from "react";
 
 export interface DemoUser {
   id: string;
@@ -11,7 +12,6 @@ export interface DemoUser {
 }
 
 const DEMO_USERS: Record<Role, DemoUser> = {
-  patient: { id: "u_patient", name: "Sofia Bennett", email: "sofia@example.com", role: "patient" },
   clinic_owner: { id: "u_owner", name: "Dr. Elif Yılmaz", email: "owner@bosphorus.com", role: "clinic_owner", clinic_id: "clinic_istanbul" },
   clinic_admin: { id: "u_owner", name: "Clinic Admin", email: "admin@bosphorus.com", role: "clinic_admin", clinic_id: "clinic_istanbul" },
   coordinator: { id: "u_coord", name: "Kaan Demir", email: "coord@bosphorus.com", role: "coordinator", clinic_id: "clinic_istanbul" },
@@ -33,8 +33,25 @@ export const useAuth = create<AuthState>()(
       loginAs: (role) => set({ user: DEMO_USERS[role] }),
       logout: () => set({ user: null }),
     }),
-    { name: "smileabroad-auth-v1" },
+    {
+      name: "smileabroad-auth-v1",
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as Partial<AuthState>;
+        return state.user && state.user.role === ("patient" as Role) ? { ...state, user: null } : state;
+      },
+    },
   ),
 );
 
 export const demoUsers = DEMO_USERS;
+
+export function useAuthHydrated() {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    const unsubscribe = useAuth.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useAuth.persist.hasHydrated());
+    return unsubscribe;
+  }, []);
+  return hydrated;
+}

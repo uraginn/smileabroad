@@ -72,7 +72,6 @@ export const seedBranding: ClinicBranding[] = seedClinics.map((c, i) => ({
 
 // --- Users
 export const seedUsers: User[] = [
-  { id: "u_patient", ...base(), email: "sofia@example.com", name: "Sofia Bennett", role: "patient" },
   { id: "u_owner", ...base(), email: "owner@bosphorus.com", name: "Elif Yılmaz", role: "clinic_owner", clinic_id: "clinic_istanbul" },
   { id: "u_coord", ...base(), email: "coord@bosphorus.com", name: "Kaan Demir", role: "coordinator", clinic_id: "clinic_istanbul" },
   { id: "u_admin", ...base(), email: "admin@smileabroad.com", name: "Platform Admin", role: "platform_admin" },
@@ -80,7 +79,7 @@ export const seedUsers: User[] = [
 
 // --- Patients (per clinic CRM)
 export const seedPatients: Patient[] = [
-  { id: "p_sofia", ...base(), clinic_id: "clinic_istanbul", user_id: "u_patient",
+  { id: "p_sofia", ...base(), clinic_id: "clinic_istanbul", user_id: "legacy_submission_sofia",
     first_name: "Sofia", last_name: "Bennett", email: "sofia@example.com",
     country: "United Kingdom", city: "London", language: "English", phone: "+44 7700 900123" },
   { id: "p_marco", ...base(), clinic_id: "clinic_istanbul",
@@ -99,7 +98,7 @@ const leadStatuses: LeadStatus[] = [
 ];
 
 export const seedLeads: Lead[] = [
-  { id: "l_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "u_patient",
+  { id: "l_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "legacy_submission_sofia",
     patient_name: "Sofia Bennett", patient_country: "United Kingdom",
     treatment: "All-on-4 Implants", budget: "€8,000–€12,000",
     assigned_to: "u_coord", priority: "high", source: "assessment",
@@ -129,7 +128,7 @@ export const seedLeads: Lead[] = [
 ];
 
 export const seedTreatmentPlans: TreatmentPlan[] = [
-  { id: "tp_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "u_patient",
+  { id: "tp_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "legacy_submission_sofia",
     title: "All-on-4 Upper Arch", summary: "Immediate load implants with fixed provisional bridge.",
     items: [
       { id: id("tpi"), tooth: 11, treatment: "extraction", unit_price: 80 },
@@ -143,7 +142,7 @@ export const seedTreatmentPlans: TreatmentPlan[] = [
 ];
 
 export const seedQuotes: Quote[] = [
-  { id: "q_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "u_patient",
+  { id: "q_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "legacy_submission_sofia",
     treatment_plan_id: "tp_1", currency: "EUR",
     items: [
       { id: id("qi"), label: "Straumann Implant", qty: 4, unit_price: 780 },
@@ -169,7 +168,7 @@ export const seedTasks: Task[] = [
 ];
 
 export const seedAppointments: Appointment[] = [
-  { id: "a_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "u_patient",
+  { id: "a_1", ...base(), clinic_id: "clinic_istanbul", patient_user_id: "legacy_submission_sofia",
     title: "Consultation — Sofia Bennett", starts_at: new Date(Date.now() + 3 * 864e5).toISOString(),
     duration_min: 45, location: "Clinic — Room 2" },
 ];

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,18 +7,17 @@ import { ClinicCard } from "@/components/clinic-card";
 import { PageHeader } from "@/components/ui-bits";
 import { AlertTriangle, CalendarDays, Clock, EuroIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/auth/mock-auth";
 
 export const Route = createFileRoute("/roadmap/$id")({ component: RoadmapPage });
 
 function RoadmapPage() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
   const hydrated = useMockStoreHydrated();
   const roadmap = useMockStore((s) => s.roadmaps.find((r) => r.id === id));
   const clinics = useMockStore((s) => s.clinics);
   const assessment = useMockStore((s) => s.assessments.find((a) => a.id === roadmap?.assessment_id));
   const apply = useMockStore((s) => s.applyToClinic);
-  const { user, loginAs } = useAuth();
 
   if (!hydrated) return null;
   if (!roadmap || !assessment) throw notFound();
@@ -26,15 +25,16 @@ function RoadmapPage() {
   const recommended = clinics.filter((c) => roadmap.recommended_clinic_ids.includes(c.id));
 
   const onApply = (clinicId: string) => {
-    if (!user || user.role !== "patient") loginAs("patient");
-    const uid = useAuth.getState().user!.id;
-    apply({
-      clinic_id: clinicId, patient_user_id: uid,
+    const application = apply({
+      clinic_id: clinicId, patient_user_id: assessment.patient_user_id,
       assessment_id: assessment.id, roadmap_id: roadmap.id,
       patient_name: `${assessment.personal.first_name} ${assessment.personal.last_name ?? ""}`.trim() || "New Patient",
       patient_country: assessment.personal.country || assessment.travel.travel_from || "Unknown",
       treatment: assessment.dental.treatment_interest,
     });
+    window.localStorage.removeItem("smileabroad-active-journey-v1");
+    window.localStorage.removeItem("smileabroad-assessment-draft-v1");
+    navigate({ to: "/confirmation/$id", params: { id: application.id } });
     toast.success("Application sent — the clinic will be in touch.");
   };
 
@@ -43,7 +43,7 @@ function RoadmapPage() {
       <div className="container-app py-10 max-w-5xl">
         <PageHeader title="Your preliminary roadmap"
           description="Based on your assessment. This is an estimate, not a diagnosis. A qualified dentist will confirm after a clinical exam."
-          actions={<Button asChild variant="outline"><Link to="/patient/dashboard">My dashboard</Link></Button>} />
+          actions={<Button asChild variant="outline"><Link to="/assessment">Start a new assessment</Link></Button>} />
 
         <Card className="border-warning/40 bg-warning/5 mb-6">
           <CardContent className="p-4 flex gap-3 items-start">
@@ -73,7 +73,7 @@ function RoadmapPage() {
 
         <h2 className="font-display text-2xl font-semibold mb-4">Recommended clinics</h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {recommended.map((c) => <ClinicCard key={c.id} clinic={c} onApply={onApply} />)}
+          {recommended.map((c) => <ClinicCard key={c.id} clinic={c} onApply={onApply} roadmapId={roadmap.id} />)}
         </div>
       </div>
     </div>
