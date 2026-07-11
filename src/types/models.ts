@@ -1,10 +1,5 @@
 export type Role =
-  | "clinic_owner"
-  | "clinic_admin"
-  | "coordinator"
-  | "dentist"
-  | "sales"
-  | "platform_admin";
+  "clinic_owner" | "clinic_admin" | "coordinator" | "dentist" | "sales" | "platform_admin";
 
 export interface BaseRecord {
   id: string;
@@ -290,11 +285,7 @@ export interface TreatmentPlanItem {
 }
 
 export type TreatmentPlanStatus =
-  | "draft"
-  | "awaiting_doctor_review"
-  | "approved"
-  | "sent_to_patient"
-  | "archived";
+  "draft" | "awaiting_doctor_review" | "approved" | "sent_to_patient" | "archived";
 
 export interface TreatmentStage {
   stage_number: number;
@@ -345,6 +336,14 @@ export interface TreatmentPlan extends BaseRecord {
   treatment_stages?: TreatmentStage[];
   visit_plan?: TreatmentVisit[];
   share_token?: string;
+  dental_plan_data?: unknown;
+  treatment_groups?: Array<{
+    id: string;
+    type: string;
+    arch: string;
+    affected_teeth: number[];
+    generated_item_ids: string[];
+  }>;
 }
 
 export interface QuoteItem {
@@ -355,7 +354,8 @@ export interface QuoteItem {
 }
 
 export type QuoteCurrency = "GBP" | "EUR" | "USD" | "TRY";
-export type QuoteStatus = "draft" | "approved" | "sent" | "viewed" | "accepted" | "declined" | "expired";
+export type QuoteStatus =
+  "draft" | "approved" | "sent" | "viewed" | "accepted" | "declined" | "expired";
 
 export interface Quote extends BaseRecord {
   clinic_id: string;

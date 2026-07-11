@@ -17,7 +17,11 @@ interface DentalPlanStudioProps {
 }
 ```
 
-Standalone state is stored through `LocalStorageDentalPlanRepository` at `smileabroad.dentalplan.dev.v2`. The adapter boundary is intentionally independent from Zustand, CRM patients, professional treatment plans, quotes, and shared plans.
+Standalone state is stored through `LocalStorageDentalPlanRepository` at `smileabroad.dentalplan.dev.v3`. Version 2 drafts are read and normalized without deletion. Child planner components remain independent from Zustand; CRM conversion exists only at the route adapter boundary.
+
+The route provides four guided steps: patient information, clinical planning, travel/services, and review/finalize. Clinical planning renders one editable chart at a time and supports click, Ctrl/Cmd-click, pointer-paint selection, linked bridge and All-on-4 groups, and centralized structured clinical rule results.
+
+With a tenant-valid `patientId` or `treatmentPlanId` query parameter, the boundary adapter updates or creates the existing CRM TreatmentPlan, reuses or creates its Quote, and navigates to `/pro/quotes/:id`. Standalone mode never creates CRM records. Sharing and browser Print/PDF remain owned by the existing quote and shared-treatment-plan routes.
 
 ## Source parity
 

@@ -86,20 +86,79 @@ export type ToothTreatment = {
   notes?: string;
   bridgeRoles?: Partial<Record<ToothNumber, BridgeUnitRole>>;
 };
+export type DentalTreatmentGroup = {
+  id: string;
+  type: "bridge" | "all-on-4" | "full-arch";
+  arch: "upper" | "lower";
+  affectedTeeth: ToothNumber[];
+  generatedTreatmentIds: string[];
+  abutments?: ToothNumber[];
+  pontics?: ToothNumber[];
+  implantPositions?: ToothNumber[];
+  supportType?: "natural" | "implant" | "mixed";
+};
+export type DentalPlannerPatient = {
+  patientId?: string;
+  fullName: string;
+  dateOfBirth?: string;
+  country?: string;
+  email?: string;
+  phone?: string;
+  treatmentInterest?: string;
+  dentistId?: string;
+  coordinatorId?: string;
+  planTitle: string;
+  preparationDate: string;
+  currency: "GBP" | "EUR" | "USD" | "TRY";
+};
+export type DentalPlannerTravel = {
+  clinicId?: string;
+  visits: number;
+  visitDuration?: string;
+  healingWeeks: number;
+  hotelRequired: boolean;
+  hotelName?: string;
+  roomType?: string;
+  hotelNights: number;
+  boardType?: string;
+  companion?: string;
+  airportTransfer: boolean;
+  localTransfer: boolean;
+  includedServices: string[];
+  guarantees: string[];
+  treatmentDates?: string;
+  timelineNotes?: string;
+  patientFacingNotes?: string;
+  internalNotes?: string;
+};
 export type DentalPlanData = {
   id: string;
   name: string;
   patientName?: string;
   currentConditions: Partial<Record<ToothNumber, ToothCondition>>;
   proposedTreatments: ToothTreatment[];
+  treatmentGroups: DentalTreatmentGroup[];
+  patient: DentalPlannerPatient;
+  travel: DentalPlannerTravel;
+  draftStep: number;
+  finalized: boolean;
   createdAt: string;
   updatedAt: string;
 };
 export type DentalPlan = DentalPlanData;
 export type PlannerMode = "current" | "proposed";
 export interface DentalPlanStudioProps {
+  context?: DentalPlannerContext;
   initialValue?: DentalPlanData;
   onChange?: (value: DentalPlanData) => void;
   onSave?: (value: DentalPlanData) => void;
+  onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string; quoteId: string }>;
   readOnly?: boolean;
+}
+export interface DentalPlannerContext {
+  mode: "standalone" | "crm";
+  clinicId?: string;
+  patientId?: string;
+  treatmentPlanId?: string;
+  quoteId?: string;
 }

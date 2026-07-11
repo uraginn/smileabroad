@@ -1,13 +1,15 @@
 import type { DentalPlan } from "../types/dental-plan.types";
 import { createDentalPlan } from "../utils/createDentalPlan";
 import type { DentalPlanRepository } from "./DentalPlanRepository";
-export const DENTALPLAN_STORAGE_KEY = "smileabroad.dentalplan.dev.v2";
+export const DENTALPLAN_STORAGE_KEY = "smileabroad.dentalplan.dev.v3";
+const LEGACY_KEY = "smileabroad.dentalplan.dev.v2";
 export class LocalStorageDentalPlanRepository implements DentalPlanRepository {
   constructor(private storageKey = DENTALPLAN_STORAGE_KEY) {}
   getPlan(): DentalPlan | null {
     if (typeof window === "undefined") return null;
     try {
-      const raw = window.localStorage.getItem(this.storageKey);
+      const raw =
+        window.localStorage.getItem(this.storageKey) ?? window.localStorage.getItem(LEGACY_KEY);
       if (!raw) return null;
       const value = JSON.parse(raw) as Partial<DentalPlan>;
       return createDentalPlan({

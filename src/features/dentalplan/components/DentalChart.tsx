@@ -17,6 +17,10 @@ type Props = {
   onSelectAllUpper?: () => void;
   onSelectAllLower?: () => void;
   onClearSelection?: () => void;
+  onSelectAll?: () => void;
+  onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
+  onDragEnter?: (tooth: ToothNumber) => void;
+  onDragEnd?: () => void;
 };
 export function DentalChart({
   title,
@@ -29,6 +33,10 @@ export function DentalChart({
   onSelectAllUpper,
   onSelectAllLower,
   onClearSelection,
+  onSelectAll,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
 }: Props) {
   return (
     <div
@@ -46,18 +54,39 @@ export function DentalChart({
             <Mini onClick={onSelectAllUpper}>Upper</Mini>
             <Mini onClick={onSelectAllLower}>Lower</Mini>
             <Mini onClick={onClearSelection}>Clear</Mini>
+            <Mini onClick={onSelectAll}>All</Mini>
           </div>
         )}
       </div>
-      <div className="space-y-3 overflow-x-auto">
+      <div className="space-y-3 overflow-x-auto" onPointerUp={onDragEnd} onPointerLeave={onDragEnd}>
         <Arch
           teeth={orderedByArch(UPPER_TEETH)}
-          {...{ mode, currentConditions, proposedTreatments, selected, readOnly, onSelect }}
+          {...{
+            mode,
+            currentConditions,
+            proposedTreatments,
+            selected,
+            readOnly,
+            onSelect,
+            onDragStart,
+            onDragEnter,
+            onDragEnd,
+          }}
         />
         <div className="border-t border-dashed" />
         <Arch
           teeth={orderedByArch(LOWER_TEETH)}
-          {...{ mode, currentConditions, proposedTreatments, selected, readOnly, onSelect }}
+          {...{
+            mode,
+            currentConditions,
+            proposedTreatments,
+            selected,
+            readOnly,
+            onSelect,
+            onDragStart,
+            onDragEnter,
+            onDragEnd,
+          }}
         />
       </div>
     </div>
@@ -82,6 +111,9 @@ function Arch(props: {
   selected: ToothNumber[];
   readOnly?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean) => void;
+  onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
+  onDragEnter?: (tooth: ToothNumber) => void;
+  onDragEnd?: () => void;
 }) {
   return (
     <div className="flex min-w-[650px] justify-center gap-1">
@@ -95,6 +127,9 @@ function Arch(props: {
           selected={props.selected.includes(tooth)}
           readOnly={props.readOnly}
           onSelect={props.onSelect}
+          onDragStart={props.onDragStart}
+          onDragEnter={props.onDragEnter}
+          onDragEnd={props.onDragEnd}
         />
       ))}
     </div>

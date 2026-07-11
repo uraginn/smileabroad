@@ -17,6 +17,9 @@ type Props = {
   selected: boolean;
   readOnly?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean) => void;
+  onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
+  onDragEnter?: (tooth: ToothNumber) => void;
+  onDragEnd?: () => void;
 };
 const W = 40,
   H = 56;
@@ -28,6 +31,9 @@ export function Tooth({
   selected,
   readOnly,
   onSelect,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
 }: Props) {
   const visual = resolveToothVisualState({
     toothNumber,
@@ -41,12 +47,23 @@ export function Tooth({
     <button
       type="button"
       onClick={(event) =>
-        !readOnly && onSelect(toothNumber, event.shiftKey || event.metaKey || event.ctrlKey)
+        !readOnly &&
+        event.detail === 0 &&
+        onSelect(toothNumber, event.shiftKey || event.metaKey || event.ctrlKey)
       }
+      onPointerDown={(event) => {
+        if (readOnly) return;
+        event.preventDefault();
+        onDragStart?.(toothNumber, event.metaKey || event.ctrlKey);
+      }}
+      onPointerEnter={() => !readOnly && onDragEnter?.(toothNumber)}
+      onPointerUp={onDragEnd}
+      onPointerCancel={onDragEnd}
+      draggable={false}
       disabled={readOnly}
       aria-label={label}
       aria-pressed={selected}
-      className={`group relative flex flex-col items-center focus:outline-none ${readOnly ? "cursor-default opacity-90" : "cursor-pointer"}`}
+      className={`group relative flex flex-col items-center focus:outline-none ${readOnly ? "cursor-default opacity-90" : "cursor-pointer touch-none select-none"}`}
     >
       {isUpper ? (
         <>

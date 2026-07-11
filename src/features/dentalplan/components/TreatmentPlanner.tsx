@@ -13,6 +13,11 @@ import { useToothSelection } from "../hooks/useToothSelection";
 import { applyCondition, removeCondition } from "../rules/conditionRules";
 import { validateTreatment } from "../rules/treatmentRules";
 import { validateBridge } from "../rules/bridgeRules";
+import {
+  ALL_ON_4_PRESETS,
+  archForSelection,
+  validateClinicalTreatment,
+} from "../rules/clinicalRules";
 import { treatmentByType } from "../data/treatmentDefinitions";
 import { DentalChart } from "./DentalChart";
 import { ConditionSelector } from "./ConditionSelector";
@@ -91,6 +96,87 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
         return;
       }
       const definition = treatmentByType(treatment);
+      const ruleResults = validateClinicalTreatment(history.state, treatment, selection.selected);
+      const blocked = ruleResults.find((result) => !result.allowed && result.severity === "block");
+      if (blocked) {
+        setMessage(blocked.message);
+        return;
+      }
+      const warnings = ruleResults.filter((result) => result.severity === "warning");
+      if (
+        warnings.length &&
+        !window.confirm(
+          `${warnings.map((result) => result.message).join("\n")}\n\nContinue with clinician override?`,
+        )
+      )
+        return;
+      if (treatment === "all-on-4") {
+        const arch = archForSelection(selection.selected);
+        const preset = ALL_ON_4_PRESETS[arch];
+        const groupId = crypto.randomUUID();
+        history.commit((previous) => {
+          const generated = preset.implantPositions.map((tooth) => ({
+            id: crypto.randomUUID(),
+            toothNumbers: [tooth],
+            treatmentType: "dental-implant" as const,
+            treatmentGroupId: groupId,
+          }));
+          return {
+            ...previous,
+            proposedTreatments: [...previous.proposedTreatments, ...generated],
+            treatmentGroups: [
+              ...previous.treatmentGroups,
+              {
+                id: groupId,
+                type: "all-on-4",
+                arch,
+                affectedTeeth: [...preset.prostheticRange],
+                generatedTreatmentIds: generated.map((item) => item.id),
+                implantPositions: [...preset.implantPositions],
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        setMessage(null);
+        return;
+      }
+      if (treatment === "whitening") {
+        const arches = new Set(selection.selected.map((tooth) => archForSelection([tooth])));
+        const teeth = [
+          ...(arches.has("upper") ? ALL_ON_4_PRESETS.upper.prostheticRange : []),
+          ...(arches.has("lower") ? ALL_ON_4_PRESETS.lower.prostheticRange : []),
+        ].filter(
+          (tooth) =>
+            !(history.state.currentConditions[tooth]?.conditions ?? []).some((condition) =>
+              ["missing", "existing-crown", "existing-implant", "existing-filling"].includes(
+                condition,
+              ),
+            ),
+        );
+        const id = crypto.randomUUID();
+        const groupId = crypto.randomUUID();
+        history.commit((previous) => ({
+          ...previous,
+          proposedTreatments: [
+            ...previous.proposedTreatments,
+            { id, toothNumbers: teeth, treatmentType: "whitening", treatmentGroupId: groupId },
+          ],
+          treatmentGroups: [
+            ...previous.treatmentGroups,
+            {
+              id: groupId,
+              type: "full-arch",
+              arch: arches.has("lower") && !arches.has("upper") ? "lower" : "upper",
+              affectedTeeth: teeth,
+              generatedTreatmentIds: [id],
+            },
+          ],
+          updatedAt: new Date().toISOString(),
+        }));
+        setMessage("Whitening added at arch level; restorations were excluded.");
+        return;
+      }
       if (treatment === "bridge") {
         const result = validateBridge(selection.selected);
         if (!result.ok) {
@@ -137,17 +223,38 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
   const confirmBridge = useCallback(
     (roles: Partial<Record<ToothNumber, BridgeUnitRole>>) => {
       if (!bridgeTeeth) return;
+      if (
+        !Object.values(roles).includes("pontic") ||
+        !Object.values(roles).some((role) => role !== "pontic")
+      ) {
+        setMessage("A bridge requires at least one pontic and one supporting abutment.");
+        return;
+      }
       const groupId = crypto.randomUUID();
+      const treatmentId = crypto.randomUUID();
       history.commit((previous) => ({
         ...previous,
         proposedTreatments: [
           ...previous.proposedTreatments,
           {
-            id: crypto.randomUUID(),
+            id: treatmentId,
             treatmentType: "bridge",
             toothNumbers: [...bridgeTeeth],
             treatmentGroupId: groupId,
             bridgeRoles: roles,
+          },
+        ],
+        treatmentGroups: [
+          ...previous.treatmentGroups,
+          {
+            id: groupId,
+            type: "bridge",
+            arch: archForSelection(bridgeTeeth),
+            affectedTeeth: [...bridgeTeeth],
+            generatedTreatmentIds: [treatmentId],
+            abutments: bridgeTeeth.filter((tooth) => roles[tooth] !== "pontic"),
+            pontics: bridgeTeeth.filter((tooth) => roles[tooth] === "pontic"),
+            supportType: Object.values(roles).includes("implant-abutment") ? "implant" : "natural",
           },
         ],
         updatedAt: new Date().toISOString(),
@@ -168,6 +275,9 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
               ? item.treatmentGroupId !== target.treatmentGroupId
               : item.id !== id,
           ),
+          treatmentGroups: target.treatmentGroupId
+            ? previous.treatmentGroups.filter((group) => group.id !== target.treatmentGroupId)
+            : previous.treatmentGroups,
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -240,30 +350,22 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           {message}
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_320px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <DentalChart
-          title="Current Dental Condition"
-          mode="current"
+          title={mode === "current" ? "Current Dental Condition" : "Proposed Treatment Plan"}
+          mode={mode}
           currentConditions={history.state.currentConditions}
           proposedTreatments={history.state.proposedTreatments}
-          selected={currentSelection.selected}
-          readOnly={mode !== "current" || readOnly}
-          onSelect={currentSelection.toggle}
-          onSelectAllUpper={currentSelection.selectAllUpper}
-          onSelectAllLower={currentSelection.selectAllLower}
-          onClearSelection={currentSelection.clear}
-        />
-        <DentalChart
-          title="Proposed Treatment Plan"
-          mode="proposed"
-          currentConditions={history.state.currentConditions}
-          proposedTreatments={history.state.proposedTreatments}
-          selected={proposedSelection.selected}
-          readOnly={mode !== "proposed" || readOnly}
-          onSelect={proposedSelection.toggle}
-          onSelectAllUpper={proposedSelection.selectAllUpper}
-          onSelectAllLower={proposedSelection.selectAllLower}
-          onClearSelection={proposedSelection.clear}
+          selected={selection.selected}
+          readOnly={readOnly}
+          onSelect={selection.toggle}
+          onSelectAllUpper={selection.selectAllUpper}
+          onSelectAllLower={selection.selectAllLower}
+          onSelectAll={selection.selectAll}
+          onClearSelection={selection.clear}
+          onDragStart={selection.beginDrag}
+          onDragEnter={selection.enterDrag}
+          onDragEnd={selection.endDrag}
         />
         <div className="space-y-4">
           <div className="rounded-lg border bg-card p-4">
