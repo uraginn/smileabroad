@@ -363,11 +363,13 @@ export const useMockStore = create<Store>()(
         const shareToken = ["approved", "sent"].includes(nextStatus)
           ? quote.share_token ?? makeId("share")
           : quote.share_token;
-        const sentNow = nextStatus === "sent" && (quote.status ?? "draft") !== "sent";
+        const previousStatus = quote.status ?? "draft";
+        const sentNow = nextStatus === "sent" && previousStatus !== "sent";
+        const publicStatusChanged = nextStatus !== previousStatus && ["sent", "viewed", "accepted"].includes(nextStatus);
         const lead = get().leads.find((item) => item.clinic_id === quote.clinic_id && (item.clinic_patient_id === quote.clinic_patient_id || item.patient_user_id === quote.patient_user_id));
-        const activity: LeadActivity | undefined = sentNow && lead ? {
+        const activity: LeadActivity | undefined = publicStatusChanged && lead ? {
           id: makeId("activity"), clinic_id: quote.clinic_id, lead_id: lead.id,
-          kind: "status_change", body: `Quote ${quote.id.slice(0, 8)} sent to patient.`, internal: true,
+          kind: "status_change", body: `Quote ${quote.id.slice(0, 8)} marked as ${nextStatus}.`, internal: true,
           created_at: timestamp, updated_at: timestamp, created_by: changedBy,
         } : undefined;
         set((s) => ({
