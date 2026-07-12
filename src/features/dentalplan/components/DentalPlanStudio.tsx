@@ -188,9 +188,7 @@ function PlannerShell({
       const ids = await onFinalize({ ...plan, finalized: true });
       change({ finalized: true, draftStep: 5 });
       toast.success("Treatment plan finalized");
-      setResult(
-        `Treatment plan ${ids.treatmentPlanId} saved.${ids.legacyQuoteId ? " Opening legacy quote…" : ""}`,
-      );
+      setResult(`Treatment plan ${ids.treatmentPlanId} saved.`);
     } catch (error) {
       setResult(error instanceof Error ? error.message : "Finalization failed.");
     } finally {

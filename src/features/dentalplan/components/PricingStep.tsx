@@ -85,7 +85,7 @@ export function PricingStep({
               </Select>
             </div>
             <div>
-              <Label>Quote valid until</Label>
+              <Label>Plan valid until</Label>
               <Input
                 type="date"
                 value={commercial.validUntil ?? ""}
@@ -317,7 +317,7 @@ export function PricingStep({
           ))}
           {scheduled > totals.total && (
             <p className="rounded bg-warning/15 p-2 text-sm">
-              Scheduled payments exceed the current quote total.
+              Scheduled payments exceed the current plan total.
             </p>
           )}
         </CardContent>

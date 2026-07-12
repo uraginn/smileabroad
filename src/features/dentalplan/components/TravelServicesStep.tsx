@@ -305,7 +305,8 @@ export function TravelServicesStep({
             rows={3}
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            Private clinic-only information. Never shown on patient quotes or preliminary roadmaps.
+            Private clinic-only information. Never shown in the Patient View or preliminary
+            roadmaps.
           </p>
         </CardContent>
       </Card>

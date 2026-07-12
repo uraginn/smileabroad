@@ -2,7 +2,7 @@ import type { DentalPlanData } from "@/features/dentalplan/types/dental-plan.typ
 import { TREATMENT_DEFINITIONS } from "@/features/dentalplan/data/treatmentDefinitions";
 import type {
   Assessment,
-  QuoteCurrency,
+  PlanCurrency,
   RoadmapCountryTreatmentPrice,
   RoadmapJourneyStep,
   RoadmapTreatmentContent,
@@ -118,7 +118,7 @@ export function calculateRoadmapPriceRange({
 }) {
   let minimum = 0;
   let maximum = 0;
-  let currency: QuoteCurrency = "EUR";
+  let currency: PlanCurrency = "EUR";
   const missingPriceKeys: string[] = [];
   for (const estimate of treatmentEstimates) {
     const price = configuredPrices.find(

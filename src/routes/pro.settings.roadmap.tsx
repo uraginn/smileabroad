@@ -33,7 +33,7 @@ import { useAuth } from "@/lib/auth/mock-auth";
 import { useMockStore } from "@/lib/mock/store";
 import { formatQuoteMoney } from "@/lib/quote";
 import type {
-  QuoteCurrency,
+  PlanCurrency,
   RoadmapCountryTreatmentPrice,
   RoadmapTreatmentContent,
 } from "@/types/models";
@@ -282,7 +282,7 @@ function PriceDialog({
           <Field label="Currency">
             <Select
               value={draft.currency}
-              onValueChange={(currency) => patch({ currency: currency as QuoteCurrency })}
+              onValueChange={(currency) => patch({ currency: currency as PlanCurrency })}
             >
               <SelectTrigger>
                 <SelectValue />

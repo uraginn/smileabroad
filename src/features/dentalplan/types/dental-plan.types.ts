@@ -234,9 +234,7 @@ export interface DentalPlanStudioProps {
   initialValue?: DentalPlanData;
   onChange?: (value: DentalPlanData) => void;
   onSave?: (value: DentalPlanData) => void;
-  onFinalize?: (
-    value: DentalPlanData,
-  ) => Promise<{ treatmentPlanId: string; legacyQuoteId?: string }>;
+  onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string }>;
   onSaveAsTemplate?: (value: DentalPlanData, name: string) => void;
   readOnly?: boolean;
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
@@ -282,6 +280,5 @@ export interface DentalPlannerContext {
   clinicId?: string;
   patientId?: string;
   treatmentPlanId?: string;
-  quoteId?: string;
 }
 import type { ReactNode } from "react";

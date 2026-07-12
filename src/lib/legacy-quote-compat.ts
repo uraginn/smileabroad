@@ -1,59 +1,15 @@
-import type { Quote, TreatmentPlan, TreatmentPlanPriceItem } from "@/types/models";
+import type { TreatmentPlan, TreatmentPlanPriceItem } from "@/types/models";
+import type { LegacyQuote } from "@/lib/mock/migrations/legacy-quote.types";
 import {
-  calculateTreatmentPlanTotals,
   dedupeTreatmentPlanPriceItems,
   normalizePaymentSchedule,
 } from "@/lib/treatment-plan-commercial";
 import { mapQuoteStatusToTreatmentPlan } from "@/lib/treatment-plan-status";
 
-export function getLegacyQuoteForTreatmentPlan(quotes: Quote[], planId: string, clinicId?: string) {
-  return quotes.find(
-    (quote) => quote.treatment_plan_id === planId && (!clinicId || quote.clinic_id === clinicId),
-  );
-}
-
-export function mapTreatmentPlanToLegacyQuote(plan: TreatmentPlan): Quote {
-  const totals = calculateTreatmentPlanTotals(plan);
-  const compatibleStatus = [
-    "approved",
-    "sent",
-    "viewed",
-    "accepted",
-    "declined",
-    "expired",
-  ].includes(plan.status ?? "")
-    ? (plan.status as Quote["status"])
-    : "draft";
-  return {
-    id: plan.legacy_quote_id ?? `compat_${plan.id}`,
-    clinic_id: plan.clinic_id,
-    patient_user_id: plan.patient_user_id,
-    clinic_patient_id: plan.clinic_patient_id,
-    treatment_plan_id: plan.id,
-    currency: plan.currency ?? "EUR",
-    items: (plan.price_items ?? []).map((item) => ({
-      id: item.id,
-      label: item.label,
-      qty: item.quantity,
-      unit_price: item.unit_price,
-    })),
-    hotel_total: plan.hotel_total ?? 0,
-    transfer_total: plan.transfer_total ?? 0,
-    discount: totals.discount,
-    payment_schedule: plan.payment_schedule ?? [],
-    valid_until: plan.valid_until,
-    included_services: plan.included_services ?? [],
-    excluded_services: plan.excluded_services ?? [],
-    patient_message: plan.patient_message,
-    status: compatibleStatus,
-    share_token: plan.share_token,
-    created_at: plan.created_at,
-    updated_at: plan.updated_at,
-    created_by: plan.created_by,
-  };
-}
-
-export function mapLegacyQuoteToTreatmentPlanCommercials(quote: Quote): Partial<TreatmentPlan> {
+// Migration-only adapter. Active runtime code must read TreatmentPlan directly.
+export function mapLegacyQuoteToTreatmentPlanCommercials(
+  quote: LegacyQuote,
+): Partial<TreatmentPlan> {
   const priceItems: TreatmentPlanPriceItem[] = (quote.items ?? []).map((item) => ({
     id: item.id,
     label: item.label,
@@ -88,12 +44,11 @@ export function mapLegacyQuoteToTreatmentPlanCommercials(quote: Quote): Partial<
 
 export function mergeLegacyQuoteIntoTreatmentPlan(
   plan: TreatmentPlan,
-  quote?: Quote,
+  quote?: LegacyQuote,
 ): TreatmentPlan {
-  if (!quote || quote.clinic_id !== plan.clinic_id) return plan;
+  if (!quote || quote.clinic_id !== plan.clinic_id || quote.treatment_plan_id !== plan.id)
+    return plan;
   const commercial = mapLegacyQuoteToTreatmentPlanCommercials(quote);
-  // Quote wins for historical commercial/share data; clinical content always remains on TreatmentPlan.
-  // Travel/services use the newest record when updated_at is reliable.
   const quoteIsNewer = +new Date(quote.updated_at) >= +new Date(plan.updated_at);
   return {
     ...plan,

@@ -3,7 +3,6 @@ import type {
   Lead,
   Patient,
   TreatmentPlan,
-  Quote,
   ClinicBranding,
   Task,
   Appointment,
@@ -383,35 +382,6 @@ export const seedTreatmentPlans: TreatmentPlan[] = [
     prepared_at: now(),
     patient_document_version: 1,
     legacy_quote_id: "q_1",
-  },
-];
-
-export const seedQuotes: Quote[] = [
-  {
-    id: "q_1",
-    ...base(),
-    clinic_id: "clinic_istanbul",
-    patient_user_id: "legacy_submission_sofia",
-    treatment_plan_id: "tp_1",
-    currency: "EUR",
-    items: [
-      { id: id("qi"), label: "Straumann Implant", qty: 4, unit_price: 780 },
-      { id: id("qi"), label: "Zirconia Bridge (12 units)", qty: 1, unit_price: 3600 },
-      { id: id("qi"), label: "Extraction", qty: 1, unit_price: 80 },
-      { id: id("qi"), label: "Bone graft", qty: 2, unit_price: 220 },
-    ],
-    hotel_total: 640,
-    transfer_total: 90,
-    discount: 200,
-    payment_schedule: [
-      { label: "On arrival", amount: 3000, due: "Day 1" },
-      { label: "After surgery", amount: 3000, due: "Day 3" },
-      { label: "Final delivery", amount: 1450, due: "Month 4" },
-    ],
-    notes: "Includes CBCT, all consultations, sedation and follow-up.",
-    included_services: [],
-    excluded_services: [],
-    share_token: "share_sofia_upper",
   },
 ];
 

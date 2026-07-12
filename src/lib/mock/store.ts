@@ -7,7 +7,6 @@ import type {
   LeadStatus,
   Patient,
   TreatmentPlan,
-  Quote,
   ClinicBranding,
   Task,
   Appointment,
@@ -27,7 +26,11 @@ import type {
 } from "@/types/models";
 import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
 import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
-import { normalizeTreatmentPlanStatus } from "@/lib/treatment-plan-status";
+import {
+  canTransitionTreatmentPlanStatus,
+  normalizeTreatmentPlanStatus,
+} from "@/lib/treatment-plan-status";
+import type { LegacyQuote } from "@/lib/mock/migrations/legacy-quote.types";
 import {
   DEFAULT_ROADMAP_COUNTRY_PRICES,
   DEFAULT_ROADMAP_TREATMENT_CONTENT,
@@ -39,7 +42,6 @@ import {
   seedPatients,
   seedLeads,
   seedTreatmentPlans,
-  seedQuotes,
   seedTasks,
   seedAppointments,
   seedApplications,
@@ -58,7 +60,6 @@ interface Store {
   patients: Patient[];
   leads: Lead[];
   treatmentPlans: TreatmentPlan[];
-  quotes: Quote[];
   tasks: Task[];
   appointments: Appointment[];
   applications: ClinicApplication[];
@@ -127,8 +128,6 @@ interface Store {
   markTreatmentPlanViewed: (id: string, clinicId: string) => void;
   markTreatmentPlanAccepted: (id: string, clinicId: string) => void;
   markTreatmentPlanDeclined: (id: string, clinicId: string) => void;
-  addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
-  updateQuote: (id: string, patch: Partial<Quote>, changedBy?: string) => void;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
   addTask: (
     task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">,
@@ -166,6 +165,8 @@ interface Store {
     changedBy?: string,
   ) => void;
 }
+
+type LegacyPersistedStore = Store & { quotes?: LegacyQuote[] };
 
 const makeShareToken = () =>
   `share_${globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? makeId("token")}`;
@@ -279,7 +280,6 @@ export const useMockStore = create<Store>()(
       patients: seedPatients,
       leads: seedLeads,
       treatmentPlans: seedTreatmentPlans,
-      quotes: seedQuotes,
       tasks: seedTasks,
       appointments: seedAppointments,
       applications: seedApplications,
@@ -728,6 +728,7 @@ export const useMockStore = create<Store>()(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
         if (!plan) return;
+        if (!canTransitionTreatmentPlanStatus(plan.status, status)) return;
         get().updateTreatmentPlan(id, { status }, changedBy);
       },
       ensureTreatmentPlanShareToken: (id, clinicId) => {
@@ -740,6 +741,10 @@ export const useMockStore = create<Store>()(
         return token;
       },
       markTreatmentPlanSent: (id, clinicId, changedBy = "system") => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan || !canTransitionTreatmentPlanStatus(plan.status, "sent")) return;
         const token = get().ensureTreatmentPlanShareToken(id, clinicId);
         if (!token) return;
         const timestamp = now();
@@ -756,118 +761,15 @@ export const useMockStore = create<Store>()(
         const plan = get().treatmentPlans.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
-        if (!plan || !["sent", "viewed"].includes(plan.status ?? "")) return;
+        if (!plan || plan.status !== "viewed") return;
         get().updateTreatmentPlan(id, { status: "accepted", accepted_at: now() }, "patient_shared");
       },
       markTreatmentPlanDeclined: (id, clinicId) => {
         const plan = get().treatmentPlans.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
-        if (!plan || !["sent", "viewed"].includes(plan.status ?? "")) return;
+        if (!plan || plan.status !== "viewed") return;
         get().updateTreatmentPlan(id, { status: "declined", declined_at: now() }, "patient_shared");
-      },
-      addQuote: (q) => {
-        const existing = get().quotes.find(
-          (quote) =>
-            quote.clinic_id === q.clinic_id && quote.treatment_plan_id === q.treatment_plan_id,
-        );
-        if (existing) return existing;
-        const groupedItems = Array.from(
-          q.items
-            .reduce((groups, item) => {
-              const label = item.label.replace(/^Tooth \d+ · /, "");
-              const key = `${label}|${item.unit_price}`;
-              const existing = groups.get(key);
-              groups.set(
-                key,
-                existing ? { ...existing, qty: existing.qty + item.qty } : { ...item, label },
-              );
-              return groups;
-            }, new Map<string, Quote["items"][number]>())
-            .values(),
-        );
-        const rec: Quote = {
-          ...q,
-          items: groupedItems,
-          status: q.status ?? "draft",
-          share_token: undefined,
-          id: makeId("q"),
-          created_at: now(),
-          updated_at: now(),
-          created_by: q.patient_user_id,
-        };
-        set((s) => ({
-          quotes: [...s.quotes, rec],
-          treatmentPlans: s.treatmentPlans.map((plan) =>
-            plan.id === rec.treatment_plan_id && plan.clinic_id === rec.clinic_id
-              ? mergeLegacyQuoteIntoTreatmentPlan(plan, rec)
-              : plan,
-          ),
-        }));
-        return rec;
-      },
-      updateQuote: (id, patch, changedBy = "system") => {
-        const quote = get().quotes.find((item) => item.id === id);
-        if (!quote) return;
-        const actor = get().users.find((user) => user.id === changedBy);
-        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== quote.clinic_id) return;
-        const timestamp = now();
-        const nextStatus = patch.status ?? quote.status ?? "draft";
-        const shareToken = ["approved", "sent"].includes(nextStatus)
-          ? (quote.share_token ?? makeShareToken())
-          : quote.share_token;
-        const previousStatus = quote.status ?? "draft";
-        const sentNow = nextStatus === "sent" && previousStatus !== "sent";
-        const publicStatusChanged =
-          nextStatus !== previousStatus && ["sent", "viewed", "accepted"].includes(nextStatus);
-        const lead = get().leads.find(
-          (item) =>
-            item.clinic_id === quote.clinic_id &&
-            (item.clinic_patient_id === quote.clinic_patient_id ||
-              item.patient_user_id === quote.patient_user_id),
-        );
-        const activity: LeadActivity | undefined =
-          publicStatusChanged && lead
-            ? {
-                id: makeId("activity"),
-                clinic_id: quote.clinic_id,
-                lead_id: lead.id,
-                kind: "status_change",
-                body: `Treatment Plan marked as ${nextStatus}.`,
-                internal: true,
-                created_at: timestamp,
-                updated_at: timestamp,
-                created_by: changedBy,
-              }
-            : undefined;
-        const updatedQuote: Quote = {
-          ...quote,
-          ...patch,
-          status: nextStatus,
-          share_token: shareToken,
-          updated_at: timestamp,
-        };
-        set((s) => ({
-          quotes: s.quotes.map((item) => (item.id === id ? updatedQuote : item)),
-          treatmentPlans: s.treatmentPlans.map((plan) =>
-            plan.id === quote.treatment_plan_id && plan.clinic_id === quote.clinic_id
-              ? { ...mergeLegacyQuoteIntoTreatmentPlan(plan, updatedQuote), updated_at: timestamp }
-              : plan,
-          ),
-          activities: activity ? [...s.activities, activity] : s.activities,
-          leads: lead
-            ? s.leads.map((item) =>
-                item.id === lead.id
-                  ? {
-                      ...item,
-                      status: sentNow ? "quote_sent" : item.status,
-                      last_activity_at: timestamp,
-                      updated_at: timestamp,
-                    }
-                  : item,
-              )
-            : s.leads,
-        }));
       },
       updateBranding: (clinic_id, patch) =>
         set((s) => ({
@@ -1100,9 +1002,10 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 14,
+      version: 15,
       migrate: (persistedState) => {
-        const state = persistedState as Store;
+        const state = persistedState as LegacyPersistedStore;
+        const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
         const patients = state.patients ?? [];
         const applications = (state.applications ?? []).map((application) => {
           const clinicPatient = patients.find(
@@ -1144,7 +1047,7 @@ export const useMockStore = create<Store>()(
           return lead && !application.lead_id ? { ...application, lead_id: lead.id } : application;
         });
         const normalizedTreatmentPlans = (state.treatmentPlans ?? []).map((plan) => {
-          const quote = (state.quotes ?? []).find((item) => item.treatment_plan_id === plan.id);
+          const quote = legacyQuotes.find((item) => item.treatment_plan_id === plan.id);
           const shareToken = plan.share_token ?? quote?.share_token ?? makeShareToken();
           const lead = leads.find(
             (item) =>
@@ -1209,7 +1112,7 @@ export const useMockStore = create<Store>()(
             share_token: shareToken,
           };
         });
-        const quotes = (state.quotes ?? []).map((quote) => {
+        const quotes = legacyQuotes.map((quote) => {
           const plan = normalizedTreatmentPlans.find((item) => item.id === quote.treatment_plan_id);
           return {
             ...quote,
@@ -1224,7 +1127,7 @@ export const useMockStore = create<Store>()(
             share_token: quote.share_token ?? plan?.share_token,
           };
         });
-        const treatmentPlans = normalizedTreatmentPlans.map((plan) =>
+        const mergedTreatmentPlans = normalizedTreatmentPlans.map((plan) =>
           mergeLegacyQuoteIntoTreatmentPlan(
             plan,
             quotes.find(
@@ -1232,8 +1135,15 @@ export const useMockStore = create<Store>()(
             ),
           ),
         );
+        const seenTokens = new Set<string>();
+        const treatmentPlans = mergedTreatmentPlans.map((plan) => {
+          const token = plan.share_token ?? makeShareToken();
+          const uniqueToken = seenTokens.has(token) ? makeShareToken() : token;
+          seenTokens.add(uniqueToken);
+          return { ...plan, share_token: uniqueToken };
+        });
         return {
-          ...state,
+          ...stateWithoutLegacyQuotes,
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
             ...(clinic.id === "clinic_istanbul"
@@ -1278,7 +1188,6 @@ export const useMockStore = create<Store>()(
           applications: linkedApplications,
           leads,
           treatmentPlans,
-          quotes,
           clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((legacy) => {
             const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
               svg_asset?: unknown;
@@ -1356,7 +1265,5 @@ export const selectClinicAppointments = (clinicId: string) => (s: Store) =>
   s.appointments.filter((a) => a.clinic_id === clinicId);
 export const selectClinicPlans = (clinicId: string) => (s: Store) =>
   (s.treatmentPlans ?? []).filter((t) => t.clinic_id === clinicId);
-export const selectClinicQuotes = (clinicId: string) => (s: Store) =>
-  s.quotes.filter((q) => q.clinic_id === clinicId);
 export const selectClinicBranding = (clinicId: string) => (s: Store) =>
   s.branding.find((b) => b.clinic_id === clinicId);

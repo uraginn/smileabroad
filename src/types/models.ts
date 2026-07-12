@@ -326,7 +326,7 @@ export interface TreatmentPlanHotelSnapshot {
   room_type?: string;
   board_type?: string;
   price_per_night?: number;
-  currency?: QuoteCurrency;
+  currency?: PlanCurrency;
 }
 
 export interface TreatmentStage {
@@ -398,7 +398,7 @@ export interface TreatmentPlan extends BaseRecord {
   flight_included?: boolean;
   included_services?: string[];
   excluded_services?: string[];
-  currency?: QuoteCurrency;
+  currency?: PlanCurrency;
   price_items?: TreatmentPlanPriceItem[];
   hotel_total?: number;
   transfer_total?: number;
@@ -418,36 +418,7 @@ export interface TreatmentPlan extends BaseRecord {
   legacy_quote_id?: string;
 }
 
-export interface QuoteItem {
-  id: string;
-  label: string;
-  qty: number;
-  unit_price: number;
-}
-
-export type QuoteCurrency = "GBP" | "EUR" | "USD" | "TRY";
-export type QuoteStatus =
-  "draft" | "approved" | "sent" | "viewed" | "accepted" | "declined" | "expired";
-
-export interface Quote extends BaseRecord {
-  clinic_id: string;
-  patient_user_id: string;
-  clinic_patient_id?: string;
-  treatment_plan_id: string;
-  currency: QuoteCurrency;
-  items: QuoteItem[];
-  hotel_total: number;
-  transfer_total: number;
-  discount: number;
-  payment_schedule: { label: string; amount: number; due: string }[];
-  notes?: string;
-  valid_until?: string;
-  included_services?: string[];
-  excluded_services?: string[];
-  patient_message?: string;
-  status?: QuoteStatus;
-  share_token?: string;
-}
+export type PlanCurrency = "GBP" | "EUR" | "USD" | "TRY";
 
 export interface ClinicBranding extends BaseRecord {
   clinic_id: string;
@@ -580,7 +551,7 @@ export interface RoadmapJourneyStep {
 export interface RoadmapCountryTreatmentPrice extends BaseRecord {
   clinic_id?: string;
   country: string;
-  currency: QuoteCurrency;
+  currency: PlanCurrency;
   treatment_key: string;
   minimum_price: number;
   maximum_price: number;

@@ -57,7 +57,6 @@ function DentalPlanRoute() {
   const hydrated = useMockStoreHydrated();
   const patients = useMockStore((state) => state.patients);
   const plans = useMockStore((state) => state.treatmentPlans);
-  const quotes = useMockStore((state) => state.quotes);
   const leads = useMockStore((state) => state.leads);
   const assessments = useMockStore((state) => state.assessments);
   const roadmaps = useMockStore((state) => state.roadmaps);
@@ -73,7 +72,6 @@ function DentalPlanRoute() {
   const templates = useMockStore((state) => state.dentalPlanTemplates);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
-  const updateQuote = useMockStore((state) => state.updateQuote);
   const addPatient = useMockStore((state) => state.addPatient);
   const updatePatient = useMockStore((state) => state.updatePatient);
   const saveTemplate = useMockStore((state) => state.saveDentalPlanTemplate);
@@ -83,9 +81,6 @@ function DentalPlanRoute() {
   );
   const existingPlan = plans.find(
     (item) => item.id === search.treatmentPlanId && item.clinic_id === user?.clinic_id,
-  );
-  const contextQuote = quotes.find(
-    (quote) => quote.treatment_plan_id === existingPlan?.id && quote.clinic_id === user?.clinic_id,
   );
   const lead = leads.find(
     (item) => item.id === search.leadId && item.clinic_id === user?.clinic_id,
@@ -168,35 +163,36 @@ function DentalPlanRoute() {
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user?.clinic_id,
       );
     const embedded = existingPlan?.dental_plan_data as DentalPlanData | undefined;
-    const importedCommercial = contextQuote
+    const importedCommercial = existingPlan?.currency
       ? {
-          currency: contextQuote.currency,
+          currency: existingPlan.currency,
           items: (embedded?.proposedTreatments ?? []).map((treatment) => {
-            const matchingItems = contextQuote.items.filter((item) =>
-              item.id.startsWith(`qi_dpi_${treatment.id}_`),
+            const matchingItem = existingPlan.price_items?.find(
+              (item) =>
+                item.id === `price_${treatment.id}` ||
+                item.treatment_key === treatment.treatmentType,
             );
             const fallback = embedded?.commercial?.items.find(
               (item) => item.treatmentId === treatment.id,
             );
             return {
               treatmentId: treatment.id,
-              label: fallback?.label ?? matchingItems[0]?.label ?? treatment.treatmentType,
+              label: fallback?.label ?? matchingItem?.label ?? treatment.treatmentType,
               qty: Math.max(1, treatment.toothNumbers.length),
-              unitPrice: matchingItems[0]?.unit_price ?? fallback?.unitPrice ?? 0,
+              unitPrice: matchingItem?.unit_price ?? fallback?.unitPrice ?? 0,
             };
           }),
-          hotelTotal: contextQuote.hotel_total,
-          transferTotal: contextQuote.transfer_total,
-          otherServiceTotal:
-            contextQuote.items.find((item) => item.id === "qi_other_services")?.unit_price ?? 0,
-          discountType: contextQuote.discount > 0 ? ("fixed" as const) : ("none" as const),
-          discountValue: contextQuote.discount,
-          paymentSchedule: contextQuote.payment_schedule.map((item) => ({
+          hotelTotal: existingPlan.hotel_total ?? 0,
+          transferTotal: existingPlan.transfer_total ?? 0,
+          otherServiceTotal: existingPlan.optional_service_total ?? 0,
+          discountType: existingPlan.discount_type ?? ("none" as const),
+          discountValue: existingPlan.discount_value ?? 0,
+          paymentSchedule: (existingPlan.payment_schedule ?? []).map((item) => ({
             ...item,
-            id: crypto.randomUUID(),
+            id: item.id ?? crypto.randomUUID(),
           })),
-          validUntil: contextQuote.valid_until,
-          commercialNotes: contextQuote.notes,
+          validUntil: existingPlan.valid_until,
+          commercialNotes: existingPlan.patient_message,
         }
       : undefined;
     if (embedded?.currentConditions)
@@ -281,13 +277,13 @@ function DentalPlanRoute() {
       travel: {
         visits: existingPlan?.visits ?? 1,
         healingWeeks: existingPlan?.healing_weeks ?? 0,
-        hotelRequired: (contextQuote?.hotel_total ?? 0) > 0,
-        hotelIncluded: (contextQuote?.hotel_total ?? 0) > 0,
-        hotelNights: 0,
-        airportTransfer: (contextQuote?.transfer_total ?? 0) > 0,
-        transferIncluded: (contextQuote?.transfer_total ?? 0) > 0,
+        hotelRequired: (existingPlan?.hotel_total ?? 0) > 0,
+        hotelIncluded: (existingPlan?.hotel_total ?? 0) > 0,
+        hotelNights: existingPlan?.hotel_nights ?? 0,
+        airportTransfer: existingPlan?.transfers_included ?? false,
+        transferIncluded: existingPlan?.transfers_included ?? false,
         localTransfer: false,
-        includedServices: contextQuote?.included_services ?? [],
+        includedServices: existingPlan?.included_services ?? [],
         guarantees: [],
         patientFacingNotes: existingPlan?.patient_facing_notes,
         internalNotes: existingPlan?.internal_clinical_notes,
@@ -305,7 +301,6 @@ function DentalPlanRoute() {
     lead,
     caseFiles,
     importedAssessment,
-    contextQuote,
     defaultDentist?.id,
     templateMode,
     activeTemplate,
@@ -487,10 +482,7 @@ function DentalPlanRoute() {
           },
           user.id,
         );
-    const existingQuote = quotes.find(
-      (quote) => quote.treatment_plan_id === plan.id && quote.clinic_id === user.clinic_id,
-    );
-    const quoteItems = items.map((item) => {
+    const priceItems = items.map((item) => {
       const customTreatment = value.proposedTreatments.find((treatment) =>
         item.id.startsWith(`dpi_${treatment.id}_`),
       );
@@ -502,14 +494,14 @@ function DentalPlanRoute() {
       };
     });
     if (value.commercial.otherServiceTotal > 0)
-      quoteItems.push({
+      priceItems.push({
         id: "qi_other_services",
         label: "Other services",
         qty: 1,
         unit_price: value.commercial.otherServiceTotal,
       });
     const beforeDiscount =
-      quoteItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
+      priceItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
       (value.travel.hotelIncluded ? value.commercial.hotelTotal : 0) +
       (value.travel.includedServices.includes("Airport Transfer") ||
       value.travel.includedServices.includes("Hotel Transfer")
@@ -533,7 +525,7 @@ function DentalPlanRoute() {
       ...(hotelSummary ? [hotelSummary] : []),
     ].filter((service, index, services) => services.indexOf(service) === index);
     const commercialPatch = {
-      items: quoteItems,
+      items: priceItems,
       currency: value.commercial.currency,
       hotel_total: value.travel.hotelIncluded ? value.commercial.hotelTotal : 0,
       transfer_total:
@@ -588,17 +580,8 @@ function DentalPlanRoute() {
       },
       user.id,
     );
-    if (existingQuote) {
-      updateQuote(
-        existingQuote.id,
-        {
-          ...commercialPatch,
-        },
-        user.id,
-      );
-    }
     navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id }, replace: true });
-    return { treatmentPlanId: plan.id, legacyQuoteId: existingQuote?.id };
+    return { treatmentPlanId: plan.id };
   };
   return (
     <DentalPlanStudio

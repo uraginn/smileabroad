@@ -4,16 +4,20 @@
 
 - **Roadmap** is an anonymous, preliminary public estimate. Clinics cannot edit it and its estimates remain `preliminary_suggestions`, never confirmed clinical treatment.
 - **TreatmentPlan** is clinic-owned and is the canonical clinical, travel, commercial, workflow and sharing record.
-- **Patient shared view** is a read-only projection of TreatmentPlan. The mapper excludes internal notes, medical records, CRM activity, tasks and raw identifiers.
+- **Patient Shared View** is a read-only projection of TreatmentPlan. The mapper excludes internal notes, medical records, CRM activity, tasks and raw identifiers.
 
-## Legacy Quote compatibility
+## Active architecture
 
-Store migration v14 preserves every Quote and copies its commercial and sharing data into the linked TreatmentPlan without creating another plan. Clinical fields always remain owned by TreatmentPlan. Quote commercial data and valid public token/status take precedence; travel/service fields use the newer `updated_at` record.
+TreatmentPlan is the only active clinic document. It owns clinical content, travel and services, pricing, payment schedule, workflow status and the stable patient share token. Totals are derived by `calculateTreatmentPlanTotals()`; price item IDs are deduplicated on save and migration.
 
-Quote routes remain available during Phases 1–2. Their writes synchronize back to TreatmentPlan through `legacy-quote-compat.ts`. Dental Planner now finalizes directly into TreatmentPlan and only updates a Quote when that legacy record already exists; it never creates a new Quote.
+The public token route resolves TreatmentPlan directly and renders only `mapTreatmentPlanToPatientDocument()`. Public access is limited to approved, sent, viewed and accepted plans. An authenticated same-clinic user, or platform administrator, may use clinic preview for non-public plans without changing their status.
 
-Totals are derived centrally by `calculateTreatmentPlanTotals()` rather than persisted as competing values. Price item IDs remain stable and are deduplicated on save and migration.
+## Legacy compatibility
 
-## Phase 3 end state
+Store migration v15 consumes linked legacy Quote records once, copies their commercial values, status history and share tokens into TreatmentPlan, and removes the old Quote array from persisted state. Migration-only Quote types and the compatibility mapper remain isolated under the mock migration layer; the active application does not read or write Quote records.
 
-The public token route will resolve TreatmentPlan directly and render `mapTreatmentPlanToPatientDocument()`. Once legacy links are no longer required, Quote records and UI can be retired without changing the unified plan or patient document contract.
+Old `/pro/quotes` bookmarks redirect to Treatment Plans. An old detail URL resolves only through the stored `legacy_quote_id` on a TreatmentPlan owned by the active clinic. Existing `/shared/treatment-plan/:token` links keep the same URL and resolve the migrated TreatmentPlan directly.
+
+## Status and privacy
+
+Status transitions are centrally guarded: draft to doctor review, approval, sent, viewed, and accepted or declined, with explicit reopen and expiry paths. Public viewing marks a sent plan as viewed once; preview never mutates status. The patient mapper excludes internal notes, medical history, medications, allergies, tasks, CRM activity, staff warnings and raw internal identifiers.

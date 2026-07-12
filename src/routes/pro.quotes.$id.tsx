@@ -10,15 +10,8 @@ function LegacyQuoteRedirect() {
   const { id } = Route.useParams();
   const clinicId = useAuth((state) => state.user?.clinic_id);
   const hydrated = useMockStoreHydrated();
-  const quote = useMockStore((state) =>
-    state.quotes.find((item) => item.id === id && item.clinic_id === clinicId),
-  );
   const plan = useMockStore((state) =>
-    quote
-      ? state.treatmentPlans.find(
-          (item) => item.id === quote.treatment_plan_id && item.clinic_id === clinicId,
-        )
-      : undefined,
+    state.treatmentPlans.find((item) => item.legacy_quote_id === id && item.clinic_id === clinicId),
   );
   if (!hydrated) return <PageLoading label="Opening treatment plan" />;
   if (plan) return <Navigate to="/dentalplan" search={{ treatmentPlanId: plan.id }} replace />;

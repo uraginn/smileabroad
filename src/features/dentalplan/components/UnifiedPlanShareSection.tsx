@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -14,27 +13,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/ui-bits";
-import { mapTreatmentPlanToPatientDocument } from "@/lib/care-plan";
 import { useMockStore } from "@/lib/mock/store";
-import { formatQuoteMoney } from "@/lib/quote";
-import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import type { Clinic, ClinicBranding, Patient, TreatmentPlan } from "@/types/models";
 
 export function UnifiedPlanShareSection({
   plan,
-  clinic,
-  branding,
-  patient,
   actorId,
   role,
 }: {
@@ -45,14 +31,16 @@ export function UnifiedPlanShareSection({
   actorId?: string;
   role?: string;
 }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
   const markSent = useMockStore((state) => state.markTreatmentPlanSent);
   const ensureToken = useMockStore((state) => state.ensureTreatmentPlanShareToken);
   const canApprove = ["dentist", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const publicLinkReady = Boolean(plan.share_token && isTreatmentPlanPubliclyViewable(plan.status));
-  const document = mapTreatmentPlanToPatientDocument(plan, clinic, patient, branding);
-  const totals = calculateTreatmentPlanTotals(plan);
+  const preview = () => {
+    const token = ensureToken(plan.id, plan.clinic_id);
+    if (!token) return;
+    window.open(`/shared/treatment-plan/${token}?preview=true`, "_blank", "noopener,noreferrer");
+  };
   const copyLink = () => {
     if (!publicLinkReady || !plan.share_token) return;
     void navigator.clipboard.writeText(
@@ -77,7 +65,7 @@ export function UnifiedPlanShareSection({
               <p className="text-sm text-muted-foreground">Current document status</p>
               <StatusBadge status={plan.status ?? "draft"} />
             </div>
-            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+            <Button variant="outline" onClick={preview}>
               Preview Patient View
             </Button>
           </div>
@@ -129,6 +117,33 @@ export function UnifiedPlanShareSection({
             <Button variant="outline" disabled={!publicLinkReady} onClick={copyLink}>
               Copy Share Link
             </Button>
+            {["approved", "sent", "viewed"].includes(plan.status ?? "") && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">Revoke Public Access</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Revoke public access?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The patient link will become unavailable. The token remains stable for a
+                      future reapproval.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        updateStatus(plan.id, plan.clinic_id, "draft", actorId);
+                        toast.success("Public access revoked");
+                      }}
+                    >
+                      Revoke access
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
           {!publicLinkReady && (
             <p className="text-xs text-muted-foreground">
@@ -146,46 +161,6 @@ export function UnifiedPlanShareSection({
           </dl>
         </CardContent>
       </Card>
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Patient View preview</DialogTitle>
-            <DialogDescription>
-              Clinic-only preview. Internal notes and private medical information are excluded.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-semibold">{document.title}</h3>
-              <p className="text-muted-foreground">{document.summary}</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Meta label="Patient" value={document.patient_name ?? "Patient"} />
-              <Meta label="Planned visits" value={document.visit_information} />
-              <Meta label="Healing" value={document.healing_information} />
-              <Meta label="Total" value={formatQuoteMoney(totals.total, plan.currency ?? "EUR")} />
-            </div>
-            <Separator />
-            <div>
-              <p className="font-medium">Confirmed procedures</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                {document.price.items?.map((item) => (
-                  <li key={`${item.label}-${item.unit_price}`}>
-                    {item.label} · {item.quantity} ×{" "}
-                    {formatQuoteMoney(item.unit_price, plan.currency ?? "EUR")}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className="font-medium">Included services</p>
-              <p className="text-sm text-muted-foreground">
-                {document.quote.included_services.join(", ") || "None listed"}
-              </p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

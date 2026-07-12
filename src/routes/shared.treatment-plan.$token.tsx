@@ -15,9 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatQuoteMoney } from "@/lib/quote";
-import { mapClinicQuoteCarePlan } from "@/lib/care-plan";
-import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
-import { mapTreatmentPlanToLegacyQuote } from "@/lib/legacy-quote-compat";
+import { mapTreatmentPlanToPatientDocument } from "@/lib/care-plan";
+import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import {
   PlanDisclaimer,
@@ -41,68 +40,51 @@ function SharedPlan() {
   const activeUser = useAuth((state) => state.user);
   const authHydrated = useAuthHydrated();
   const hydrated = useMockStoreHydrated();
-  const tokenQuote = useMockStore((s) => s.quotes.find((quote) => quote.share_token === token));
   const tokenPlan = useMockStore((s) =>
     s.treatmentPlans.find((plan) => plan.share_token === token),
   );
-  const tokenOwnerClinicId = tokenQuote?.clinic_id ?? tokenPlan?.clinic_id;
   const canClinicPreview =
     Boolean(preview) &&
-    Boolean(tokenQuote || tokenPlan) &&
+    Boolean(tokenPlan) &&
     Boolean(activeUser) &&
-    (activeUser?.role === "platform_admin" || activeUser?.clinic_id === tokenOwnerClinicId);
-  const quote =
-    tokenQuote && (isQuotePubliclyViewable(tokenQuote.status) || canClinicPreview)
-      ? tokenQuote
-      : tokenPlan && (isQuotePubliclyViewable(tokenPlan.status) || canClinicPreview)
-        ? mapTreatmentPlanToLegacyQuote(tokenPlan)
-        : undefined;
-  const plan = useMockStore(
-    (s) =>
-      tokenPlan ??
-      (quote
-        ? s.treatmentPlans.find(
-            (item) => item.id === quote.treatment_plan_id && item.clinic_id === quote.clinic_id,
-          )
-        : undefined),
-  );
+    (activeUser?.role === "platform_admin" || activeUser?.clinic_id === tokenPlan?.clinic_id);
+  const plan =
+    tokenPlan && (isTreatmentPlanPubliclyViewable(tokenPlan.status) || canClinicPreview)
+      ? tokenPlan
+      : undefined;
   const clinic = useMockStore((s) =>
-    quote ? s.clinics.find((item) => item.id === quote.clinic_id) : undefined,
+    plan ? s.clinics.find((item) => item.id === plan.clinic_id) : undefined,
   );
   const branding = useMockStore((s) =>
-    quote ? s.branding.find((item) => item.clinic_id === quote.clinic_id) : undefined,
+    plan ? s.branding.find((item) => item.clinic_id === plan.clinic_id) : undefined,
   );
   const patient = useMockStore((s) =>
-    quote
+    plan
       ? s.patients.find(
           (item) =>
-            item.clinic_id === quote.clinic_id &&
-            (item.id === quote.clinic_patient_id || item.user_id === quote.patient_user_id),
+            item.clinic_id === plan.clinic_id &&
+            (item.id === plan.clinic_patient_id || item.user_id === plan.patient_user_id),
         )
       : undefined,
   );
   const dentist = useMockStore((s) =>
     plan?.dentist_id
-      ? s.users.find((user) => user.id === plan.dentist_id && user.clinic_id === quote?.clinic_id)
+      ? s.users.find((user) => user.id === plan.dentist_id && user.clinic_id === plan.clinic_id)
       : undefined,
   );
-  const updateQuote = useMockStore((s) => s.updateQuote);
   const markPlanViewed = useMockStore((s) => s.markTreatmentPlanViewed);
   const markPlanAccepted = useMockStore((s) => s.markTreatmentPlanAccepted);
 
   useEffect(() => {
-    if (!preview && quote?.status === "sent") {
-      if (tokenQuote) updateQuote(tokenQuote.id, { status: "viewed" }, "patient_shared");
-      else if (tokenPlan) markPlanViewed(tokenPlan.id, tokenPlan.clinic_id);
-    }
-  }, [markPlanViewed, preview, quote?.status, tokenPlan, tokenQuote, updateQuote]);
+    if (!preview && plan?.status === "sent") markPlanViewed(plan.id, plan.clinic_id);
+  }, [markPlanViewed, plan?.clinic_id, plan?.id, plan?.status, preview]);
 
   if (!hydrated || (preview && !authHydrated)) return null;
-  if (!quote || !plan || !clinic) return <SafeNotFound />;
+  if (!plan || !clinic) return <SafeNotFound />;
 
   const primary = branding?.primary_color || "#0f766e";
   const secondary = branding?.secondary_color || "#f97316";
-  const carePlan = mapClinicQuoteCarePlan({ plan, quote, clinic, branding, patient });
+  const carePlan = mapTreatmentPlanToPatientDocument(plan, clinic, patient, branding);
   const patientName = carePlan.patient_name || "Patient";
   const diagramItems = carePlan.plan.procedures.map((item) => ({ ...item, unit_price: 0 }));
   const contactHref = branding?.phone
@@ -121,7 +103,7 @@ function SharedPlan() {
       <style>{`@media print { .shared-plan .no-print { display:none!important } .shared-plan { background:white!important } .shared-plan .print-card { break-inside:avoid; box-shadow:none!important } }`}</style>
       <PlanDocumentHeader
         variant="clinic"
-        eyebrow="Clinic treatment plan and quote"
+        eyebrow="Treatment Plan & Cost Estimate"
         title={clinic.name}
         description={`${clinic.city}, ${clinic.country}`}
         brand={
@@ -160,11 +142,11 @@ function SharedPlan() {
               </div>
               <div className="text-left sm:text-right">
                 <Badge className="capitalize" style={{ background: primary }}>
-                  {quote.status}
+                  {plan.status}
                 </Badge>
-                <p className="text-xs text-muted-foreground mt-2">Quote {quote.id.slice(0, 8)}</p>
+                <p className="text-xs text-muted-foreground mt-2">Treatment Plan</p>
                 <p className="text-xs text-muted-foreground">
-                  Prepared {new Date(quote.created_at).toLocaleDateString()}
+                  Prepared {new Date(plan.prepared_at ?? plan.created_at).toLocaleDateString()}
                 </p>
                 {carePlan.price.valid_until && (
                   <p className="text-xs text-muted-foreground">
@@ -315,21 +297,21 @@ function SharedPlan() {
           </PlanSection>
         )}
 
-        {(carePlan.quote.included_services.length > 0 ||
-          carePlan.quote.excluded_services.length > 0 ||
-          carePlan.quote.patient_message) && (
+        {(carePlan.services.included_services.length > 0 ||
+          carePlan.services.excluded_services.length > 0 ||
+          carePlan.services.patient_message) && (
           <PlanSection title="Included services">
             <div className="grid gap-5 md:grid-cols-2">
-              {carePlan.quote.included_services.length > 0 && (
-                <DetailList title="Included" items={carePlan.quote.included_services} />
+              {carePlan.services.included_services.length > 0 && (
+                <DetailList title="Included" items={carePlan.services.included_services} />
               )}
-              {carePlan.quote.excluded_services.length > 0 && (
-                <DetailList title="Not included" items={carePlan.quote.excluded_services} />
+              {carePlan.services.excluded_services.length > 0 && (
+                <DetailList title="Not included" items={carePlan.services.excluded_services} />
               )}
             </div>
-            {carePlan.quote.patient_message && (
+            {carePlan.services.patient_message && (
               <p className="mt-4 rounded-lg bg-slate-100 p-4 text-sm">
-                {carePlan.quote.patient_message}
+                {carePlan.services.patient_message}
               </p>
             )}
           </PlanSection>
@@ -337,7 +319,7 @@ function SharedPlan() {
 
         <Card className="print-card">
           <CardContent className="p-5 sm:p-7 space-y-5">
-            <h3 className="text-lg font-semibold">Treatment and quote</h3>
+            <h3 className="text-lg font-semibold">Treatment and included services</h3>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -354,10 +336,10 @@ function SharedPlan() {
                       <TableCell>{item.label}</TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        {formatQuoteMoney(item.unit_price, quote.currency)}
+                        {formatQuoteMoney(item.unit_price, plan.currency ?? "EUR")}
                       </TableCell>
                       <TableCell className="text-right font-medium whitespace-nowrap">
-                        {formatQuoteMoney(item.total, quote.currency)}
+                        {formatQuoteMoney(item.total, plan.currency ?? "EUR")}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -367,26 +349,26 @@ function SharedPlan() {
             <div className="sm:ml-auto sm:max-w-sm space-y-1 text-sm">
               <PriceRow
                 label="Subtotal"
-                value={formatQuoteMoney(carePlan.price.subtotal ?? 0, quote.currency)}
+                value={formatQuoteMoney(carePlan.price.subtotal ?? 0, plan.currency ?? "EUR")}
               />
               <PriceRow
                 label="Hotel"
-                value={formatQuoteMoney(carePlan.price.hotel_total ?? 0, quote.currency)}
+                value={formatQuoteMoney(carePlan.price.hotel_total ?? 0, plan.currency ?? "EUR")}
               />
               <PriceRow
                 label="Transfers"
-                value={formatQuoteMoney(carePlan.price.transfer_total ?? 0, quote.currency)}
+                value={formatQuoteMoney(carePlan.price.transfer_total ?? 0, plan.currency ?? "EUR")}
               />
               {(carePlan.price.discount ?? 0) > 0 && (
                 <PriceRow
                   label="Discount"
-                  value={`- ${formatQuoteMoney(carePlan.price.discount ?? 0, quote.currency)}`}
+                  value={`- ${formatQuoteMoney(carePlan.price.discount ?? 0, plan.currency ?? "EUR")}`}
                 />
               )}
               <div className="border-t mt-2 pt-2 text-lg font-semibold">
                 <PriceRow
                   label="Total"
-                  value={formatQuoteMoney(carePlan.price.total ?? 0, quote.currency)}
+                  value={formatQuoteMoney(carePlan.price.total ?? 0, plan.currency ?? "EUR")}
                 />
               </div>
             </div>
@@ -406,7 +388,7 @@ function SharedPlan() {
                     <span className="font-medium">{payment.label}</span>
                     <span className="text-muted-foreground">{payment.due}</span>
                     <span className="font-medium">
-                      {formatQuoteMoney(payment.amount, quote.currency)}
+                      {formatQuoteMoney(payment.amount, plan.currency ?? "EUR")}
                     </span>
                   </div>
                 ))}
@@ -475,12 +457,12 @@ function SharedPlan() {
 
         <Card className="no-print">
           <CardContent className="p-5 sm:p-7 text-center space-y-4">
-            {quote.status === "accepted" ? (
+            {plan.status === "accepted" ? (
               <div>
                 <CheckCircle2 className="size-10 mx-auto mb-2" style={{ color: primary }} />
                 <h3 className="text-xl font-semibold">Plan accepted</h3>
                 <p className="text-sm text-muted-foreground">
-                  The clinic has been notified of your decision.
+                  Your acceptance has been recorded with this Treatment Plan.
                 </p>
               </div>
             ) : (
@@ -496,23 +478,19 @@ function SharedPlan() {
                   )}
                   {branding?.email && (
                     <Button asChild variant="outline">
-                      <a
-                        href={`mailto:${branding.email}?subject=Question about quote ${quote.id.slice(0, 8)}`}
-                      >
+                      <a href={`mailto:${branding.email}?subject=Question about my Treatment Plan`}>
                         <Mail className="size-4 mr-1" /> Ask a Question
                       </a>
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      tokenQuote
-                        ? updateQuote(tokenQuote.id, { status: "accepted" }, "patient_shared")
-                        : tokenPlan && markPlanAccepted(tokenPlan.id, tokenPlan.clinic_id)
-                    }
-                  >
-                    Accept Plan
-                  </Button>
+                  {!preview && plan.status === "viewed" && (
+                    <Button
+                      variant="outline"
+                      onClick={() => markPlanAccepted(plan.id, plan.clinic_id)}
+                    >
+                      Accept Plan
+                    </Button>
+                  )}
                 </div>
               </>
             )}

@@ -3,15 +3,14 @@ import type {
   Clinic,
   ClinicBranding,
   Patient,
-  Quote,
   Roadmap,
   TreatmentPlan,
+  TreatmentPlanPayment,
   TreatmentStage,
   TreatmentVisit,
   ToothTreatment,
 } from "@/types/models";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
-import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
 
 export interface CarePlanPricePresentation {
   currency: string;
@@ -23,7 +22,7 @@ export interface CarePlanPricePresentation {
   transfer_total?: number;
   discount?: number;
   items?: { label: string; quantity: number; unit_price: number; total: number }[];
-  payment_schedule?: Quote["payment_schedule"];
+  payment_schedule?: TreatmentPlanPayment[];
   valid_until?: string;
 }
 
@@ -76,7 +75,7 @@ export interface PublicClinicPlanDetails {
   }[];
 }
 
-export interface PublicClinicQuoteDetails {
+export interface PublicClinicServiceDetails {
   included_services: string[];
   excluded_services: string[];
   patient_message?: string;
@@ -89,7 +88,7 @@ export interface PublicClinicQuoteDetails {
 export interface ClinicCarePlanPresentation extends CarePlanPresentation {
   kind: "clinic_treatment_plan";
   plan: PublicClinicPlanDetails;
-  quote: PublicClinicQuoteDetails;
+  services: PublicClinicServiceDetails;
 }
 
 export function mapPreliminaryRoadmap(input: {
@@ -117,22 +116,6 @@ export function mapPreliminaryRoadmap(input: {
     disclaimer:
       "This preliminary roadmap is based only on information provided in the assessment. It is not a diagnosis, treatment plan, or final quotation.",
   };
-}
-
-export function mapClinicQuoteCarePlan(input: {
-  plan: TreatmentPlan;
-  quote: Quote;
-  clinic?: Clinic;
-  branding?: ClinicBranding;
-  patient?: Patient;
-}): ClinicCarePlanPresentation {
-  const { plan, quote, clinic, branding, patient } = input;
-  return mapTreatmentPlanToPatientDocument(
-    mergeLegacyQuoteIntoTreatmentPlan(plan, quote),
-    clinic,
-    patient,
-    branding,
-  );
 }
 
 export function mapTreatmentPlanToPatientDocument(
@@ -178,7 +161,7 @@ export function mapTreatmentPlanToPatientDocument(
         }
       : undefined,
     plan: selectPatientFacingPlan(plan),
-    quote: {
+    services: {
       included_services: plan.included_services ?? [],
       excluded_services: plan.excluded_services ?? [],
       patient_message: plan.patient_message,

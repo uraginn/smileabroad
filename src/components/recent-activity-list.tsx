@@ -15,7 +15,7 @@ import {
 
 export type ActivityItem = {
   id: string;
-  type: "lead" | "task" | "appointment" | "application" | "plan" | "quote" | "note";
+  type: "lead" | "task" | "appointment" | "application" | "plan" | "note";
   title: string;
   patient?: string;
   status?: string;
@@ -31,7 +31,6 @@ const iconMap: Record<ActivityItem["type"], LucideIcon> = {
   appointment: CalendarCheck,
   application: FileUp,
   plan: ClipboardList,
-  quote: FileText,
   note: FileText,
 };
 
