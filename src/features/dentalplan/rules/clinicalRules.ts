@@ -168,6 +168,24 @@ export function validatePlanForFinalize(plan: DentalPlan): string[] {
           `Tooth ${tooth}: ${treatment.treatmentType} conflicts with a missing or extraction-indicated position.`,
         );
     }
+  const teeth = new Set(plan.proposedTreatments.flatMap((item) => item.toothNumbers));
+  for (const tooth of teeth) {
+    const types = new Set(
+      plan.proposedTreatments
+        .filter((item) => item.toothNumbers.includes(tooth))
+        .map((item) => item.treatmentType),
+    );
+    const hasAny = (values: TreatmentType[]) => values.some((value) => types.has(value));
+    const hasImplant = types.has("dental-implant") || types.has("implant-crown");
+    if (hasImplant && hasAny([...surfaceTreatments, ...crowns]))
+      errors.push(`Tooth ${tooth}: implant treatment conflicts with a natural-tooth restoration.`);
+    if (types.has("extraction") && hasAny([...surfaceTreatments, ...crowns]))
+      errors.push(`Tooth ${tooth}: extraction conflicts with a natural-tooth restoration.`);
+    if (hasAny(crowns) && hasAny(["veneer", "composite-bonding"]))
+      errors.push(`Tooth ${tooth}: crown conflicts with veneer or composite bonding.`);
+    if (types.has("pontic") && hasAny(["composite-filling", "root-canal-treatment"]))
+      errors.push(`Tooth ${tooth}: pontic conflicts with filling or root canal treatment.`);
+  }
   for (const group of plan.treatmentGroups)
     if (
       group.generatedTreatmentIds.some(

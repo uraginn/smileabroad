@@ -219,6 +219,12 @@ export interface DentalPlanStudioProps {
   onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string; quoteId: string }>;
   readOnly?: boolean;
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
+  treatmentDefaults?: Array<{
+    treatmentKey: string;
+    displayName: string;
+    active: boolean;
+    prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
+  }>;
 }
 export interface DentalPlannerContext {
   mode: "standalone" | "crm";

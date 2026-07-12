@@ -1,13 +1,21 @@
 import type { DentalPlan, DentalPlannerCommercial } from "../types/dental-plan.types";
 import { treatmentByType } from "../data/treatmentDefinitions";
-export function syncPricingItems(plan: DentalPlan): DentalPlannerCommercial["items"] {
+export function syncPricingItems(
+  plan: DentalPlan,
+  defaults: Array<{
+    treatmentKey: string;
+    displayName: string;
+    prices: Partial<Record<DentalPlan["commercial"]["currency"], number>>;
+  }> = [],
+): DentalPlannerCommercial["items"] {
   return plan.proposedTreatments.map((treatment) => {
     const existing = plan.commercial.items.find((item) => item.treatmentId === treatment.id);
+    const configured = defaults.find((item) => item.treatmentKey === treatment.treatmentType);
     return {
       treatmentId: treatment.id,
       label: `${treatmentByType(treatment.treatmentType).label} · ${treatment.toothNumbers.join(", ")}`,
       qty: Math.max(1, treatment.toothNumbers.length),
-      unitPrice: existing?.unitPrice ?? 0,
+      unitPrice: existing?.unitPrice ?? configured?.prices[plan.commercial.currency] ?? 0,
     };
   });
 }

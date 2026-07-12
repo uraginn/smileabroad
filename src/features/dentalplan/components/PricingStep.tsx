@@ -26,14 +26,20 @@ import { calculateCommercial, syncPricingItems } from "../utils/commercial";
 export function PricingStep({
   plan,
   change,
+  treatmentDefaults = [],
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
+  treatmentDefaults?: Array<{
+    treatmentKey: string;
+    displayName: string;
+    prices: Partial<Record<DentalPlan["commercial"]["currency"], number>>;
+  }>;
 }) {
   const commercial = plan.commercial;
   const update = (patch: Partial<typeof commercial>) =>
     change({ commercial: { ...commercial, ...patch } });
-  const synced = syncPricingItems(plan);
+  const synced = syncPricingItems(plan, treatmentDefaults);
   useEffect(() => {
     if (JSON.stringify(synced) !== JSON.stringify(commercial.items)) update({ items: synced });
     // Sync only when dental treatment structure changes; prices are retained by treatment ID.

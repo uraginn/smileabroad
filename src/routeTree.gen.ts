@@ -45,6 +45,7 @@ import { Route as PublicClinicsRouteImport } from './routes/_public.clinics'
 import { Route as PublicAboutRouteImport } from './routes/_public.about'
 import { Route as SharedTreatmentPlanTokenRouteImport } from './routes/shared.treatment-plan.$token'
 import { Route as ProTreatmentPlansIdRouteImport } from './routes/pro.treatment-plans.$id'
+import { Route as ProSettingsDentalPlannerRouteImport } from './routes/pro.settings.dental-planner'
 import { Route as ProQuotesIdRouteImport } from './routes/pro.quotes.$id'
 import { Route as ProPatientsIdRouteImport } from './routes/pro.patients.$id'
 import { Route as PublicClinicsSlugRouteImport } from './routes/_public.clinics.$slug'
@@ -229,6 +230,12 @@ const ProTreatmentPlansIdRoute = ProTreatmentPlansIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ProTreatmentPlansRoute,
 } as any)
+const ProSettingsDentalPlannerRoute =
+  ProSettingsDentalPlannerRouteImport.update({
+    id: '/dental-planner',
+    path: '/dental-planner',
+    getParentRoute: () => ProSettingsRoute,
+  } as any)
 const ProQuotesIdRoute = ProQuotesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -272,7 +279,7 @@ export interface FileRoutesByFullPath {
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
-  '/pro/settings': typeof ProSettingsRoute
+  '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
@@ -282,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/clinics/$slug': typeof PublicClinicsSlugRoute
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
+  '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
 }
@@ -311,7 +319,7 @@ export interface FileRoutesByTo {
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
-  '/pro/settings': typeof ProSettingsRoute
+  '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
@@ -322,6 +330,7 @@ export interface FileRoutesByTo {
   '/clinics/$slug': typeof PublicClinicsSlugRoute
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
+  '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
 }
@@ -353,7 +362,7 @@ export interface FileRoutesById {
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
-  '/pro/settings': typeof ProSettingsRoute
+  '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
@@ -364,6 +373,7 @@ export interface FileRoutesById {
   '/_public/clinics/$slug': typeof PublicClinicsSlugRoute
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
+  '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
 }
@@ -406,6 +416,7 @@ export interface FileRouteTypes {
     | '/clinics/$slug'
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
+    | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -446,6 +457,7 @@ export interface FileRouteTypes {
     | '/clinics/$slug'
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
+    | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
   id:
@@ -487,6 +499,7 @@ export interface FileRouteTypes {
     | '/_public/clinics/$slug'
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
+    | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
   fileRoutesById: FileRoutesById
@@ -757,6 +770,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProTreatmentPlansIdRouteImport
       parentRoute: typeof ProTreatmentPlansRoute
     }
+    '/pro/settings/dental-planner': {
+      id: '/pro/settings/dental-planner'
+      path: '/dental-planner'
+      fullPath: '/pro/settings/dental-planner'
+      preLoaderRoute: typeof ProSettingsDentalPlannerRouteImport
+      parentRoute: typeof ProSettingsRoute
+    }
     '/pro/quotes/$id': {
       id: '/pro/quotes/$id'
       path: '/$id'
@@ -873,6 +893,18 @@ const ProQuotesRouteWithChildren = ProQuotesRoute._addFileChildren(
   ProQuotesRouteChildren,
 )
 
+interface ProSettingsRouteChildren {
+  ProSettingsDentalPlannerRoute: typeof ProSettingsDentalPlannerRoute
+}
+
+const ProSettingsRouteChildren: ProSettingsRouteChildren = {
+  ProSettingsDentalPlannerRoute: ProSettingsDentalPlannerRoute,
+}
+
+const ProSettingsRouteWithChildren = ProSettingsRoute._addFileChildren(
+  ProSettingsRouteChildren,
+)
+
 interface ProTreatmentPlansRouteChildren {
   ProTreatmentPlansIdRoute: typeof ProTreatmentPlansIdRoute
 }
@@ -891,7 +923,7 @@ interface ProRouteChildren {
   ProLeadsRoute: typeof ProLeadsRoute
   ProPatientsRoute: typeof ProPatientsRouteWithChildren
   ProQuotesRoute: typeof ProQuotesRouteWithChildren
-  ProSettingsRoute: typeof ProSettingsRoute
+  ProSettingsRoute: typeof ProSettingsRouteWithChildren
   ProTasksRoute: typeof ProTasksRoute
   ProTeamRoute: typeof ProTeamRoute
   ProTemplatesRoute: typeof ProTemplatesRoute
@@ -905,7 +937,7 @@ const ProRouteChildren: ProRouteChildren = {
   ProLeadsRoute: ProLeadsRoute,
   ProPatientsRoute: ProPatientsRouteWithChildren,
   ProQuotesRoute: ProQuotesRouteWithChildren,
-  ProSettingsRoute: ProSettingsRoute,
+  ProSettingsRoute: ProSettingsRouteWithChildren,
   ProTasksRoute: ProTasksRoute,
   ProTeamRoute: ProTeamRoute,
   ProTemplatesRoute: ProTemplatesRoute,

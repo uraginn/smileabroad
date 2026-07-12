@@ -12,6 +12,7 @@ import {
   Settings,
   Palette,
   UserRound,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { PageLoading } from "@/components/ui-bits";
@@ -37,7 +38,13 @@ const items = [
   { to: "/pro/team", label: "Team", icon: UserRound, group: "clinic" as const },
   { to: "/pro/templates", label: "Templates", icon: FileBox, group: "clinic" as const },
   { to: "/pro/branding", label: "Branding", icon: Palette, group: "clinic" as const },
-  { to: "/pro/settings", label: "Settings", icon: Settings, group: "clinic" as const },
+  { to: "/pro/settings", label: "Settings", icon: Settings, group: "clinic" as const, exact: true },
+  {
+    to: "/pro/settings/dental-planner",
+    label: "Dental Planner",
+    icon: SlidersHorizontal,
+    group: "clinic" as const,
+  },
 ];
 
 function ProLayout() {

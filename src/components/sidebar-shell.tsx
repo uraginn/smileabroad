@@ -24,6 +24,7 @@ export interface SidebarItem {
   label: string;
   icon: LucideIcon;
   badge?: string | number;
+  exact?: boolean;
   group?: "overview" | "sales" | "clinical" | "clinic";
 }
 
@@ -57,7 +58,9 @@ export function SidebarShell({
   const activeItem = useMemo(
     () =>
       items.find(
-        (item) => pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to)),
+        (item) =>
+          pathname === item.to ||
+          (!item.exact && item.to !== "/" && pathname.startsWith(`${item.to}/`)),
       ),
     [items, pathname],
   );
@@ -241,7 +244,9 @@ function NavGroup({
       )}
       {items.map((item) => {
         const Icon = item.icon;
-        const active = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
+        const active =
+          pathname === item.to ||
+          (!item.exact && item.to !== "/" && pathname.startsWith(`${item.to}/`));
         return (
           <Link
             key={item.to}

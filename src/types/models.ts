@@ -15,6 +15,13 @@ export interface User extends BaseRecord {
   role: Role;
   avatar_url?: string;
   clinic_id?: string;
+  title?: string;
+  specialty?: string;
+  languages?: string[];
+  active?: boolean;
+  default_planner_dentist?: boolean;
+  patient_bio?: string;
+  profile_image_name?: string;
 }
 
 export interface Profile extends BaseRecord {
@@ -397,6 +404,65 @@ export interface ClinicPricing extends BaseRecord {
   treatment: ToothTreatment;
   unit_price: number;
   currency: string;
+}
+
+export type PlannerCurrency = "GBP" | "EUR" | "USD" | "TRY";
+
+export interface ClinicTreatmentDefinition extends BaseRecord {
+  clinic_id: string;
+  treatment_key: string;
+  system: boolean;
+  display_name: string;
+  patient_label?: string;
+  internal_label?: string;
+  category: string;
+  description?: string;
+  prices: Partial<Record<PlannerCurrency, number>>;
+  unit_type: "tooth" | "arch" | "case";
+  availability: "current" | "proposed" | "both";
+  active: boolean;
+  svg_asset?: PlannerAssetMetadata;
+}
+
+export interface PlannerAssetMetadata {
+  id: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  data_url?: string;
+}
+
+export interface DentalPlanTemplate extends BaseRecord {
+  clinic_id: string;
+  name: string;
+  description?: string;
+  category: string;
+  active: boolean;
+  default_dentist_id?: string;
+  plan_data: unknown;
+  patient_summary?: string;
+  internal_notes?: string;
+}
+
+export interface ClinicHotel extends BaseRecord {
+  clinic_id: string;
+  name: string;
+  description?: string;
+  address?: string;
+  city: string;
+  country: string;
+  distance_from_clinic?: string;
+  room_types: string[];
+  board_types: string[];
+  default_nights: number;
+  companion_policy?: string;
+  price_per_night: number;
+  currency: PlannerCurrency;
+  active: boolean;
+  is_default: boolean;
+  contact?: string;
+  internal_notes?: string;
+  images: PlannerAssetMetadata[];
 }
 
 export interface Message extends BaseRecord {

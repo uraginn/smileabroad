@@ -57,6 +57,7 @@ function DentalPlanRoute() {
   const applications = useMockStore((state) => state.applications);
   const files = useMockStore((state) => state.files);
   const users = useMockStore((state) => state.users);
+  const treatmentDefinitions = useMockStore((state) => state.clinicTreatmentDefinitions);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const addQuote = useMockStore((state) => state.addQuote);
@@ -95,6 +96,12 @@ function DentalPlanRoute() {
     (item) => item.id === (lead?.roadmap_id ?? patient?.roadmap_id ?? application?.roadmap_id),
   );
   const crmMode = !!user && !!user.clinic_id && !!(patient || existingPlan || lead || assessment);
+  const requestedCrmContext = !!(
+    search.patientId ||
+    search.treatmentPlanId ||
+    search.leadId ||
+    search.assessmentId
+  );
   const caseFiles = useMemo(
     () =>
       [
@@ -137,15 +144,24 @@ function DentalPlanRoute() {
     const importedCommercial = contextQuote
       ? {
           currency: contextQuote.currency,
-          items: contextQuote.items.map((item, index) => ({
-            treatmentId: embedded?.proposedTreatments[index]?.id ?? item.id,
-            label: item.label,
-            qty: item.qty,
-            unitPrice: item.unit_price,
-          })),
+          items: (embedded?.proposedTreatments ?? []).map((treatment) => {
+            const matchingItems = contextQuote.items.filter((item) =>
+              item.id.startsWith(`qi_dpi_${treatment.id}_`),
+            );
+            const fallback = embedded?.commercial?.items.find(
+              (item) => item.treatmentId === treatment.id,
+            );
+            return {
+              treatmentId: treatment.id,
+              label: fallback?.label ?? matchingItems[0]?.label ?? treatment.treatmentType,
+              qty: Math.max(1, treatment.toothNumbers.length),
+              unitPrice: matchingItems[0]?.unit_price ?? fallback?.unitPrice ?? 0,
+            };
+          }),
           hotelTotal: contextQuote.hotel_total,
           transferTotal: contextQuote.transfer_total,
-          otherServiceTotal: 0,
+          otherServiceTotal:
+            contextQuote.items.find((item) => item.id === "qi_other_services")?.unit_price ?? 0,
           discountType: contextQuote.discount > 0 ? ("fixed" as const) : ("none" as const),
           discountValue: contextQuote.discount,
           paymentSchedule: contextQuote.payment_schedule.map((item) => ({
@@ -195,7 +211,9 @@ function DentalPlanRoute() {
           planTitle: existingPlan?.title ?? embedded.patient.planTitle,
         },
         importedAssessment,
-        commercial: embedded.commercial ?? importedCommercial,
+        commercial: importedCommercial
+          ? { ...embedded.commercial, ...importedCommercial }
+          : embedded.commercial,
       });
     return createDentalPlan({
       name: existingPlan?.title ?? "Dental treatment plan",
@@ -262,11 +280,16 @@ function DentalPlanRoute() {
     importedAssessment,
     contextQuote,
   ]);
-  if (
-    !hydrated &&
-    (search.patientId || search.treatmentPlanId || search.leadId || search.assessmentId)
-  )
-    return <div className="p-8">Loading CRM context…</div>;
+  if (!hydrated && requestedCrmContext) return <div className="p-8">Loading CRM context…</div>;
+  if (hydrated && requestedCrmContext && !crmMode)
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Planner context unavailable</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This patient, lead, assessment, or treatment plan is unavailable for the active clinic.
+        </p>
+      </div>
+    );
   const finalize = async (value: DentalPlanData) => {
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
@@ -276,10 +299,12 @@ function DentalPlanRoute() {
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user.clinic_id,
       );
     if (!linkedPatient) {
+      const normalizedEmail = value.patient.email?.trim().toLowerCase();
       const duplicate = patients.find(
         (item) =>
+          !!normalizedEmail &&
           item.clinic_id === user.clinic_id &&
-          item.email.toLowerCase() === value.patient.email?.toLowerCase(),
+          item.email.trim().toLowerCase() === normalizedEmail,
       );
       linkedPatient =
         duplicate ??
@@ -389,8 +414,8 @@ function DentalPlanRoute() {
       });
     const beforeDiscount =
       quoteItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
-      value.commercial.hotelTotal +
-      value.commercial.transferTotal +
+      (value.travel.hotelIncluded ? value.commercial.hotelTotal : 0) +
+      (value.travel.transferIncluded ? value.commercial.transferTotal : 0) +
       0;
     const discount =
       value.commercial.discountType === "percentage"
@@ -451,6 +476,14 @@ function DentalPlanRoute() {
       clinicUsers={users
         .filter((member) => member.clinic_id === user?.clinic_id)
         .map(({ id, name, role }) => ({ id, name, role }))}
+      treatmentDefaults={treatmentDefinitions
+        .filter((item) => item.clinic_id === user?.clinic_id && item.active)
+        .map((item) => ({
+          treatmentKey: item.treatment_key,
+          displayName: item.display_name,
+          active: item.active,
+          prices: item.prices,
+        }))}
       onFinalize={finalize}
     />
   );

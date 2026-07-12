@@ -69,6 +69,7 @@ function PlannerShell({
   readOnly,
   context,
   clinicUsers = [],
+  treatmentDefaults = [],
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
@@ -95,8 +96,10 @@ function PlannerShell({
       return;
     }
     if (context?.mode !== "crm" || !onFinalize) {
-      change({ finalized: true });
-      save();
+      const finalizedPlan = { ...plan, finalized: true, updatedAt: new Date().toISOString() };
+      setPlan(finalizedPlan);
+      repository.savePlan(finalizedPlan);
+      onSave?.(finalizedPlan);
       setResult("Standalone review finalized locally. No CRM record was created.");
       return;
     }
@@ -162,7 +165,9 @@ function PlannerShell({
         {step === 0 && <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />}{" "}
         {step === 1 && <TreatmentPlanner value={plan} onChange={setPlan} readOnly={readOnly} />}{" "}
         {step === 2 && <TravelServicesStep plan={plan} change={change} />}{" "}
-        {step === 3 && <PricingStep plan={plan} change={change} />}
+        {step === 3 && (
+          <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
+        )}
         {step === 4 && <FinalReviewStep plan={plan} />}
         <div className="flex justify-between">
           <Button

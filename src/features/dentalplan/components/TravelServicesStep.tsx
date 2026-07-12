@@ -183,13 +183,6 @@ export function TravelServicesStep({
               />
               Companion included
             </label>
-            <Field label="Image metadata">
-              <Input
-                value={plan.travel.hotelImageMetadata ?? ""}
-                onChange={(e) => update({ hotelImageMetadata: e.target.value })}
-                placeholder="Future image reference"
-              />
-            </Field>
             <div className="md:col-span-3">
               <Field label="Short hotel description">
                 <Textarea
