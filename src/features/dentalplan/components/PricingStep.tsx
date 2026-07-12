@@ -19,7 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan } from "../types/dental-plan.types";
 import { calculateCommercial, syncPricingItems } from "../utils/commercial";
@@ -45,7 +44,16 @@ export function PricingStep({
     // Sync only when dental treatment structure changes; prices are retained by treatment ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.proposedTreatments]);
-  const totals = calculateCommercial(commercial);
+  const billableCommercial = {
+    ...commercial,
+    hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
+    transferTotal:
+      plan.travel.includedServices.includes("Airport Transfer") ||
+      plan.travel.includedServices.includes("Hotel Transfer")
+        ? commercial.transferTotal
+        : 0,
+  };
+  const totals = calculateCommercial(billableCommercial);
   const scheduled = commercial.paymentSchedule.reduce((sum, item) => sum + item.amount, 0);
   return (
     <div className="space-y-4">
@@ -54,25 +62,35 @@ export function PricingStep({
           <CardTitle>Currency and treatment pricing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-48">
-            <Label>Currency</Label>
-            <Select
-              value={commercial.currency}
-              onValueChange={(currency) =>
-                update({ currency: currency as typeof commercial.currency })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {["GBP", "EUR", "USD", "TRY"].map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label>Currency</Label>
+              <Select
+                value={commercial.currency}
+                onValueChange={(currency) =>
+                  update({ currency: currency as typeof commercial.currency })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["GBP", "EUR", "USD", "TRY"].map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Quote valid until</Label>
+              <Input
+                type="date"
+                value={commercial.validUntil ?? ""}
+                onChange={(e) => update({ validUntil: e.target.value })}
+              />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <Table>
@@ -117,7 +135,7 @@ export function PricingStep({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Commercial totals and discount</CardTitle>
+          <CardTitle>Travel and service totals</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Money
@@ -135,6 +153,13 @@ export function PricingStep({
             value={commercial.otherServiceTotal}
             onChange={(otherServiceTotal) => update({ otherServiceTotal })}
           />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Discount</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Discount type</Label>
             <Select
@@ -166,15 +191,45 @@ export function PricingStep({
               onChange={(discountValue) => update({ discountValue })}
             />
           )}
-          <div className="space-y-1 text-sm md:col-span-2 lg:col-span-4">
-            <Row label="Subtotal" value={formatQuoteMoney(totals.subtotal, commercial.currency)} />
-            <Row label="Discount" value={formatQuoteMoney(totals.discount, commercial.currency)} />
+          <div className="space-y-1 text-sm sm:col-span-2">
             <Row
-              label="Final total"
+              label="Calculated discount"
+              value={formatQuoteMoney(totals.discount, commercial.currency)}
+            />
+            <Row
+              label="Total after discount"
               value={formatQuoteMoney(totals.total, commercial.currency)}
               strong
             />
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Total summary</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <Row
+            label="Treatment subtotal"
+            value={formatQuoteMoney(totals.subtotal, commercial.currency)}
+          />
+          <Row
+            label="Hotel"
+            value={formatQuoteMoney(billableCommercial.hotelTotal, commercial.currency)}
+          />
+          <Row
+            label="Transfer and services"
+            value={formatQuoteMoney(
+              billableCommercial.transferTotal + commercial.otherServiceTotal,
+              commercial.currency,
+            )}
+          />
+          <Row label="Discount" value={formatQuoteMoney(totals.discount, commercial.currency)} />
+          <Row
+            label="Final total"
+            value={formatQuoteMoney(totals.total, commercial.currency)}
+            strong
+          />
         </CardContent>
       </Card>
       <Card>
@@ -260,23 +315,6 @@ export function PricingStep({
               Scheduled payments exceed the current quote total.
             </p>
           )}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label>Quote valid until</Label>
-              <Input
-                type="date"
-                value={commercial.validUntil ?? ""}
-                onChange={(e) => update({ validUntil: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Commercial notes</Label>
-              <Textarea
-                value={commercial.commercialNotes ?? ""}
-                onChange={(e) => update({ commercialNotes: e.target.value })}
-              />
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

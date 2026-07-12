@@ -462,24 +462,6 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           onHighlight={highlightTeeth}
         />
       </div>
-      <PlanningDefaultsPanel
-        plan={history.state}
-        defaults={defaults}
-        onChange={(key, mode, value) =>
-          history.set(
-            (current) => ({
-              ...current,
-              planningPreferences: { ...current.planningPreferences, [key]: { mode, value } },
-              travel: {
-                ...current.travel,
-                ...(key === "visits" && Number(value) > 0 ? { visits: Number(value) } : {}),
-                ...(key === "visitDuration" ? { visitDuration: value } : {}),
-              },
-            }),
-            { commit: false },
-          )
-        }
-      />
     </div>
   );
 }

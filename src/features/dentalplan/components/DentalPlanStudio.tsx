@@ -70,6 +70,7 @@ function PlannerShell({
   context,
   clinicUsers = [],
   treatmentDefaults = [],
+  hotels = [],
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
@@ -164,11 +165,11 @@ function PlannerShell({
         )}
         {step === 0 && <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />}{" "}
         {step === 1 && <TreatmentPlanner value={plan} onChange={setPlan} readOnly={readOnly} />}{" "}
-        {step === 2 && <TravelServicesStep plan={plan} change={change} />}{" "}
+        {step === 2 && <TravelServicesStep plan={plan} change={change} hotels={hotels} />}{" "}
         {step === 3 && (
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
         )}
-        {step === 4 && <FinalReviewStep plan={plan} />}
+        {step === 4 && <FinalReviewStep plan={plan} hotels={hotels} />}
         <div className="flex justify-between">
           <Button
             variant="outline"

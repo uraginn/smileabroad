@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,312 +15,262 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { DentalPlan } from "../types/dental-plan.types";
-const SERVICES = [
+import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
+import { derivePlanDefaults } from "../utils/derivePlanDefaults";
+
+const CLINICAL_SERVICES = [
   "Prescribed medications",
   "Panoramic X-ray",
   "3D X-ray / CBCT",
   "Initial clinical examination",
   "Digital dental scan",
   "Temporary teeth where required",
-  "Airport transfer",
-  "Local clinic and hotel transfer",
 ];
+const TRAVEL_SERVICES = ["Airport Transfer", "Hotel Transfer", "Flight Included"];
+const KNOWN_SERVICES = [...CLINICAL_SERVICES, ...TRAVEL_SERVICES];
+type HotelOption = NonNullable<DentalPlanStudioProps["hotels"]>[number];
+
 export function TravelServicesStep({
   plan,
   change,
+  hotels = [],
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
+  hotels?: HotelOption[];
 }) {
   const [custom, setCustom] = useState("");
+  const defaults = derivePlanDefaults(plan);
+  const selectedHotel = hotels.find((hotel) => hotel.id === plan.travel.selectedHotelId);
+  const defaultHotel = hotels.find((hotel) => hotel.isDefault) ?? hotels[0];
   const update = (patch: Partial<DentalPlan["travel"]>) =>
     change({ travel: { ...plan.travel, ...patch } });
-  const preference = (
-    key: "visits" | "visitDuration" | "healingPeriod",
-    mode: "automatic" | "custom",
-    value: string,
-  ) =>
-    change({
-      planningPreferences: { ...plan.planningPreferences, [key]: { mode, value } },
-      travel: {
-        ...plan.travel,
-        ...(key === "visits" && Number(value) > 0 ? { visits: Number(value) } : {}),
-        ...(key === "visitDuration" ? { visitDuration: value } : {}),
-      },
+  const setService = (service: string, checked: boolean) => {
+    const includedServices = checked
+      ? [...new Set([...plan.travel.includedServices, service])]
+      : plan.travel.includedServices.filter((item) => item !== service);
+    update({
+      includedServices,
+      transferIncluded:
+        includedServices.includes("Airport Transfer") ||
+        includedServices.includes("Hotel Transfer"),
+      ...(service === "Airport Transfer"
+        ? { airportTransfer: checked, airportPickup: checked, airportDropoff: checked }
+        : {}),
+      ...(service === "Hotel Transfer" ? { localTransfer: checked } : {}),
+      ...(service === "Flight Included" ? { flightIncluded: checked } : {}),
     });
-  const setTransfer = (
-    key: "airportPickup" | "airportDropoff" | "localTransfer",
-    checked: boolean,
-  ) => {
-    const next = { ...plan.travel, [key]: checked };
-    const airport = key.startsWith("airport")
-      ? checked || next.airportPickup || next.airportDropoff
-      : next.airportPickup || next.airportDropoff;
-    const local = key === "localTransfer" ? checked : next.localTransfer;
-    const services = plan.travel.includedServices.filter(
-      (item) => item !== "Airport transfer" && item !== "Local clinic and hotel transfer",
-    );
-    if (airport) services.push("Airport transfer");
-    if (local) services.push("Local clinic and hotel transfer");
-    update({ ...next, airportTransfer: airport, includedServices: services });
+  };
+  const chooseHotel = (hotelId: string, extra: Partial<DentalPlan["travel"]> = {}) => {
+    const hotel = hotels.find((item) => item.id === hotelId);
+    if (!hotel) return;
+    update({
+      ...extra,
+      selectedHotelId: hotel.id,
+      hotelName: hotel.name,
+      hotelDescription: hotel.description,
+      hotelNights: plan.travel.hotelNights || hotel.defaultNights,
+      roomType: hotel.roomTypes.includes(plan.travel.roomType ?? "")
+        ? plan.travel.roomType
+        : hotel.roomTypes[0],
+      boardType: hotel.boardTypes.includes(plan.travel.boardType ?? "")
+        ? plan.travel.boardType
+        : hotel.boardTypes[0],
+    });
   };
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Visits, healing and estimated dates</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <Preference
-            label="Visit count"
-            value={plan.planningPreferences.visits}
-            automaticValue={plan.planningPreferences.visits.value}
-            onChange={(mode, value) => preference("visits", mode, value)}
-          />
-          <Preference
-            label="Visit duration / estimated stay"
-            value={plan.planningPreferences.visitDuration}
-            automaticValue={plan.planningPreferences.visitDuration.value}
-            onChange={(mode, value) => preference("visitDuration", mode, value)}
-          />
-          <Preference
-            label="Healing period"
-            value={plan.planningPreferences.healingPeriod}
-            automaticValue={plan.planningPreferences.healingPeriod.value}
-            onChange={(mode, value) => preference("healingPeriod", mode, value)}
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="First visit estimate">
-              <Input
-                type="date"
-                value={plan.travel.firstVisitDate ?? ""}
-                onChange={(e) => update({ firstVisitDate: e.target.value })}
-              />
-            </Field>
-            {plan.travel.visits > 1 && (
-              <Field label="Second visit estimate">
-                <Input
-                  type="date"
-                  value={plan.travel.secondVisitDate ?? ""}
-                  onChange={(e) => update({ secondVisitDate: e.target.value })}
-                />
-              </Field>
-            )}
-            <label className="col-span-2 flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={plan.travel.datesFlexible}
-                onCheckedChange={(value) => update({ datesFlexible: value === true })}
-              />
-              Flexible / not confirmed
-            </label>
-          </div>
-          <Field label="Timeline notes">
-            <Textarea
-              value={plan.travel.timelineNotes ?? ""}
-              onChange={(e) => update({ timelineNotes: e.target.value })}
-            />
-          </Field>
+      <Card className="bg-muted/30">
+        <CardContent className="space-y-2 p-4 text-sm">
+          <p>
+            This plan is currently expected to require <b>{defaults.recommendedVisits} visit(s)</b>{" "}
+            with <b>{defaults.healingPeriodSummary.toLowerCase()}</b>.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Generated from the selected treatments and linked groups; confirm clinically.
+          </p>
+          {defaults.warnings.map((warning) => (
+            <p key={warning} className="text-xs text-warning-foreground">
+              {warning}
+            </p>
+          ))}
         </CardContent>
       </Card>
+
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Hotel</CardTitle>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={plan.travel.hotelIncluded}
-                onCheckedChange={(hotelIncluded) =>
-                  update({ hotelIncluded, hotelRequired: hotelIncluded })
-                }
-              />
-              Included
-            </label>
-          </div>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle>Hotel</CardTitle>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={plan.travel.hotelIncluded}
+              onCheckedChange={(hotelIncluded) => {
+                if (hotelIncluded && !selectedHotel && defaultHotel)
+                  chooseHotel(defaultHotel.id, { hotelIncluded, hotelRequired: hotelIncluded });
+                else update({ hotelIncluded, hotelRequired: hotelIncluded });
+              }}
+            />
+            Included
+          </label>
         </CardHeader>
         {plan.travel.hotelIncluded && (
-          <CardContent className="grid gap-4 md:grid-cols-3">
-            <Field label="Hotel name">
-              <Input
-                value={plan.travel.hotelName ?? ""}
-                onChange={(e) => update({ hotelName: e.target.value })}
-              />
-            </Field>
-            <Field label="Room type">
-              <Input
-                value={plan.travel.roomType ?? ""}
-                onChange={(e) => update({ roomType: e.target.value })}
-              />
-            </Field>
-            <Field label="Nights">
-              <Input
-                type="number"
-                min={0}
-                value={plan.travel.hotelNights}
-                onChange={(e) => update({ hotelNights: Math.max(0, Number(e.target.value)) })}
-              />
-            </Field>
-            <Field label="Board type">
-              <Select
-                value={plan.travel.boardType}
-                onValueChange={(boardType) => update({ boardType })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select board" />
-                </SelectTrigger>
-                <SelectContent>
-                  {["Room only", "Breakfast", "Half board", "Full board"].map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <label className="flex items-center gap-2 pt-7 text-sm">
+          <CardContent className="space-y-4">
+            {hotels.length ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Configured hotel">
+                  <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select hotel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hotels.map((hotel) => (
+                        <SelectItem key={hotel.id} value={hotel.id}>
+                          {hotel.name}
+                          {hotel.isDefault ? " · Default" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Nights">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={plan.travel.hotelNights}
+                    onChange={(event) =>
+                      update({ hotelNights: Math.max(0, Number(event.target.value)) })
+                    }
+                  />
+                </Field>
+                <Field label="Room type">
+                  <OptionSelect
+                    value={plan.travel.roomType}
+                    options={selectedHotel?.roomTypes ?? legacyOption(plan.travel.roomType)}
+                    placeholder="Select room"
+                    onChange={(roomType) => update({ roomType })}
+                  />
+                </Field>
+                <Field label="Board type">
+                  <OptionSelect
+                    value={plan.travel.boardType}
+                    options={selectedHotel?.boardTypes ?? legacyOption(plan.travel.boardType)}
+                    placeholder="Select board"
+                    onChange={(boardType) => update({ boardType })}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {plan.travel.hotelName
+                  ? `Legacy hotel: ${plan.travel.hotelName}`
+                  : "No active hotels are configured. Add one in CRM Settings."}
+              </p>
+            )}
+            <label className="flex items-center gap-2 text-sm">
               <Checkbox
-                checked={plan.travel.companionIncluded}
+                checked={!!plan.travel.companionIncluded}
                 onCheckedChange={(value) => update({ companionIncluded: value === true })}
               />
               Companion included
             </label>
-            <div className="md:col-span-3">
-              <Field label="Short hotel description">
-                <Textarea
-                  value={plan.travel.hotelDescription ?? ""}
-                  onChange={(e) => update({ hotelDescription: e.target.value })}
-                />
-              </Field>
-            </div>
+            {selectedHotel && <HotelPreview hotel={selectedHotel} />}
           </CardContent>
         )}
       </Card>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Transfers</CardTitle>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={plan.travel.transferIncluded}
-                onCheckedChange={(transferIncluded) => update({ transferIncluded })}
-              />
-              Included
-            </label>
-          </div>
+          <CardTitle>Transfers and flight</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <ServiceCheck
-            label="Airport pickup"
-            checked={!!plan.travel.airportPickup}
-            onChange={(value) => setTransfer("airportPickup", value)}
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <ServiceSwitch
+            label="Airport Transfer"
+            description="Airport pickup and drop-off"
+            checked={plan.travel.includedServices.includes("Airport Transfer")}
+            onChange={(checked) => setService("Airport Transfer", checked)}
           />
-          <ServiceCheck
-            label="Airport drop-off"
-            checked={!!plan.travel.airportDropoff}
-            onChange={(value) => setTransfer("airportDropoff", value)}
+          <ServiceSwitch
+            label="Hotel Transfer"
+            description="Hotel and clinic transfers"
+            checked={plan.travel.includedServices.includes("Hotel Transfer")}
+            onChange={(checked) => setService("Hotel Transfer", checked)}
           />
-          <ServiceCheck
-            label="Clinic / hotel local transfer"
-            checked={plan.travel.localTransfer}
-            onChange={(value) => setTransfer("localTransfer", value)}
+          <ServiceSwitch
+            label="Flight Included"
+            description="Flight cost included in package"
+            checked={plan.travel.includedServices.includes("Flight Included")}
+            onChange={(checked) => setService("Flight Included", checked)}
           />
-          <div className="md:col-span-3">
-            <Field label="Transfer note">
-              <Textarea
-                value={plan.travel.transferNote ?? ""}
-                onChange={(e) => update({ transferNote: e.target.value })}
-              />
-            </Field>
-          </div>
         </CardContent>
       </Card>
+
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Included services</CardTitle>
+          <Badge variant="secondary">{plan.travel.includedServices.length} selected</Badge>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {SERVICES.map((service) => (
-              <ServiceCheck
-                key={service}
-                label={service}
-                checked={plan.travel.includedServices.includes(service)}
-                onChange={(checked) =>
-                  update({
-                    includedServices: checked
-                      ? [...new Set([...plan.travel.includedServices, service])]
-                      : plan.travel.includedServices.filter((item) => item !== service),
-                    ...(service === "Airport transfer"
-                      ? { airportTransfer: checked, airportPickup: checked }
-                      : {}),
-                    ...(service === "Local clinic and hotel transfer"
-                      ? { localTransfer: checked }
-                      : {}),
-                  })
-                }
-              />
-            ))}
-          </div>
+          <ServiceGroup
+            title="Clinical"
+            services={CLINICAL_SERVICES}
+            selected={plan.travel.includedServices}
+            onChange={setService}
+          />
+          <ServiceGroup
+            title="Travel"
+            services={TRAVEL_SERVICES}
+            selected={plan.travel.includedServices}
+            onChange={setService}
+          />
           <div className="flex gap-2">
             <Input
               value={custom}
-              onChange={(e) => setCustom(e.target.value)}
+              onChange={(event) => setCustom(event.target.value)}
               placeholder="Custom included service"
             />
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                if (custom.trim()) {
-                  update({
-                    includedServices: [
-                      ...new Set([...plan.travel.includedServices, custom.trim()]),
-                    ],
-                  });
-                  setCustom("");
-                }
+                const value = custom.trim();
+                if (!value) return;
+                setService(value, true);
+                setCustom("");
               }}
             >
-              <Plus />
-              Add
+              <Plus className="size-4" /> Add
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
             {plan.travel.includedServices
-              .filter((item) => !SERVICES.includes(item))
+              .filter((item) => !KNOWN_SERVICES.includes(item))
               .map((item) => (
                 <Button
                   key={item}
                   type="button"
                   size="sm"
                   variant="secondary"
-                  onClick={() =>
-                    update({
-                      includedServices: plan.travel.includedServices.filter(
-                        (service) => service !== item,
-                      ),
-                    })
-                  }
+                  onClick={() => setService(item, false)}
                 >
                   {item}
-                  <Trash2 />
+                  <Trash2 className="size-3" />
                 </Button>
               ))}
           </div>
         </CardContent>
       </Card>
+
       <Card className="border-warning/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <LockKeyhole />
+            <LockKeyhole className="size-4" />
             Internal clinic notes
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Textarea
             value={plan.travel.internalNotes ?? ""}
-            onChange={(e) => update({ internalNotes: e.target.value })}
-            rows={4}
+            onChange={(event) => update({ internalNotes: event.target.value })}
+            rows={3}
           />
           <p className="mt-2 text-xs text-muted-foreground">
             Private clinic-only information. Never shown on patient quotes or preliminary roadmaps.
@@ -329,50 +280,113 @@ export function TravelServicesStep({
     </div>
   );
 }
-function Preference({
-  label,
-  value,
-  automaticValue,
-  onChange,
-}: {
-  label: string;
-  value: { mode: "automatic" | "custom"; value: string };
-  automaticValue: string;
-  onChange: (mode: "automatic" | "custom", value: string) => void;
-}) {
+
+function HotelPreview({ hotel }: { hotel: HotelOption }) {
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex gap-1">
-        <Button
-          type="button"
-          size="sm"
-          variant={value.mode === "automatic" ? "secondary" : "outline"}
-          onClick={() => onChange("automatic", automaticValue)}
-        >
-          Automatic
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={value.mode === "custom" ? "secondary" : "outline"}
-          onClick={() => onChange("custom", value.value || automaticValue)}
-        >
-          Custom
-        </Button>
+    <div className="rounded-lg border p-3">
+      <div className="flex flex-wrap gap-3">
+        <div className="min-w-48 flex-1">
+          <p className="font-medium">{hotel.name}</p>
+          {hotel.description && (
+            <p className="mt-1 text-sm text-muted-foreground">{hotel.description}</p>
+          )}
+        </div>
+        {hotel.images
+          .slice(0, 4)
+          .map(
+            (image) =>
+              image.dataUrl && (
+                <img
+                  key={image.id}
+                  src={image.dataUrl}
+                  alt={image.name}
+                  className="h-20 w-28 rounded-md border object-cover"
+                />
+              ),
+          )}
       </div>
-      <Input
-        value={value.value}
-        disabled={value.mode === "automatic"}
-        onChange={(e) => onChange("custom", e.target.value)}
-      />
-      <p className="text-xs text-muted-foreground">
-        Suggested from selected treatments — confirm clinically.
-      </p>
     </div>
   );
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function ServiceGroup({
+  title,
+  services,
+  selected,
+  onChange,
+}: {
+  title: string;
+  services: string[];
+  selected: string[];
+  onChange: (service: string, checked: boolean) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium">{title}</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {services.map((service) => (
+          <label
+            key={service}
+            className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <Checkbox
+              checked={selected.includes(service)}
+              onCheckedChange={(value) => onChange(service, value === true)}
+            />
+            {service}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+function ServiceSwitch({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-20 items-center justify-between gap-3 rounded-lg border p-3">
+      <span>
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="text-xs text-muted-foreground">{description}</span>
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </label>
+  );
+}
+function OptionSelect({
+  value,
+  options,
+  placeholder,
+  onChange,
+}: {
+  value?: string;
+  options: string[];
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option} value={option}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -380,19 +394,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-function ServiceCheck({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
-      <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-      {label}
-    </label>
-  );
+function legacyOption(value?: string) {
+  return value ? [value] : [];
 }

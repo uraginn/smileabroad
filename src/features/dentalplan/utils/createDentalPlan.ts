@@ -3,6 +3,27 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
   const now = new Date().toISOString();
   const importedAssessment = overrides.importedAssessment;
   const commercial = overrides.commercial;
+  const legacyTravel = overrides.travel;
+  const airportTransfer = !!(
+    legacyTravel?.airportTransfer ||
+    legacyTravel?.airportPickup ||
+    legacyTravel?.airportDropoff
+  );
+  const hotelTransfer = !!legacyTravel?.localTransfer;
+  const flightIncluded = !!legacyTravel?.flightIncluded;
+  const includedServices = new Set(
+    (Array.isArray(legacyTravel?.includedServices) ? legacyTravel.includedServices : []).map(
+      (service) =>
+        service === "Airport transfer"
+          ? "Airport Transfer"
+          : service === "Local clinic and hotel transfer"
+            ? "Hotel Transfer"
+            : service,
+    ),
+  );
+  if (airportTransfer) includedServices.add("Airport Transfer");
+  if (hotelTransfer) includedServices.add("Hotel Transfer");
+  if (flightIncluded) includedServices.add("Flight Included");
   return {
     id: overrides.id ?? crypto.randomUUID(),
     name: overrides.name ?? "Untitled Plan",
@@ -33,15 +54,14 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
       hotelRequired: false,
       hotelIncluded: false,
       hotelNights: 0,
-      airportTransfer: false,
-      airportPickup: false,
-      airportDropoff: false,
-      localTransfer: false,
-      transferIncluded: false,
       ...(overrides.travel ?? {}),
-      includedServices: Array.isArray(overrides.travel?.includedServices)
-        ? overrides.travel.includedServices
-        : [],
+      airportTransfer,
+      airportPickup: airportTransfer,
+      airportDropoff: airportTransfer,
+      localTransfer: hotelTransfer,
+      flightIncluded,
+      transferIncluded: airportTransfer || hotelTransfer,
+      includedServices: [...includedServices],
       guarantees: Array.isArray(overrides.travel?.guarantees) ? overrides.travel.guarantees : [],
     },
     draftStep: overrides.draftStep ?? 0,

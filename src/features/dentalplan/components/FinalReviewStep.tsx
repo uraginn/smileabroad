@@ -2,15 +2,30 @@ import { LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatQuoteMoney } from "@/lib/quote";
-import type { DentalPlan } from "../types/dental-plan.types";
+import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { calculateCommercial } from "../utils/commercial";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { DentalChart } from "./DentalChart";
 import { ConditionSummary } from "./ConditionSummary";
 import { TreatmentSummary } from "./TreatmentSummary";
-export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
-  const totals = calculateCommercial(plan.commercial);
+export function FinalReviewStep({
+  plan,
+  hotels = [],
+}: {
+  plan: DentalPlan;
+  hotels?: DentalPlanStudioProps["hotels"];
+}) {
+  const totals = calculateCommercial({
+    ...plan.commercial,
+    hotelTotal: plan.travel.hotelIncluded ? plan.commercial.hotelTotal : 0,
+    transferTotal:
+      plan.travel.includedServices.includes("Airport Transfer") ||
+      plan.travel.includedServices.includes("Hotel Transfer")
+        ? plan.commercial.transferTotal
+        : 0,
+  });
   const defaults = derivePlanDefaults(plan);
+  const selectedHotel = hotels?.find((hotel) => hotel.id === plan.travel.selectedHotelId);
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
@@ -48,21 +63,13 @@ export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>
-              <b>Visits:</b> {plan.planningPreferences.visits.value}
+              <b>Visits:</b> {defaults.recommendedVisits}
             </p>
             <p>
-              <b>Visit duration:</b> {plan.planningPreferences.visitDuration.value}
+              <b>Visit duration:</b> {defaults.visitDurationSummary}
             </p>
             <p>
-              <b>Healing:</b> {plan.planningPreferences.healingPeriod.value}
-            </p>
-            <p>
-              <b>Estimated dates:</b>{" "}
-              {plan.travel.datesFlexible
-                ? "Flexible / not confirmed"
-                : [plan.travel.firstVisitDate, plan.travel.secondVisitDate]
-                    .filter(Boolean)
-                    .join(" — ") || "Not scheduled"}
+              <b>Healing:</b> {defaults.healingPeriodSummary}
             </p>
           </CardContent>
         </Card>
@@ -105,10 +112,28 @@ export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
               <>
                 <p>{plan.travel.hotelName || "Hotel to be confirmed"}</p>
                 <p>
-                  {plan.travel.roomType || "Room type not specified"} · {plan.travel.hotelNights}{" "}
+                  {plan.travel.roomType || "Room type not specified"} Â· {plan.travel.hotelNights}{" "}
                   nights
                 </p>
                 <p>{plan.travel.boardType}</p>
+                <p>Companion: {plan.travel.companionIncluded ? "Included" : "Not included"}</p>
+                {selectedHotel?.images?.length ? (
+                  <div className="mt-2 flex gap-2 overflow-x-auto">
+                    {selectedHotel.images
+                      .slice(0, 4)
+                      .map(
+                        (image) =>
+                          image.dataUrl && (
+                            <img
+                              key={image.id}
+                              src={image.dataUrl}
+                              alt={image.name}
+                              className="h-16 w-24 shrink-0 rounded border object-cover"
+                            />
+                          ),
+                      )}
+                  </div>
+                ) : null}
               </>
             ) : (
               <p className="text-muted-foreground">Not included</p>
@@ -120,9 +145,22 @@ export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
             <CardTitle>Transfers</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
-            <p>Airport pickup: {plan.travel.airportPickup ? "Yes" : "No"}</p>
-            <p>Airport drop-off: {plan.travel.airportDropoff ? "Yes" : "No"}</p>
-            <p>Local transfer: {plan.travel.localTransfer ? "Yes" : "No"}</p>
+            <p>
+              Airport Transfer:{" "}
+              {plan.travel.includedServices.includes("Airport Transfer")
+                ? "Included"
+                : "Not included"}
+            </p>
+            <p>
+              Hotel Transfer:{" "}
+              {plan.travel.includedServices.includes("Hotel Transfer")
+                ? "Included"
+                : "Not included"}
+            </p>
+            <p>
+              Flight Included:{" "}
+              {plan.travel.includedServices.includes("Flight Included") ? "Yes" : "No"}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -161,7 +199,7 @@ export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
           {plan.commercial.items.map((item) => (
             <div key={item.treatmentId} className="flex justify-between gap-3">
               <span>
-                {item.label} × {item.qty}
+                {item.label} Ã— {item.qty}
               </span>
               <span>{formatQuoteMoney(item.qty * item.unitPrice, plan.commercial.currency)}</span>
             </div>
@@ -176,7 +214,7 @@ export function FinalReviewStep({ plan }: { plan: DentalPlan }) {
           </div>
           {plan.commercial.paymentSchedule.map((item) => (
             <p key={item.id}>
-              {item.label}: {formatQuoteMoney(item.amount, plan.commercial.currency)} · {item.due}
+              {item.label}: {formatQuoteMoney(item.amount, plan.commercial.currency)} Â· {item.due}
             </p>
           ))}
         </CardContent>

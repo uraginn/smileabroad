@@ -5,6 +5,7 @@ import type { DentalPlanData, TreatmentType } from "@/features/dentalplan";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { treatmentLabel } from "@/lib/dental";
+import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
 
 type Search = {
@@ -58,6 +59,7 @@ function DentalPlanRoute() {
   const files = useMockStore((state) => state.files);
   const users = useMockStore((state) => state.users);
   const treatmentDefinitions = useMockStore((state) => state.clinicTreatmentDefinitions);
+  const hotels = useMockStore((state) => state.clinicHotels);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const addQuote = useMockStore((state) => state.addQuote);
@@ -355,17 +357,18 @@ function DentalPlanRoute() {
           0,
       })),
     );
+    const defaults = derivePlanDefaults(value);
     const patch = {
       title: value.patient.planTitle,
       summary: value.travel.patientFacingNotes ?? "Dental treatment plan",
       items,
-      visits: Number(value.planningPreferences.visits.value) || value.travel.visits,
-      healing_weeks: value.travel.healingWeeks,
+      visits: defaults.recommendedVisits,
+      healing_weeks: defaults.recommendedHealingWeeks,
       dentist_id: value.patient.dentistId,
       coordinator_id: value.patient.coordinatorId,
       patient_facing_notes: value.travel.patientFacingNotes,
       internal_clinical_notes: value.travel.internalNotes,
-      treatment_timeline: value.travel.timelineNotes,
+      treatment_timeline: `${defaults.visitDurationSummary}. ${defaults.healingPeriodSummary}.`,
       dental_plan_data: value,
       treatment_groups: value.treatmentGroups.map((group) => ({
         id: group.id,
@@ -415,7 +418,10 @@ function DentalPlanRoute() {
     const beforeDiscount =
       quoteItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
       (value.travel.hotelIncluded ? value.commercial.hotelTotal : 0) +
-      (value.travel.transferIncluded ? value.commercial.transferTotal : 0) +
+      (value.travel.includedServices.includes("Airport Transfer") ||
+      value.travel.includedServices.includes("Hotel Transfer")
+        ? value.commercial.transferTotal
+        : 0) +
       0;
     const discount =
       value.commercial.discountType === "percentage"
@@ -426,11 +432,22 @@ function DentalPlanRoute() {
         : value.commercial.discountType === "fixed"
           ? Math.min(beforeDiscount, Math.max(0, value.commercial.discountValue))
           : 0;
+    const hotelSummary = value.travel.hotelIncluded
+      ? `Hotel: ${value.travel.hotelName || "To be confirmed"} · ${value.travel.hotelNights} nights${value.travel.roomType ? ` · ${value.travel.roomType}` : ""}${value.travel.boardType ? ` · ${value.travel.boardType}` : ""}`
+      : undefined;
+    const includedServices = [
+      ...value.travel.includedServices.filter((service) => !service.startsWith("Hotel: ")),
+      ...(hotelSummary ? [hotelSummary] : []),
+    ].filter((service, index, services) => services.indexOf(service) === index);
     const commercialPatch = {
       items: quoteItems,
       currency: value.commercial.currency,
       hotel_total: value.travel.hotelIncluded ? value.commercial.hotelTotal : 0,
-      transfer_total: value.travel.transferIncluded ? value.commercial.transferTotal : 0,
+      transfer_total:
+        value.travel.includedServices.includes("Airport Transfer") ||
+        value.travel.includedServices.includes("Hotel Transfer")
+          ? value.commercial.transferTotal
+          : 0,
       discount,
       payment_schedule: value.commercial.paymentSchedule.map(({ label, amount, due }) => ({
         label,
@@ -438,8 +455,7 @@ function DentalPlanRoute() {
         due,
       })),
       valid_until: value.commercial.validUntil,
-      included_services: value.travel.includedServices,
-      notes: value.commercial.commercialNotes,
+      included_services: includedServices,
     };
     let quote;
     if (existingQuote) {
@@ -483,6 +499,22 @@ function DentalPlanRoute() {
           displayName: item.display_name,
           active: item.active,
           prices: item.prices,
+        }))}
+      hotels={hotels
+        .filter((item) => item.clinic_id === user?.clinic_id && item.active)
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          roomTypes: item.room_types,
+          boardTypes: item.board_types,
+          defaultNights: item.default_nights,
+          isDefault: item.is_default,
+          images: item.images.map((image) => ({
+            id: image.id,
+            name: image.name,
+            dataUrl: image.data_url,
+          })),
         }))}
       onFinalize={finalize}
     />

@@ -3,6 +3,7 @@ export type DerivedPlanDefaults = {
   recommendedVisits: number;
   visitDurationSummary: string;
   healingPeriodSummary: string;
+  recommendedHealingWeeks: number;
   estimatedStaySummary?: string;
   reasons: string[];
   warnings: string[];
@@ -28,10 +29,12 @@ export function derivePlanDefaults(plan: DentalPlan): DerivedPlanDefaults {
   const reasons: string[] = [];
   const warnings: string[] = [];
   let recommendedVisits = 1,
+    recommendedHealingWeeks = 0,
     visitDurationSummary = "One clinical visit; scope-dependent stay",
     healingPeriodSummary = "No staged implant-healing interval suggested",
     estimatedStaySummary = "Approximately 3–7 days; confirm clinically";
   if (implant) {
+    recommendedHealingWeeks = 20;
     recommendedVisits = 2;
     visitDurationSummary = "Two staged visits: surgery, then final restoration";
     healingPeriodSummary = "Approximately 4–6 months between surgical and prosthetic stages";
@@ -39,6 +42,7 @@ export function derivePlanDefaults(plan: DentalPlan): DerivedPlanDefaults {
     reasons.push("Implant-related treatment requires staged surgical and restorative planning.");
   }
   if (graft) {
+    recommendedHealingWeeks = Math.max(recommendedHealingWeeks, 24);
     recommendedVisits = Math.max(recommendedVisits, 2);
     healingPeriodSummary = "Extended staged healing may be required after grafting or sinus lift";
     warnings.push("Grafting and sinus-lift timing must be confirmed by the treating dentist.");
@@ -72,6 +76,7 @@ export function derivePlanDefaults(plan: DentalPlan): DerivedPlanDefaults {
     );
   return {
     recommendedVisits,
+    recommendedHealingWeeks,
     visitDurationSummary,
     healingPeriodSummary,
     estimatedStaySummary,

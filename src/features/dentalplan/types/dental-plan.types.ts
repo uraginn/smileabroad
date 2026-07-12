@@ -150,6 +150,7 @@ export type DentalPlannerTravel = {
   healingWeeks: number;
   hotelRequired: boolean;
   hotelIncluded: boolean;
+  selectedHotelId?: string;
   hotelName?: string;
   roomType?: string;
   hotelNights: number;
@@ -162,6 +163,7 @@ export type DentalPlannerTravel = {
   airportPickup?: boolean;
   airportDropoff?: boolean;
   localTransfer: boolean;
+  flightIncluded?: boolean;
   transferIncluded?: boolean;
   transferNote?: string;
   includedServices: string[];
@@ -224,6 +226,16 @@ export interface DentalPlanStudioProps {
     displayName: string;
     active: boolean;
     prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
+  }>;
+  hotels?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    roomTypes: string[];
+    boardTypes: string[];
+    defaultNights: number;
+    isDefault: boolean;
+    images: Array<{ id: string; name: string; dataUrl?: string }>;
   }>;
 }
 export interface DentalPlannerContext {
