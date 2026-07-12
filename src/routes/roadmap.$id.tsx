@@ -1,6 +1,5 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, CheckCircle2, Clock, EuroIcon, XCircle } from "lucide-react";
-import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Accordion,
@@ -37,7 +36,6 @@ function RoadmapPage() {
     state.assessments.find((item) => item.id === roadmap?.assessment_id),
   );
   const treatmentContent = useMockStore((state) => state.roadmapTreatmentContent);
-  const apply = useMockStore((state) => state.applyToClinic);
   if (!hydrated) return null;
   if (!roadmap || !assessment) throw notFound();
   const recommended = clinics.filter((clinic) =>
@@ -52,23 +50,6 @@ function RoadmapPage() {
   const completePrice =
     estimates.length > 0 && !roadmap.missing_price_keys?.length && roadmap.price_max > 0;
   const legacyPrice = !roadmap.treatment_estimates?.length && roadmap.price_max > 0;
-  const onApply = (clinicId: string) => {
-    const application = apply({
-      clinic_id: clinicId,
-      patient_user_id: assessment.patient_user_id,
-      assessment_id: assessment.id,
-      roadmap_id: roadmap.id,
-      patient_name:
-        `${assessment.personal.first_name} ${assessment.personal.last_name ?? ""}`.trim() ||
-        "New Patient",
-      patient_country: assessment.personal.country || assessment.travel.travel_from || "Unknown",
-      treatment: assessment.dental.treatment_interest,
-    });
-    window.localStorage.removeItem("smileabroad-active-journey-v1");
-    window.localStorage.removeItem("smileabroad-assessment-draft-v1");
-    navigate({ to: "/confirmation/$id", params: { id: application.id } });
-    toast.success("Application sent — the clinic will be in touch.");
-  };
   const addMoreInformation = () => {
     window.localStorage.setItem(
       "smileabroad-assessment-draft-v1",
@@ -481,7 +462,17 @@ function RoadmapPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <a href="#recommended-clinics">Compare recommended clinics</a>
+              <Link
+                to="/clinics"
+                search={{
+                  country: assessment.travel.destination_country || undefined,
+                  city: assessment.travel.preferred_cities?.[0] || undefined,
+                  treatments: estimates.map((item) => item.treatment_key).join(",") || undefined,
+                  sort: "recommended",
+                }}
+              >
+                Compare recommended clinics
+              </Link>
             </Button>
             {(view.missingPhotos || view.missingPanoramic) && (
               <Button type="button" variant="outline" onClick={addMoreInformation}>
@@ -492,7 +483,7 @@ function RoadmapPage() {
         </div>
         <div id="recommended-clinics" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {recommended.map((clinic) => (
-            <ClinicCard key={clinic.id} clinic={clinic} onApply={onApply} />
+            <ClinicCard key={clinic.id} clinic={clinic} />
           ))}
         </div>
       </div>

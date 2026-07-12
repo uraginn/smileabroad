@@ -929,7 +929,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 12,
+      version: 13,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -1026,6 +1026,20 @@ export const useMockStore = create<Store>()(
               ? { name: "DTKURT Aesthetic Dentistry", slug: "dtkurt-aesthetic-dentistry" }
               : {}),
             languages: Array.isArray(clinic.languages) ? clinic.languages : [],
+            supported_treatments: Array.isArray(clinic.supported_treatments)
+              ? clinic.supported_treatments
+              : (seedClinics.find((item) => item.id === clinic.id)?.supported_treatments ?? []),
+            directory_source:
+              clinic.directory_source ?? (clinic.id === "clinic_istanbul" ? "platform" : "curated"),
+            platform_tier:
+              clinic.platform_tier ?? (clinic.id === "clinic_istanbul" ? "pro" : undefined),
+            source_label:
+              clinic.source_label ??
+              (clinic.id === "clinic_istanbul" ? undefined : "Public clinic listing"),
+            website: clinic.website ?? seedClinics.find((item) => item.id === clinic.id)?.website,
+            last_reviewed_at:
+              clinic.last_reviewed_at ??
+              seedClinics.find((item) => item.id === clinic.id)?.last_reviewed_at,
           })),
           users: [
             ...(state.users ?? seedUsers).map((member) =>

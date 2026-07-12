@@ -48,6 +48,11 @@ export const seedClinics: Clinic[] = [
     guarantee_years: 10,
     short_description:
       "Boutique dental clinic on the European side, specialising in full mouth rehabilitation.",
+    directory_source: "platform",
+    platform_tier: "pro",
+    supported_treatments: ["dental-implant", "all-on-4", "all-on-6", "zirconium-crown", "veneer"],
+    website: "https://dtkurt.com",
+    last_reviewed_at: "2026-07-01",
   },
   {
     id: "clinic_budapest",
@@ -57,7 +62,7 @@ export const seedClinics: Clinic[] = [
     country: "Hungary",
     city: "Budapest",
     cover_image: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=80",
-    verified: true,
+    verified: false,
     google_rating: 4.8,
     google_reviews: 611,
     trustpilot_rating: 4.7,
@@ -69,6 +74,11 @@ export const seedClinics: Clinic[] = [
     transfers_included: true,
     guarantee_years: 7,
     short_description: "European-standard care in the heart of Budapest with in-house lab.",
+    directory_source: "curated",
+    supported_treatments: ["dental-implant", "bridge", "zirconium-crown", "veneer"],
+    website: "https://danube-smile.com",
+    source_label: "Public clinic listing",
+    last_reviewed_at: "2026-06-15",
   },
   {
     id: "clinic_cancun",
@@ -78,7 +88,7 @@ export const seedClinics: Clinic[] = [
     country: "Mexico",
     city: "Cancún",
     cover_image: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=80",
-    verified: true,
+    verified: false,
     google_rating: 4.7,
     google_reviews: 489,
     trustpilot_rating: 4.6,
@@ -90,6 +100,11 @@ export const seedClinics: Clinic[] = [
     transfers_included: true,
     guarantee_years: 5,
     short_description: "Beachside recovery paired with US-trained implantologists.",
+    directory_source: "curated",
+    supported_treatments: ["dental-implant", "all-on-4", "all-on-6", "zirconium-crown"],
+    website: "https://riviera-dental.com",
+    source_label: "Public clinic listing",
+    last_reviewed_at: "2026-06-15",
   },
 ];
 

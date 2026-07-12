@@ -50,6 +50,13 @@ export interface Clinic extends BaseRecord {
   transfers_included: boolean;
   guarantee_years: number;
   short_description: string;
+  directory_source?: "curated" | "platform";
+  supported_treatments?: string[];
+  website?: string;
+  source_label?: string;
+  source_url?: string;
+  last_reviewed_at?: string;
+  platform_tier?: "pro";
 }
 
 export interface ClinicMember extends BaseRecord {

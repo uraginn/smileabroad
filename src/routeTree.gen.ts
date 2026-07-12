@@ -42,6 +42,7 @@ import { Route as PublicHowItWorksRouteImport } from './routes/_public.how-it-wo
 import { Route as PublicForClinicsRouteImport } from './routes/_public.for-clinics'
 import { Route as PublicDestinationsRouteImport } from './routes/_public.destinations'
 import { Route as PublicClinicsRouteImport } from './routes/_public.clinics'
+import { Route as PublicApplyRouteImport } from './routes/_public.apply'
 import { Route as PublicAboutRouteImport } from './routes/_public.about'
 import { Route as ProSettingsIndexRouteImport } from './routes/pro.settings.index'
 import { Route as SharedTreatmentPlanTokenRouteImport } from './routes/shared.treatment-plan.$token'
@@ -216,6 +217,11 @@ const PublicClinicsRoute = PublicClinicsRouteImport.update({
   path: '/clinics',
   getParentRoute: () => PublicRoute,
 } as any)
+const PublicApplyRoute = PublicApplyRouteImport.update({
+  id: '/apply',
+  path: '/apply',
+  getParentRoute: () => PublicRoute,
+} as any)
 const PublicAboutRoute = PublicAboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -271,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/about': typeof PublicAboutRoute
+  '/apply': typeof PublicApplyRoute
   '/clinics': typeof PublicClinicsRouteWithChildren
   '/destinations': typeof PublicDestinationsRoute
   '/for-clinics': typeof PublicForClinicsRoute
@@ -313,6 +320,7 @@ export interface FileRoutesByTo {
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/about': typeof PublicAboutRoute
+  '/apply': typeof PublicApplyRoute
   '/clinics': typeof PublicClinicsRouteWithChildren
   '/destinations': typeof PublicDestinationsRoute
   '/for-clinics': typeof PublicForClinicsRoute
@@ -357,6 +365,7 @@ export interface FileRoutesById {
   '/patient': typeof PatientRouteWithChildren
   '/pro': typeof ProRouteWithChildren
   '/_public/about': typeof PublicAboutRoute
+  '/_public/apply': typeof PublicApplyRoute
   '/_public/clinics': typeof PublicClinicsRouteWithChildren
   '/_public/destinations': typeof PublicDestinationsRoute
   '/_public/for-clinics': typeof PublicForClinicsRoute
@@ -403,6 +412,7 @@ export interface FileRouteTypes {
     | '/patient'
     | '/pro'
     | '/about'
+    | '/apply'
     | '/clinics'
     | '/destinations'
     | '/for-clinics'
@@ -445,6 +455,7 @@ export interface FileRouteTypes {
     | '/patient'
     | '/pro'
     | '/about'
+    | '/apply'
     | '/clinics'
     | '/destinations'
     | '/for-clinics'
@@ -488,6 +499,7 @@ export interface FileRouteTypes {
     | '/patient'
     | '/pro'
     | '/_public/about'
+    | '/_public/apply'
     | '/_public/clinics'
     | '/_public/destinations'
     | '/_public/for-clinics'
@@ -771,6 +783,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicClinicsRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/_public/apply': {
+      id: '/_public/apply'
+      path: '/apply'
+      fullPath: '/apply'
+      preLoaderRoute: typeof PublicApplyRouteImport
+      parentRoute: typeof PublicRoute
+    }
     '/_public/about': {
       id: '/_public/about'
       path: '/about'
@@ -851,6 +870,7 @@ const PublicClinicsRouteWithChildren = PublicClinicsRoute._addFileChildren(
 
 interface PublicRouteChildren {
   PublicAboutRoute: typeof PublicAboutRoute
+  PublicApplyRoute: typeof PublicApplyRoute
   PublicClinicsRoute: typeof PublicClinicsRouteWithChildren
   PublicDestinationsRoute: typeof PublicDestinationsRoute
   PublicForClinicsRoute: typeof PublicForClinicsRoute
@@ -864,6 +884,7 @@ interface PublicRouteChildren {
 
 const PublicRouteChildren: PublicRouteChildren = {
   PublicAboutRoute: PublicAboutRoute,
+  PublicApplyRoute: PublicApplyRoute,
   PublicClinicsRoute: PublicClinicsRouteWithChildren,
   PublicDestinationsRoute: PublicDestinationsRoute,
   PublicForClinicsRoute: PublicForClinicsRoute,

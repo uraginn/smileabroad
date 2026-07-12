@@ -1,100 +1,113 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Clock, Star, Hotel, Car, ShieldCheck, Languages } from "lucide-react";
+import { Car, CheckCircle2, Clock, Hotel, Languages, Star } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Clinic } from "@/types/models";
+
+const treatmentLabel = (key: string) =>
+  key
+    .split("-")
+    .map((word) => word[0]?.toUpperCase() + word.slice(1))
+    .join(" ");
 
 export function ClinicCard({
   clinic,
-  onApply,
+  selectedForCompare = false,
+  onCompare,
 }: {
   clinic: Clinic;
-  onApply?: (id: string) => void;
+  selectedForCompare?: boolean;
+  onCompare?: (clinic: Clinic) => void;
 }) {
+  const treatments = clinic.supported_treatments ?? [];
   return (
-    <Card className="overflow-hidden group hover:shadow-lg transition-shadow p-0 gap-0">
+    <Card className="group gap-0 overflow-hidden p-0 transition-shadow hover:shadow-lg">
       <div className="relative h-44 overflow-hidden">
         <img
           src={clinic.cover_image}
           alt={clinic.name}
-          className="size-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
           loading="lazy"
         />
-        {clinic.verified && (
-          <Badge className="absolute top-3 left-3 gap-1 bg-primary text-primary-foreground">
-            <CheckCircle2 className="size-3" /> Verified
+        {clinic.directory_source === "platform" && clinic.platform_tier === "pro" ? (
+          <Badge className="absolute left-3 top-3 gap-1">
+            <CheckCircle2 className="size-3" /> SmileAbroad Pro
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="absolute left-3 top-3">
+            Public clinic listing
           </Badge>
         )}
       </div>
-      <CardContent className="p-5 space-y-3">
+      <CardContent className="space-y-3 p-5">
         <div>
           <h3 className="font-display text-lg font-semibold leading-tight">{clinic.name}</h3>
           <p className="text-sm text-muted-foreground">
             {clinic.city}, {clinic.country}
           </p>
         </div>
+        <p className="line-clamp-2 text-sm text-muted-foreground">{clinic.short_description}</p>
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            <Star className="size-3.5 text-amber-500 fill-amber-500" />
-            {clinic.google_rating} <span className="opacity-70">Google</span>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Star className="size-3.5 text-emerald-500 fill-emerald-500" />
-            {clinic.trustpilot_rating} <span className="opacity-70">Trustpilot</span>
+            <Star className="size-3.5 fill-amber-500 text-amber-500" />
+            {clinic.google_rating} ({clinic.google_reviews})
           </span>
           <span className="inline-flex items-center gap-1">
             <Clock className="size-3.5" />~{clinic.response_time_hours}h reply
           </span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {clinic.languages.slice(0, 3).map((l) => (
-            <Badge key={l} variant="secondary" className="text-[10px] font-normal">
-              <Languages className="size-3 mr-1" />
-              {l}
-            </Badge>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-3 text-xs pt-1">
+        {treatments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {treatments.slice(0, 3).map((key) => (
+              <Badge key={key} variant="outline" className="text-[10px] font-normal">
+                {treatmentLabel(key)}
+              </Badge>
+            ))}
+            {treatments.length > 3 && (
+              <Badge variant="outline" className="text-[10px]">
+                +{treatments.length - 3} more
+              </Badge>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           {clinic.hotel_included && (
-            <span className="inline-flex items-center gap-1 text-success">
-              <Hotel className="size-3.5" /> Hotel
+            <span className="inline-flex items-center gap-1">
+              <Hotel className="size-3.5" />
+              Hotel
             </span>
           )}
           {clinic.transfers_included && (
-            <span className="inline-flex items-center gap-1 text-success">
-              <Car className="size-3.5" /> Transfers
+            <span className="inline-flex items-center gap-1">
+              <Car className="size-3.5" />
+              Transfers
             </span>
           )}
-          <span className="inline-flex items-center gap-1 text-success">
-            <ShieldCheck className="size-3.5" /> {clinic.guarantee_years}y guarantee
-          </span>
+          {clinic.languages.length > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Languages className="size-3.5" />
+              {clinic.languages.slice(0, 2).join(", ")}
+            </span>
+          )}
         </div>
-        <div className="pt-2 flex items-end justify-between border-t border-border">
-          <div>
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider">From</p>
-            <p className="font-display text-lg font-semibold">
-              {clinic.price_range.currency === "USD" ? "$" : "€"}
-              {clinic.price_range.min}
-              <span className="text-xs text-muted-foreground font-normal"> / unit</span>
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild size="sm" variant="outline">
-              <Link
-                to="/clinics/$slug"
-                params={{ slug: clinic.slug }}
-                search={{ roadmap: undefined }}
-              >
-                View
-              </Link>
-            </Button>
-            {onApply && (
-              <Button size="sm" onClick={() => onApply(clinic.id)}>
-                Apply
-              </Button>
-            )}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+          {onCompare && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={selectedForCompare}
+                onCheckedChange={() => onCompare(clinic)}
+                aria-label={`Compare ${clinic.name}`}
+              />
+              Compare
+            </label>
+          )}
+          <Button asChild size="sm">
+            <Link to="/clinics/$slug" params={{ slug: clinic.slug }}>
+              View clinic
+            </Link>
+          </Button>
         </div>
       </CardContent>
     </Card>
