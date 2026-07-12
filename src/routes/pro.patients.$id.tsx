@@ -2,6 +2,7 @@ import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-ro
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { EmptyState, PageHeader } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
 import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
+import type { AssessmentUploads } from "@/types/models";
 
 export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDetail });
 
@@ -501,6 +503,7 @@ function PatientDetail() {
         <TabsList className="mb-4 flex-wrap h-auto">
           {[
             ["overview", "Overview"],
+            ["roadmap", "Roadmap Summary"],
             ["assessment", "Assessment"],
             ["medical", "Medical"],
             ["files", "Files"],
@@ -539,6 +542,83 @@ function PatientDetail() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+        <TabsContent value="roadmap">
+          {!roadmap || !assessment ? (
+            <EmptyState
+              title="No Roadmap linked"
+              description="A preliminary Roadmap summary will appear when the Lead includes a valid Roadmap reference."
+            />
+          ) : (
+            <div className="space-y-4">
+              <Alert>
+                <Lock className="size-4" />
+                <AlertTitle>Read-only preliminary Roadmap</AlertTitle>
+                <AlertDescription>
+                  This patient-provided Roadmap is an immutable source record. Clinical decisions
+                  belong in the clinic Treatment Plan.
+                </AlertDescription>
+              </Alert>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <DetailCard
+                  title="Roadmap summary"
+                  rows={[
+                    ["Reference", roadmap.id.slice(-8).toUpperCase()],
+                    ["Destination", assessment.travel.destination_country],
+                    ["Preferred cities", assessment.travel.preferred_cities.join(", ")],
+                    [
+                      "Estimated price",
+                      roadmap.price_max > 0
+                        ? `${formatRoadmapMoney(roadmap.price_min, roadmap.currency)}–${formatRoadmapMoney(roadmap.price_max, roadmap.currency)}`
+                        : "Not available",
+                    ],
+                    ["Prepared", format(new Date(roadmap.created_at), "MMM d, yyyy")],
+                  ]}
+                />
+                <DetailCard
+                  title="Medical summary"
+                  rows={[
+                    [
+                      "Conditions",
+                      assessment.medical.conditions.length
+                        ? assessment.medical.conditions.join(", ")
+                        : "None reported",
+                    ],
+                    ["Medications", assessment.medical.medications || "None reported"],
+                    ["Allergies", assessment.medical.allergies || "None reported"],
+                    ["Smoking", assessment.medical.smoking ? "Yes" : "No"],
+                  ]}
+                />
+              </div>
+              <Card>
+                <CardContent className="space-y-4 p-5">
+                  <div>
+                    <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                      Estimated treatments
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(roadmap.treatment_estimates ?? []).map((item) => (
+                        <Badge key={item.treatment_key} variant="secondary">
+                          {item.label}
+                          {item.estimated_quantity ? ` × ${item.estimated_quantity}` : ""}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <DetailRows
+                    rows={[
+                      [
+                        "Treatment journey",
+                        (roadmap.treatment_journey ?? []).map((step) => step.title).join(" → ") ||
+                          roadmap.timeline_summary,
+                      ],
+                      ["Uploaded files", roadmapUploadSummary(assessment.uploads)],
+                    ]}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="assessment">
           {!assessment ? (
@@ -1140,4 +1220,24 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatRoadmapMoney(amount: number, currency: string) {
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function roadmapUploadSummary(uploads: AssessmentUploads) {
+  const labels = [
+    uploads.uploaded_panoramic && "Panoramic X-ray",
+    uploads.uploaded_dental_photos && "Dental photos",
+    uploads.uploaded_smile_photo && "Smile photo",
+    uploads.uploaded_cbct && "CBCT",
+    uploads.uploaded_previous_plan && "Previous plan",
+    uploads.uploaded_previous_report && "Previous report",
+  ].filter(Boolean);
+  return labels.length ? labels.join(", ") : "No uploads provided";
 }

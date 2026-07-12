@@ -183,7 +183,7 @@ function ClinicDetail() {
           <Card>
             <CardContent className="p-6">
               <Button className="w-full" size="lg" onClick={continueToApply}>
-                {context.roadmap ? "Continue with this clinic" : "Start assessment"}
+                {context.roadmap ? "Apply to this clinic" : "Start assessment"}
               </Button>
               <Button asChild variant="outline" className="mt-2 w-full">
                 <Link

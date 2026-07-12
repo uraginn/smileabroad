@@ -88,6 +88,13 @@ interface Store {
     patient_country: string;
     treatment: string;
     message?: string;
+    contact?: {
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      whatsapp?: string;
+      preferred_contact_method?: string;
+    };
   }) => ClinicApplication;
   addLeadActivity: (
     activity: Omit<LeadActivity, "id" | "created_at" | "updated_at">,
@@ -326,41 +333,70 @@ export const useMockStore = create<Store>()(
         patient_country,
         treatment,
         message,
+        contact,
       }) => {
         const state = get();
         const assessment = state.assessments.find((a) => a.id === assessment_id);
+        const completedAssessment = assessment
+          ? {
+              ...assessment,
+              personal: {
+                ...assessment.personal,
+                first_name: contact?.first_name?.trim() || assessment.personal.first_name,
+                last_name: contact?.last_name?.trim() || assessment.personal.last_name,
+                email: contact?.email?.trim() || assessment.personal.email,
+                whatsapp: contact?.whatsapp?.trim() || assessment.personal.whatsapp,
+                preferred_contact_method:
+                  contact?.preferred_contact_method || assessment.personal.preferred_contact_method,
+              },
+              updated_at: now(),
+            }
+          : undefined;
         const existingPatient = state.patients.find(
           (patient) => patient.clinic_id === clinic_id && patient.user_id === patient_user_id,
         );
         const createdAt = now();
-        const clinicPatient: Patient = existingPatient ?? {
-          id: makeId("p"),
-          clinic_id,
-          user_id: patient_user_id,
-          first_name: assessment?.personal.first_name ?? "",
-          last_name: assessment?.personal.last_name ?? "",
-          email: assessment?.personal.email ?? "",
-          phone: assessment?.personal.phone,
-          whatsapp: assessment?.personal.whatsapp,
-          country:
-            assessment?.personal.country || assessment?.travel.travel_from || patient_country,
-          city: assessment?.personal.city,
-          date_of_birth: assessment?.personal.date_of_birth,
-          language: assessment?.personal.preferred_language,
-          source: "smileabroad",
-          assessment_id,
-          roadmap_id,
-          treatment_interest: assessment?.dental.treatment_interest || treatment,
-          status: "active",
-          created_at: createdAt,
-          updated_at: createdAt,
-          created_by: patient_user_id,
-        };
+        const clinicPatient: Patient = existingPatient
+          ? {
+              ...existingPatient,
+              first_name: completedAssessment?.personal.first_name || existingPatient.first_name,
+              last_name: completedAssessment?.personal.last_name || existingPatient.last_name,
+              email: completedAssessment?.personal.email || existingPatient.email,
+              whatsapp: completedAssessment?.personal.whatsapp || existingPatient.whatsapp,
+              assessment_id,
+              roadmap_id,
+              updated_at: createdAt,
+            }
+          : {
+              id: makeId("p"),
+              clinic_id,
+              user_id: patient_user_id,
+              first_name: completedAssessment?.personal.first_name ?? "",
+              last_name: completedAssessment?.personal.last_name ?? "",
+              email: completedAssessment?.personal.email ?? "",
+              phone: assessment?.personal.phone,
+              whatsapp: completedAssessment?.personal.whatsapp,
+              country:
+                assessment?.personal.country || assessment?.travel.travel_from || patient_country,
+              city: assessment?.personal.city,
+              date_of_birth: assessment?.personal.date_of_birth,
+              language: assessment?.personal.preferred_language,
+              source: "smileabroad",
+              assessment_id,
+              roadmap_id,
+              treatment_interest: assessment?.dental.treatment_interest || treatment,
+              status: "active",
+              created_at: createdAt,
+              updated_at: createdAt,
+              created_by: patient_user_id,
+            };
 
         const existingApplication = state.applications.find(
           (application) =>
             application.clinic_id === clinic_id &&
             application.patient_user_id === patient_user_id &&
+            application.assessment_id === assessment_id &&
+            application.roadmap_id === roadmap_id &&
             application.status !== "declined",
         );
         const existingLead = existingApplication
@@ -400,6 +436,9 @@ export const useMockStore = create<Store>()(
               clinic_application_id: application.id,
               assessment_id: application.assessment_id,
               roadmap_id: application.roadmap_id,
+              patient_name,
+              patient_country,
+              treatment,
               updated_at: createdAt,
             }
           : {
@@ -437,7 +476,14 @@ export const useMockStore = create<Store>()(
             };
 
         set((current) => ({
-          patients: existingPatient ? current.patients : [...current.patients, clinicPatient],
+          assessments: completedAssessment
+            ? current.assessments.map((item) =>
+                item.id === completedAssessment.id ? completedAssessment : item,
+              )
+            : current.assessments,
+          patients: existingPatient
+            ? current.patients.map((item) => (item.id === clinicPatient.id ? clinicPatient : item))
+            : [...current.patients, clinicPatient],
           applications: existingApplication
             ? current.applications.map((item) => (item.id === application.id ? application : item))
             : [...current.applications, application],
