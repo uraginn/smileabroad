@@ -121,6 +121,9 @@ interface Store {
   deleteClinicDentist: (id: string, clinicId: string) => void;
 }
 
+const makeShareToken = () =>
+  `share_${globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? makeId("token")}`;
+
 type LegacyAssessment = Assessment & {
   treatment?: string;
   countries?: string[];
@@ -616,7 +619,7 @@ export const useMockStore = create<Store>()(
         const timestamp = now();
         const nextStatus = patch.status ?? quote.status ?? "draft";
         const shareToken = ["approved", "sent"].includes(nextStatus)
-          ? (quote.share_token ?? makeId("share"))
+          ? (quote.share_token ?? makeShareToken())
           : quote.share_token;
         const previousStatus = quote.status ?? "draft";
         const sentNow = nextStatus === "sent" && previousStatus !== "sent";
@@ -916,7 +919,7 @@ export const useMockStore = create<Store>()(
         });
         const treatmentPlans = (state.treatmentPlans ?? []).map((plan) => {
           const quote = (state.quotes ?? []).find((item) => item.treatment_plan_id === plan.id);
-          const shareToken = plan.share_token ?? quote?.share_token ?? `share_${plan.id}`;
+          const shareToken = plan.share_token ?? quote?.share_token ?? makeShareToken();
           return {
             ...plan,
             status: plan.status ?? "draft",

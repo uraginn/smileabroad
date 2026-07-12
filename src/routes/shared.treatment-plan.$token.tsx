@@ -17,7 +17,7 @@ import {
 import { formatQuoteMoney } from "@/lib/quote";
 import { mapClinicQuoteCarePlan } from "@/lib/care-plan";
 import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
-import { useAuth } from "@/lib/auth/mock-auth";
+import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import {
   PlanDisclaimer,
   PlanDocumentHeader,
@@ -29,10 +29,7 @@ import { CheckCircle2, ExternalLink, Mail, Phone, Printer, ShieldCheck } from "l
 
 export const Route = createFileRoute("/shared/treatment-plan/$token")({
   validateSearch: (search: Record<string, unknown>) => ({
-    preview:
-      search.preview === true ||
-      search.preview === "true" ||
-      search.preview === "1",
+    preview: search.preview === true || search.preview === "true" || search.preview === "1",
   }),
   component: SharedPlan,
 });
@@ -41,6 +38,7 @@ function SharedPlan() {
   const { token } = Route.useParams();
   const { preview } = Route.useSearch();
   const activeUser = useAuth((state) => state.user);
+  const authHydrated = useAuthHydrated();
   const hydrated = useMockStoreHydrated();
   const tokenQuote = useMockStore((s) => s.quotes.find((quote) => quote.share_token === token));
   const canClinicPreview =
@@ -86,7 +84,7 @@ function SharedPlan() {
       updateQuote(quote.id, { status: "viewed" }, "patient_shared");
   }, [preview, quote?.id, quote?.status, updateQuote]);
 
-  if (!hydrated) return null;
+  if (!hydrated || (preview && !authHydrated)) return null;
   if (!quote || !plan || !clinic) return <SafeNotFound />;
 
   const primary = branding?.primary_color || "#0f766e";
@@ -573,10 +571,3 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
     </Card>
   );
 }
-
-
-
-
-
-
-

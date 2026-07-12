@@ -48,9 +48,13 @@ function PlanEditor() {
   );
   const clinic = useMockStore((s) => s.clinics.find((item) => item.id === plan?.clinic_id));
   const patient = useMockStore((s) =>
-    s.patients.find((item) => item.id === plan?.clinic_patient_id),
+    s.patients.find(
+      (item) => item.id === plan?.clinic_patient_id && item.clinic_id === plan?.clinic_id,
+    ),
   );
-  const existingQuote = useMockStore((s) => s.quotes.find((q) => q.treatment_plan_id === id));
+  const existingQuote = useMockStore((s) =>
+    s.quotes.find((q) => q.treatment_plan_id === id && q.clinic_id === activeUser?.clinic_id),
+  );
   const update = useMockStore((s) => s.updateTreatmentPlan);
   const users = useMockStore((s) => s.users);
   const clinicUsers = useMemo(
@@ -180,13 +184,13 @@ function PlanEditor() {
                   to="/shared/treatment-plan/$token"
                   params={{ token: existingQuote.share_token }}
                   search={
-                    isQuotePubliclyViewable(existingQuote.status) ? {} : { preview: true }
+                    isQuotePubliclyViewable(existingQuote.status)
+                      ? { preview: false }
+                      : { preview: true }
                   }
                 >
                   <ExternalLink className="size-4 mr-1" />
-                  {isQuotePubliclyViewable(existingQuote.status)
-                    ? "View shared"
-                    : "Preview shared"}
+                  {isQuotePubliclyViewable(existingQuote.status) ? "View shared" : "Preview shared"}
                 </Link>
               </Button>
             ) : existingQuote ? (
@@ -852,6 +856,3 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-
-
-

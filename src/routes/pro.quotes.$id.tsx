@@ -129,10 +129,12 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
                 <Link
                   to="/shared/treatment-plan/$token"
                   params={{ token: quote.share_token }}
-                  search={isQuotePubliclyViewable(status) ? {} : { preview: true }}
+                  search={
+                    isQuotePubliclyViewable(quote.status) ? { preview: false } : { preview: true }
+                  }
                 >
                   <ExternalLink className="size-4 mr-1" />
-                  {isQuotePubliclyViewable(status) ? "View shared" : "Preview shared"}
+                  {isQuotePubliclyViewable(quote.status) ? "View shared" : "Preview quote"}
                 </Link>
               </Button>
             ) : (
@@ -161,7 +163,13 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
           <Meta label="Updated" value={formatCrmDate(quote.updated_at, true)} />
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
             <StatusBadge status={quote.status} />
-            {quote.share_token && <Badge variant="outline">Shared link ready</Badge>}
+            {quote.share_token && (
+              <Badge variant="outline">
+                {isQuotePubliclyViewable(quote.status)
+                  ? "Public link ready"
+                  : "Private preview ready"}
+              </Badge>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -412,6 +420,3 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-
-
-

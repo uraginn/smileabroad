@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { TREATMENTS, COUNTRIES, CITIES_BY_COUNTRY } from "@/lib/constants";
 import { useMockStore } from "@/lib/mock/store";
 import { generateRoadmap } from "@/lib/roadmap";
@@ -68,6 +68,7 @@ function Assessment() {
   const store = useMockStore();
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [submissionId, setSubmissionId] = useState("");
   const [step, setStep] = useState(0);
   const [treatment, setTreatment] = useState("");
@@ -172,7 +173,8 @@ function Assessment() {
   };
 
   const submit = () => {
-    if (!submissionId || submitting) return;
+    if (!submissionId || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     const assessment = store.addAssessment({
       patient_user_id: submissionId,

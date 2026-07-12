@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   CalendarCheck2,
@@ -26,6 +32,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
+import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
 
 export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDetail });
 
@@ -34,7 +41,9 @@ function PatientDetail() {
   const activeUser = useAuth((s) => s.user);
   const hydrated = useMockStoreHydrated();
   const navigate = useNavigate();
-  const patient = useMockStore((s) => s.patients.find((p) => p.id === id && p.clinic_id === activeUser?.clinic_id));
+  const patient = useMockStore((s) =>
+    s.patients.find((p) => p.id === id && p.clinic_id === activeUser?.clinic_id),
+  );
   const users = useMockStore((s) => s.users);
   const clinic = useMockStore((s) => s.clinics.find((c) => c.id === patient?.clinic_id));
   const application = useMockStore((s) =>
@@ -127,23 +136,29 @@ function PatientDetail() {
       clinicUsers.find((user) => user.role === "coordinator"),
     [clinicUsers, lead?.assigned_to],
   );
-  const dentist = useMemo(
-    () => clinicUsers.find((user) => user.role === "dentist"),
-    [clinicUsers],
-  );
+  const dentist = useMemo(() => clinicUsers.find((user) => user.role === "dentist"), [clinicUsers]);
 
   const activitiesNewestFirst = useMemo(
-    () => activities.slice().sort((a, b) => +new Date(b.occurred_at ?? b.created_at) - +new Date(a.occurred_at ?? a.created_at)),
+    () =>
+      activities
+        .slice()
+        .sort(
+          (a, b) =>
+            +new Date(b.occurred_at ?? b.created_at) - +new Date(a.occurred_at ?? a.created_at),
+        ),
     [activities],
   );
   const nextFollowUp = useMemo(
-    () => tasks.find((task) => !task.done && !!task.due_at && task.category === "follow_up") ?? tasks.find((task) => !task.done && !!task.due_at),
+    () =>
+      tasks.find((task) => !task.done && !!task.due_at && task.category === "follow_up") ??
+      tasks.find((task) => !task.done && !!task.due_at),
     [tasks],
   );
 
   const assessmentTimeframe =
-    [assessment?.travel.earliest_date, assessment?.travel.latest_date].filter(Boolean).join(" - ") ||
-    assessment?.travel.treatment_timeline;
+    [assessment?.travel.earliest_date, assessment?.travel.latest_date]
+      .filter(Boolean)
+      .join(" - ") || assessment?.travel.treatment_timeline;
   const warningText =
     [assessment?.medical.complications, assessment?.medical.additional_notes]
       .filter(Boolean)
@@ -214,9 +229,13 @@ function PatientDetail() {
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high">("medium");
   const [taskAssignee, setTaskAssignee] = useState("");
-  const [communicationType, setCommunicationType] = useState<"whatsapp" | "call" | "email" | "in_person">("whatsapp");
+  const [communicationType, setCommunicationType] = useState<
+    "whatsapp" | "call" | "email" | "in_person"
+  >("whatsapp");
   const [communicationSummary, setCommunicationSummary] = useState("");
-  const [communicationAt, setCommunicationAt] = useState(() => format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [communicationAt, setCommunicationAt] = useState(() =>
+    format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+  );
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
   const [followUpAssignee, setFollowUpAssignee] = useState("");
@@ -231,19 +250,22 @@ function PatientDetail() {
   const createTreatmentPlan = () => {
     if (!patient.user_id) return;
     const treatment = assessment?.dental.treatment_interest || patient.treatment_interest;
-    const plan = addTreatmentPlan({
-      clinic_id: patient.clinic_id,
-      patient_user_id: patient.user_id,
-      clinic_patient_id: patient.id,
-      title: treatment
-        ? `${treatment} treatment plan`
-        : `Treatment plan for ${patient.first_name} ${patient.last_name}`,
-      summary: roadmap?.summary || assessment?.dental.concerns || "Draft treatment plan.",
-      items: [],
-      visits: roadmap?.estimated_visits ?? 1,
-      healing_weeks: roadmap?.healing_weeks ?? 0,
-      status: "draft",
-    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
+    const plan = addTreatmentPlan(
+      {
+        clinic_id: patient.clinic_id,
+        patient_user_id: patient.user_id,
+        clinic_patient_id: patient.id,
+        title: treatment
+          ? `${treatment} treatment plan`
+          : `Treatment plan for ${patient.first_name} ${patient.last_name}`,
+        summary: roadmap?.summary || assessment?.dental.concerns || "Draft treatment plan.",
+        items: [],
+        visits: roadmap?.estimated_visits ?? 1,
+        healing_weeks: roadmap?.healing_weeks ?? 0,
+        status: "draft",
+      },
+      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+    );
     navigate({ to: "/pro/treatment-plans/$id", params: { id: plan.id } });
   };
   const saveInternalNote = () => {
@@ -264,17 +286,20 @@ function PatientDetail() {
   const saveTask = () => {
     const title = taskTitle.trim();
     if (!title) return;
-    addTask({
-      clinic_id: patient.clinic_id,
-      lead_id: lead?.id,
-      patient_user_id: patient.user_id,
-      title,
-      due_at: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
-      assigned_to: taskAssignee || coordinator?.id || activeUser?.id,
-      priority: taskPriority,
-      category: "task",
-      done: false,
-    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
+    addTask(
+      {
+        clinic_id: patient.clinic_id,
+        lead_id: lead?.id,
+        patient_user_id: patient.user_id,
+        title,
+        due_at: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
+        assigned_to: taskAssignee || coordinator?.id || activeUser?.id,
+        priority: taskPriority,
+        category: "task",
+        done: false,
+      },
+      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+    );
     setTaskTitle("");
     setTaskDueDate("");
     toast.success("Task added");
@@ -284,8 +309,12 @@ function PatientDetail() {
     const body = communicationSummary.trim();
     if (!body || !lead || !communicationAt) return;
     addLeadActivity({
-      clinic_id: patient.clinic_id, lead_id: lead.id, kind: communicationType,
-      body, internal: true, occurred_at: new Date(communicationAt).toISOString(),
+      clinic_id: patient.clinic_id,
+      lead_id: lead.id,
+      kind: communicationType,
+      body,
+      internal: true,
+      occurred_at: new Date(communicationAt).toISOString(),
       created_by: activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
     });
     setCommunicationSummary("");
@@ -295,12 +324,20 @@ function PatientDetail() {
   const saveFollowUp = () => {
     const note = followUpNote.trim();
     if (!followUpDate || !note) return;
-    addTask({
-      clinic_id: patient.clinic_id, lead_id: lead?.id, patient_user_id: patient.user_id,
-      title: note, due_at: new Date(followUpDate).toISOString(),
-      assigned_to: followUpAssignee || coordinator?.id || activeUser?.id,
-      priority: "medium", category: "follow_up", done: false,
-    }, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system");
+    addTask(
+      {
+        clinic_id: patient.clinic_id,
+        lead_id: lead?.id,
+        patient_user_id: patient.user_id,
+        title: note,
+        due_at: new Date(followUpDate).toISOString(),
+        assigned_to: followUpAssignee || coordinator?.id || activeUser?.id,
+        priority: "medium",
+        category: "follow_up",
+        done: false,
+      },
+      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+    );
     setFollowUpDate("");
     setFollowUpNote("");
     toast.success("Follow-up scheduled");
@@ -319,7 +356,9 @@ function PatientDetail() {
               <Plus className="size-4 mr-1" /> Create Treatment Plan
             </Button>
             <Button asChild variant="outline" disabled={quotes.length === 0}>
-              <Link to="." hash="quotes">View Quotes</Link>
+              <Link to="." hash="quotes">
+                View Quotes
+              </Link>
             </Button>
             <Button variant="outline" disabled>
               <CalendarCheck2 className="size-4 mr-1" /> Schedule Appointment
@@ -350,7 +389,9 @@ function PatientDetail() {
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {clinic && <Badge variant="outline">{clinic.name}</Badge>}
-            {application?.status && <Badge variant="secondary">Application: {application.status}</Badge>}
+            {application?.status && (
+              <Badge variant="secondary">Application: {application.status}</Badge>
+            )}
             {lead?.priority && <Badge variant="outline">Priority: {lead.priority}</Badge>}
           </div>
         </CardContent>
@@ -361,17 +402,43 @@ function PatientDetail() {
           <div>
             <p className="font-display font-semibold">Next follow-up</p>
             <p className="text-sm text-muted-foreground">
-              {nextFollowUp ? `${formatDateTime(nextFollowUp.due_at)} · ${nextFollowUp.title}` : "No follow-up scheduled"}
+              {nextFollowUp
+                ? `${formatDateTime(nextFollowUp.due_at)} · ${nextFollowUp.title}`
+                : "No follow-up scheduled"}
             </p>
           </div>
           <div className="grid md:grid-cols-[auto_1fr_200px_auto] gap-2">
-            <Input type="datetime-local" aria-label="Follow-up date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
-            <Input aria-label="Follow-up note" placeholder="Short follow-up note" value={followUpNote} onChange={(event) => setFollowUpNote(event.target.value)} />
-            <Select value={followUpAssignee || "auto"} onValueChange={(value) => setFollowUpAssignee(value === "auto" ? "" : value)}>
-              <SelectTrigger aria-label="Follow-up assignee"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="auto">Default coordinator</SelectItem>{clinicUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent>
+            <Input
+              type="datetime-local"
+              aria-label="Follow-up date"
+              value={followUpDate}
+              onChange={(event) => setFollowUpDate(event.target.value)}
+            />
+            <Input
+              aria-label="Follow-up note"
+              placeholder="Short follow-up note"
+              value={followUpNote}
+              onChange={(event) => setFollowUpNote(event.target.value)}
+            />
+            <Select
+              value={followUpAssignee || "auto"}
+              onValueChange={(value) => setFollowUpAssignee(value === "auto" ? "" : value)}
+            >
+              <SelectTrigger aria-label="Follow-up assignee">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Default coordinator</SelectItem>
+                {clinicUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-            <Button onClick={saveFollowUp} disabled={!followUpDate || !followUpNote.trim()}>Set follow-up</Button>
+            <Button onClick={saveFollowUp} disabled={!followUpDate || !followUpNote.trim()}>
+              Set follow-up
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -407,7 +474,10 @@ function PatientDetail() {
           <CardContent className="p-5 space-y-3">
             <h3 className="font-display font-semibold">Files</h3>
             {files.length === 0 ? (
-              <EmptyState title="No uploads yet" description="Uploaded file metadata will appear here." />
+              <EmptyState
+                title="No uploads yet"
+                description="Uploaded file metadata will appear here."
+              />
             ) : (
               <div className="space-y-2">
                 {files.slice(0, 3).map((file) => (
@@ -658,18 +728,44 @@ function PatientDetail() {
                 <Lock className="size-4" /> Communication records are clinic-only manual entries.
               </div>
               <div className="grid md:grid-cols-[180px_220px_1fr_auto] gap-2">
-                <Select value={communicationType} onValueChange={(value) => setCommunicationType(value as typeof communicationType)}>
-                  <SelectTrigger aria-label="Communication type"><SelectValue /></SelectTrigger>
+                <Select
+                  value={communicationType}
+                  onValueChange={(value) => setCommunicationType(value as typeof communicationType)}
+                >
+                  <SelectTrigger aria-label="Communication type">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="call">Phone Call</SelectItem>
-                    <SelectItem value="email">Email</SelectItem><SelectItem value="in_person">In Person</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="call">Phone Call</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="in_person">In Person</SelectItem>
                   </SelectContent>
                 </Select>
-                <Input type="datetime-local" aria-label="Communication date" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} />
-                <Input aria-label="Communication summary" placeholder="Short summary" value={communicationSummary} onChange={(event) => setCommunicationSummary(event.target.value)} />
-                <Button onClick={saveCommunication} disabled={!lead || !communicationAt || !communicationSummary.trim()}>Add record</Button>
+                <Input
+                  type="datetime-local"
+                  aria-label="Communication date"
+                  value={communicationAt}
+                  onChange={(event) => setCommunicationAt(event.target.value)}
+                />
+                <Input
+                  aria-label="Communication summary"
+                  placeholder="Short summary"
+                  value={communicationSummary}
+                  onChange={(event) => setCommunicationSummary(event.target.value)}
+                />
+                <Button
+                  onClick={saveCommunication}
+                  disabled={!lead || !communicationAt || !communicationSummary.trim()}
+                >
+                  Add record
+                </Button>
               </div>
-              {!lead && <p className="text-xs text-muted-foreground">A CRM lead is required before communication can be recorded.</p>}
+              {!lead && (
+                <p className="text-xs text-muted-foreground">
+                  A CRM lead is required before communication can be recorded.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -687,13 +783,34 @@ function PatientDetail() {
                   value={taskDueDate}
                   onChange={(event) => setTaskDueDate(event.target.value)}
                 />
-                <Select value={taskPriority} onValueChange={(value) => setTaskPriority(value as typeof taskPriority)}>
-                  <SelectTrigger aria-label="Task priority"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem></SelectContent>
+                <Select
+                  value={taskPriority}
+                  onValueChange={(value) => setTaskPriority(value as typeof taskPriority)}
+                >
+                  <SelectTrigger aria-label="Task priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
                 </Select>
-                <Select value={taskAssignee || "auto"} onValueChange={(value) => setTaskAssignee(value === "auto" ? "" : value)}>
-                  <SelectTrigger aria-label="Task assignee"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="auto">Default coordinator</SelectItem>{clinicUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}</SelectContent>
+                <Select
+                  value={taskAssignee || "auto"}
+                  onValueChange={(value) => setTaskAssignee(value === "auto" ? "" : value)}
+                >
+                  <SelectTrigger aria-label="Task assignee">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Default coordinator</SelectItem>
+                    {clinicUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
                 <Button onClick={saveTask} disabled={!taskTitle.trim()}>
                   <Plus className="size-4 mr-1" /> Add task
@@ -701,7 +818,10 @@ function PatientDetail() {
               </div>
 
               {tasks.length === 0 ? (
-                <EmptyState title="No tasks" description="Add tasks to track follow-ups for this patient." />
+                <EmptyState
+                  title="No tasks"
+                  description="Add tasks to track follow-ups for this patient."
+                />
               ) : (
                 <div className="divide-y rounded-lg border">
                   {tasks.map((task) => (
@@ -709,15 +829,26 @@ function PatientDetail() {
                       key={task.id}
                       className="flex items-center gap-3 p-3 cursor-pointer hover:bg-surface/70"
                     >
-                      <Checkbox checked={task.done} onCheckedChange={() => toggleTask(task.id, activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system")} />
+                      <Checkbox
+                        checked={task.done}
+                        onCheckedChange={() =>
+                          toggleTask(
+                            task.id,
+                            activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+                          )
+                        }
+                      />
                       <div className="flex-1 min-w-0">
                         <p className={task.done ? "line-through text-muted-foreground" : ""}>
                           {task.title}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {task.due_at ? `Due ${format(new Date(task.due_at), "MMM d, yyyy")}` : "No due date"}
+                          {task.due_at
+                            ? `Due ${format(new Date(task.due_at), "MMM d, yyyy")}`
+                            : "No due date"}
                           {` · ${(task.priority ?? "medium").replace(/^./, (letter) => letter.toUpperCase())} priority`}
-                          {task.assigned_to && ` · ${users.find((user) => user.id === task.assigned_to)?.name ?? "Assigned"}`}
+                          {task.assigned_to &&
+                            ` · ${users.find((user) => user.id === task.assigned_to)?.name ?? "Assigned"}`}
                         </p>
                       </div>
                       <Badge variant={task.done ? "outline" : "secondary"}>
@@ -746,23 +877,33 @@ function PatientDetail() {
               plans.map((p) => {
                 const planDentist = clinicUsers.find((user) => user.id === p.dentist_id);
                 const estimatedTotal = p.items.reduce((sum, item) => sum + item.unit_price, 0);
-                return <Card key={p.id}>
-                  <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium">{p.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Created {formatDateTime(p.created_at)} · Updated {formatDateTime(p.updated_at)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} items · €{estimatedTotal.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className="capitalize">{(p.status ?? "draft").replace(/_/g, " ")}</Badge>
-                      <Button asChild variant="outline" size="sm"><Link to="/pro/treatment-plans/$id" params={{ id: p.id }}>Open Plan</Link></Button>
-                    </div>
-                  </CardContent>
-                </Card>;
+                return (
+                  <Card key={p.id}>
+                    <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <p className="font-medium">{p.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Created {formatDateTime(p.created_at)} · Updated{" "}
+                          {formatDateTime(p.updated_at)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} items · €
+                          {estimatedTotal.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="capitalize">
+                          {(p.status ?? "draft").replace(/_/g, " ")}
+                        </Badge>
+                        <Button asChild variant="outline" size="sm">
+                          <Link to="/pro/treatment-plans/$id" params={{ id: p.id }}>
+                            Open Plan
+                          </Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
               })
             )}
           </div>
@@ -777,22 +918,45 @@ function PatientDetail() {
             ) : (
               quotes.map((q) => {
                 const quotePlan = plans.find((plan) => plan.id === q.treatment_plan_id);
-                return <Card key={q.id}>
+                return (
+                  <Card key={q.id}>
                     <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
                       <div>
                         <p className="font-medium">Quote {q.id.slice(0, 8)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {quotePlan?.title ?? "Treatment plan"} · Updated {formatDateTime(q.updated_at)}
+                          {quotePlan?.title ?? "Treatment plan"} · Updated{" "}
+                          {formatDateTime(q.updated_at)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="capitalize">{q.status ?? "draft"}</Badge>
-                        <span className="text-sm font-medium">{formatQuoteMoney(calculateQuoteTotals(q).total, q.currency)}</span>
-                        <Button asChild size="sm" variant="outline"><Link to="/pro/quotes/$id" params={{ id: q.id }}>Open Quote</Link></Button>
-                        {q.share_token && <Button asChild size="sm" variant="ghost"><Link to="/shared/treatment-plan/$token" params={{ token: q.share_token }}>Preview</Link></Button>}
+                        <span className="text-sm font-medium">
+                          {formatQuoteMoney(calculateQuoteTotals(q).total, q.currency)}
+                        </span>
+                        <Button asChild size="sm" variant="outline">
+                          <Link to="/pro/quotes/$id" params={{ id: q.id }}>
+                            Open Quote
+                          </Link>
+                        </Button>
+                        {q.share_token && (
+                          <Button asChild size="sm" variant="ghost">
+                            <Link
+                              to="/shared/treatment-plan/$token"
+                              params={{ token: q.share_token }}
+                              search={
+                                isQuotePubliclyViewable(q.status)
+                                  ? { preview: false }
+                                  : { preview: true }
+                              }
+                            >
+                              {isQuotePubliclyViewable(q.status) ? "View shared" : "Preview quote"}
+                            </Link>
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
+                );
               })
             )}
           </div>
@@ -823,7 +987,10 @@ function PatientDetail() {
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(activity.occurred_at ?? activity.created_at), "MMM d, HH:mm")}
+                        {format(
+                          new Date(activity.occurred_at ?? activity.created_at),
+                          "MMM d, HH:mm",
+                        )}
                       </p>
                     </div>
                   ))}
@@ -849,10 +1016,14 @@ function PatientDetail() {
             <div className="space-y-3">
               {timelineEvents.map((event) => (
                 <div key={event.id} className="flex gap-3 border-l-2 border-primary/30 pl-4 py-1">
-                  <p className="text-xs text-muted-foreground w-36 shrink-0">{formatDateTime(event.at)}</p>
+                  <p className="text-xs text-muted-foreground w-36 shrink-0">
+                    {formatDateTime(event.at)}
+                  </p>
                   <div>
                     <p className="text-sm font-medium">{event.title}</p>
-                    {event.detail && <p className="text-xs text-muted-foreground">{event.detail}</p>}
+                    {event.detail && (
+                      <p className="text-xs text-muted-foreground">{event.detail}</p>
+                    )}
                   </div>
                 </div>
               ))}

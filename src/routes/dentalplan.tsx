@@ -86,7 +86,10 @@ function DentalPlanRoute() {
     (item) => item.id === search.leadId && item.clinic_id === user?.clinic_id,
   );
   const application = applications.find(
-    (item) => item.id === lead?.clinic_application_id && item.clinic_id === user?.clinic_id,
+    (item) =>
+      item.clinic_id === user?.clinic_id &&
+      (item.id === lead?.clinic_application_id ||
+        (!!search.assessmentId && item.assessment_id === search.assessmentId)),
   );
   const patient = patients.find(
     (item) =>
@@ -96,14 +99,9 @@ function DentalPlanRoute() {
         item.id === application?.clinic_patient_id ||
         item.id === existingPlan?.clinic_patient_id),
   );
-  const assessment = assessments.find(
-    (item) =>
-      item.id ===
-      (search.assessmentId ??
-        lead?.assessment_id ??
-        patient?.assessment_id ??
-        application?.assessment_id),
-  );
+  const authorizedAssessmentId =
+    lead?.assessment_id ?? patient?.assessment_id ?? application?.assessment_id;
+  const assessment = assessments.find((item) => item.id === authorizedAssessmentId);
   const roadmap = roadmaps.find(
     (item) => item.id === (lead?.roadmap_id ?? patient?.roadmap_id ?? application?.roadmap_id),
   );
