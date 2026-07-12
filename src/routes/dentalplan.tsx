@@ -67,7 +67,6 @@ function DentalPlanRoute() {
   const templates = useMockStore((state) => state.dentalPlanTemplates);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
-  const addQuote = useMockStore((state) => state.addQuote);
   const updateQuote = useMockStore((state) => state.updateQuote);
   const addPatient = useMockStore((state) => state.addPatient);
   const updatePatient = useMockStore((state) => state.updatePatient);
@@ -410,6 +409,10 @@ function DentalPlanRoute() {
             clinic_id: user.clinic_id,
             patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
             clinic_patient_id: linkedPatient.id,
+            lead_id: value.patient.leadId,
+            clinic_application_id: value.patient.applicationId,
+            assessment_id: value.patient.assessmentId,
+            roadmap_id: value.patient.roadmapId,
             status: "draft",
             clinical_findings: [],
             treatment_objectives: [],
@@ -487,7 +490,44 @@ function DentalPlanRoute() {
       valid_until: value.commercial.validUntil,
       included_services: includedServices,
     };
-    let quote;
+    updatePlan(
+      plan.id,
+      {
+        currency: commercialPatch.currency,
+        price_items: value.commercial.items.map((item) => {
+          const treatment = value.proposedTreatments.find(
+            (candidate) => candidate.id === item.treatmentId,
+          );
+          return {
+            id: `price_${item.treatmentId}`,
+            label: item.label,
+            quantity: item.qty,
+            unit_price: item.unitPrice,
+            treatment_group_id: treatment?.treatmentGroupId,
+            treatment_key: treatment?.treatmentType,
+            manually_overridden: item.priceOverridden,
+          };
+        }),
+        hotel_total: commercialPatch.hotel_total,
+        transfer_total: commercialPatch.transfer_total,
+        optional_service_total: value.commercial.otherServiceTotal,
+        discount_type: value.commercial.discountType,
+        discount_value: value.commercial.discountValue,
+        calculated_discount: discount,
+        payment_schedule: commercialPatch.payment_schedule,
+        valid_until: commercialPatch.valid_until,
+        included_services: commercialPatch.included_services,
+        excluded_services: existingPlan?.excluded_services ?? [],
+        hotel_nights: value.travel.hotelIncluded ? value.travel.hotelNights : 0,
+        transfers_included:
+          value.travel.includedServices.includes("Airport Transfer") ||
+          value.travel.includedServices.includes("Hotel Transfer"),
+        flight_included: value.travel.includedServices.includes("Flights"),
+        prepared_at: existingPlan?.prepared_at ?? new Date().toISOString(),
+        patient_document_version: existingPlan?.patient_document_version ?? 1,
+      },
+      user.id,
+    );
     if (existingQuote) {
       updateQuote(
         existingQuote.id,
@@ -496,19 +536,9 @@ function DentalPlanRoute() {
         },
         user.id,
       );
-      quote = existingQuote;
-    } else
-      quote = addQuote({
-        clinic_id: user.clinic_id,
-        patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
-        clinic_patient_id: linkedPatient.id,
-        treatment_plan_id: plan.id,
-        ...commercialPatch,
-        excluded_services: [],
-        status: "draft",
-      });
-    navigate({ to: "/pro/quotes/$id", params: { id: quote.id } });
-    return { treatmentPlanId: plan.id, quoteId: quote.id };
+      navigate({ to: "/pro/quotes/$id", params: { id: existingQuote.id } });
+    } else navigate({ to: "/pro/treatment-plans/$id", params: { id: plan.id } });
+    return { treatmentPlanId: plan.id, legacyQuoteId: existingQuote?.id };
   };
   return (
     <DentalPlanStudio

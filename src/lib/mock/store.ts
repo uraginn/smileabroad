@@ -22,7 +22,12 @@ import type {
   ClinicHotel,
   RoadmapCountryTreatmentPrice,
   RoadmapTreatmentContent,
+  TreatmentPlanPriceItem,
+  TreatmentPlanStatus,
 } from "@/types/models";
+import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
+import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
+import { normalizeTreatmentPlanStatus } from "@/lib/treatment-plan-status";
 import {
   DEFAULT_ROADMAP_COUNTRY_PRICES,
   DEFAULT_ROADMAP_TREATMENT_CONTENT,
@@ -105,6 +110,23 @@ interface Store {
     createdBy?: string,
   ) => TreatmentPlan;
   updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>, changedBy?: string) => void;
+  upsertTreatmentPlanPriceItems: (
+    id: string,
+    clinicId: string,
+    items: TreatmentPlanPriceItem[],
+    changedBy?: string,
+  ) => void;
+  updateTreatmentPlanStatus: (
+    id: string,
+    clinicId: string,
+    status: TreatmentPlanStatus,
+    changedBy?: string,
+  ) => void;
+  ensureTreatmentPlanShareToken: (id: string, clinicId: string) => string | undefined;
+  markTreatmentPlanSent: (id: string, clinicId: string, changedBy?: string) => void;
+  markTreatmentPlanViewed: (id: string, clinicId: string) => void;
+  markTreatmentPlanAccepted: (id: string, clinicId: string) => void;
+  markTreatmentPlanDeclined: (id: string, clinicId: string) => void;
   addQuote: (q: Omit<Quote, "id" | "created_at" | "updated_at" | "created_by">) => Quote;
   updateQuote: (id: string, patch: Partial<Quote>, changedBy?: string) => void;
   updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
@@ -537,31 +559,65 @@ export const useMockStore = create<Store>()(
         }));
       },
       addTreatmentPlan: (tp, createdBy = "system") => {
-        const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
-        const existingDraft = get().treatmentPlans.find(
+        const actor = get().users.find((user) => user.id === createdBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== tp.clinic_id) {
+          throw new Error("Treatment plan clinic ownership mismatch.");
+        }
+        const lead = get().leads.find(
+          (item) =>
+            item.clinic_id === tp.clinic_id &&
+            (item.id === tp.lead_id ||
+              item.clinic_patient_id === tp.clinic_patient_id ||
+              item.patient_user_id === tp.patient_user_id),
+        );
+        const existingPlan = get().treatmentPlans.find(
           (plan) =>
             plan.clinic_id === tp.clinic_id &&
-            plan.clinic_patient_id === tp.clinic_patient_id &&
-            (plan.status ?? "draft") === "draft" &&
-            plan.items.length === 0 &&
-            +new Date(plan.created_at) >= recentCutoff,
+            ((lead &&
+              plan.lead_id === lead.id &&
+              !["declined", "expired"].includes(plan.status ?? "draft")) ||
+              (plan.clinic_patient_id === tp.clinic_patient_id &&
+                (plan.status ?? "draft") === "draft" &&
+                (plan.items ?? []).length === 0)),
         );
-        if (existingDraft) return existingDraft;
+        if (existingPlan) return existingPlan;
         const timestamp = now();
+        const application = get().applications.find(
+          (item) =>
+            item.clinic_id === tp.clinic_id &&
+            (item.id === tp.clinic_application_id || item.id === lead?.clinic_application_id),
+        );
+        const roadmap = get().roadmaps.find(
+          (item) => item.id === (tp.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id),
+        );
         const rec: TreatmentPlan = {
           ...tp,
-          status: tp.status ?? "draft",
+          lead_id: tp.lead_id ?? lead?.id,
+          clinic_application_id: tp.clinic_application_id ?? application?.id,
+          assessment_id: tp.assessment_id ?? lead?.assessment_id ?? application?.assessment_id,
+          roadmap_id: tp.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id,
+          preliminary_suggestions:
+            tp.preliminary_suggestions ??
+            roadmap?.treatment_estimates?.map((item) => ({ ...item })),
+          status: normalizeTreatmentPlanStatus(tp.status),
+          price_items: dedupeTreatmentPlanPriceItems(tp.price_items ?? []),
+          included_services: tp.included_services ?? [],
+          excluded_services: tp.excluded_services ?? [],
+          payment_schedule: tp.payment_schedule ?? [],
+          currency: tp.currency ?? "EUR",
+          hotel_total: tp.hotel_total ?? 0,
+          transfer_total: tp.transfer_total ?? 0,
+          optional_service_total: tp.optional_service_total ?? 0,
+          discount_type: tp.discount_type ?? "none",
+          discount_value: tp.discount_value ?? 0,
+          calculated_discount: tp.calculated_discount ?? 0,
+          patient_document_version: tp.patient_document_version ?? 1,
+          prepared_at: tp.prepared_at ?? timestamp,
           id: makeId("tp"),
           created_at: timestamp,
           updated_at: timestamp,
           created_by: createdBy,
         };
-        const lead = get().leads.find(
-          (item) =>
-            item.clinic_id === tp.clinic_id &&
-            (item.clinic_patient_id === tp.clinic_patient_id ||
-              item.patient_user_id === tp.patient_user_id),
-        );
         const activity: LeadActivity | undefined = lead
           ? {
               id: makeId("activity"),
@@ -606,6 +662,8 @@ export const useMockStore = create<Store>()(
       updateTreatmentPlan: (id, patch, changedBy = "system") => {
         const plan = get().treatmentPlans.find((item) => item.id === id);
         if (!plan) return;
+        const actor = get().users.find((user) => user.id === changedBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== plan.clinic_id) return;
         const timestamp = now();
         const statusChanged = patch.status && patch.status !== (plan.status ?? "draft");
         const lead = statusChanged
@@ -631,7 +689,18 @@ export const useMockStore = create<Store>()(
           : undefined;
         set((s) => ({
           treatmentPlans: s.treatmentPlans.map((item) =>
-            item.id === id ? { ...item, ...patch, updated_at: timestamp } : item,
+            item.id === id
+              ? {
+                  ...item,
+                  ...patch,
+                  status: patch.status ? normalizeTreatmentPlanStatus(patch.status) : item.status,
+                  price_items: patch.price_items
+                    ? dedupeTreatmentPlanPriceItems(patch.price_items)
+                    : item.price_items,
+                  share_token: patch.share_token ?? item.share_token,
+                  updated_at: timestamp,
+                }
+              : item,
           ),
           activities: activity ? [...s.activities, activity] : s.activities,
           leads: lead
@@ -642,6 +711,60 @@ export const useMockStore = create<Store>()(
               )
             : s.leads,
         }));
+      },
+      upsertTreatmentPlanPriceItems: (id, clinicId, items, changedBy = "system") => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan) return;
+        get().updateTreatmentPlan(
+          id,
+          { price_items: dedupeTreatmentPlanPriceItems(items) },
+          changedBy,
+        );
+      },
+      updateTreatmentPlanStatus: (id, clinicId, status, changedBy = "system") => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan) return;
+        get().updateTreatmentPlan(id, { status }, changedBy);
+      },
+      ensureTreatmentPlanShareToken: (id, clinicId) => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan) return undefined;
+        const token = plan.share_token ?? makeShareToken();
+        if (!plan.share_token) get().updateTreatmentPlan(id, { share_token: token });
+        return token;
+      },
+      markTreatmentPlanSent: (id, clinicId, changedBy = "system") => {
+        const token = get().ensureTreatmentPlanShareToken(id, clinicId);
+        if (!token) return;
+        const timestamp = now();
+        get().updateTreatmentPlan(id, { status: "sent", shared_at: timestamp }, changedBy);
+      },
+      markTreatmentPlanViewed: (id, clinicId) => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan || plan.status !== "sent") return;
+        get().updateTreatmentPlan(id, { status: "viewed", viewed_at: now() }, "patient_shared");
+      },
+      markTreatmentPlanAccepted: (id, clinicId) => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan || !["sent", "viewed"].includes(plan.status ?? "")) return;
+        get().updateTreatmentPlan(id, { status: "accepted", accepted_at: now() }, "patient_shared");
+      },
+      markTreatmentPlanDeclined: (id, clinicId) => {
+        const plan = get().treatmentPlans.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!plan || !["sent", "viewed"].includes(plan.status ?? "")) return;
+        get().updateTreatmentPlan(id, { status: "declined", declined_at: now() }, "patient_shared");
       },
       addQuote: (q) => {
         const existing = get().quotes.find(
@@ -675,12 +798,19 @@ export const useMockStore = create<Store>()(
         };
         set((s) => ({
           quotes: [...s.quotes, rec],
+          treatmentPlans: s.treatmentPlans.map((plan) =>
+            plan.id === rec.treatment_plan_id && plan.clinic_id === rec.clinic_id
+              ? mergeLegacyQuoteIntoTreatmentPlan(plan, rec)
+              : plan,
+          ),
         }));
         return rec;
       },
       updateQuote: (id, patch, changedBy = "system") => {
         const quote = get().quotes.find((item) => item.id === id);
         if (!quote) return;
+        const actor = get().users.find((user) => user.id === changedBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== quote.clinic_id) return;
         const timestamp = now();
         const nextStatus = patch.status ?? quote.status ?? "draft";
         const shareToken = ["approved", "sent"].includes(nextStatus)
@@ -710,25 +840,20 @@ export const useMockStore = create<Store>()(
                 created_by: changedBy,
               }
             : undefined;
+        const updatedQuote: Quote = {
+          ...quote,
+          ...patch,
+          status: nextStatus,
+          share_token: shareToken,
+          updated_at: timestamp,
+        };
         set((s) => ({
-          quotes: s.quotes.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  ...patch,
-                  status: nextStatus,
-                  share_token: shareToken,
-                  updated_at: timestamp,
-                }
-              : item,
+          quotes: s.quotes.map((item) => (item.id === id ? updatedQuote : item)),
+          treatmentPlans: s.treatmentPlans.map((plan) =>
+            plan.id === quote.treatment_plan_id && plan.clinic_id === quote.clinic_id
+              ? { ...mergeLegacyQuoteIntoTreatmentPlan(plan, updatedQuote), updated_at: timestamp }
+              : plan,
           ),
-          treatmentPlans: shareToken
-            ? s.treatmentPlans.map((plan) =>
-                plan.id === quote.treatment_plan_id
-                  ? { ...plan, share_token: shareToken, updated_at: timestamp }
-                  : plan,
-              )
-            : s.treatmentPlans,
           activities: activity ? [...s.activities, activity] : s.activities,
           leads: lead
             ? s.leads.map((item) =>
@@ -975,7 +1100,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 13,
+      version: 14,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -1018,12 +1143,34 @@ export const useMockStore = create<Store>()(
           const lead = leads.find((item) => item.clinic_application_id === application.id);
           return lead && !application.lead_id ? { ...application, lead_id: lead.id } : application;
         });
-        const treatmentPlans = (state.treatmentPlans ?? []).map((plan) => {
+        const normalizedTreatmentPlans = (state.treatmentPlans ?? []).map((plan) => {
           const quote = (state.quotes ?? []).find((item) => item.treatment_plan_id === plan.id);
           const shareToken = plan.share_token ?? quote?.share_token ?? makeShareToken();
+          const lead = leads.find(
+            (item) =>
+              item.clinic_id === plan.clinic_id &&
+              (item.id === plan.lead_id ||
+                item.clinic_patient_id === plan.clinic_patient_id ||
+                item.patient_user_id === plan.patient_user_id),
+          );
+          const application = linkedApplications.find(
+            (item) =>
+              item.clinic_id === plan.clinic_id &&
+              (item.id === plan.clinic_application_id || item.id === lead?.clinic_application_id),
+          );
+          const roadmap = (state.roadmaps ?? []).find(
+            (item) => item.id === (plan.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id),
+          );
           return {
             ...plan,
-            status: plan.status ?? "draft",
+            lead_id: plan.lead_id ?? lead?.id,
+            clinic_application_id: plan.clinic_application_id ?? application?.id,
+            assessment_id: plan.assessment_id ?? lead?.assessment_id ?? application?.assessment_id,
+            roadmap_id: plan.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id,
+            preliminary_suggestions: Array.isArray(plan.preliminary_suggestions)
+              ? plan.preliminary_suggestions
+              : (roadmap?.treatment_estimates ?? []),
+            status: normalizeTreatmentPlanStatus(plan.status),
             items: Array.isArray(plan.items) ? plan.items : [],
             clinical_findings: Array.isArray(plan.clinical_findings) ? plan.clinical_findings : [],
             treatment_objectives: Array.isArray(plan.treatment_objectives)
@@ -1046,11 +1193,24 @@ export const useMockStore = create<Store>()(
                   procedures: Array.isArray(visit.procedures) ? visit.procedures : [],
                 }))
               : [],
+            price_items: dedupeTreatmentPlanPriceItems(plan.price_items ?? []),
+            payment_schedule: Array.isArray(plan.payment_schedule) ? plan.payment_schedule : [],
+            included_services: Array.isArray(plan.included_services) ? plan.included_services : [],
+            excluded_services: Array.isArray(plan.excluded_services) ? plan.excluded_services : [],
+            currency: plan.currency ?? "EUR",
+            hotel_total: plan.hotel_total ?? 0,
+            transfer_total: plan.transfer_total ?? 0,
+            optional_service_total: plan.optional_service_total ?? 0,
+            discount_type: plan.discount_type ?? "none",
+            discount_value: plan.discount_value ?? 0,
+            calculated_discount: plan.calculated_discount ?? 0,
+            prepared_at: plan.prepared_at ?? plan.created_at,
+            patient_document_version: plan.patient_document_version ?? 1,
             share_token: shareToken,
           };
         });
         const quotes = (state.quotes ?? []).map((quote) => {
-          const plan = treatmentPlans.find((item) => item.id === quote.treatment_plan_id);
+          const plan = normalizedTreatmentPlans.find((item) => item.id === quote.treatment_plan_id);
           return {
             ...quote,
             items: Array.isArray(quote.items) ? quote.items : [],
@@ -1064,6 +1224,14 @@ export const useMockStore = create<Store>()(
             share_token: quote.share_token ?? plan?.share_token,
           };
         });
+        const treatmentPlans = normalizedTreatmentPlans.map((plan) =>
+          mergeLegacyQuoteIntoTreatmentPlan(
+            plan,
+            quotes.find(
+              (quote) => quote.treatment_plan_id === plan.id && quote.clinic_id === plan.clinic_id,
+            ),
+          ),
+        );
         return {
           ...state,
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({

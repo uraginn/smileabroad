@@ -1,14 +1,3 @@
-﻿import type { QuoteStatus } from "@/types/models";
-
-export const PUBLIC_QUOTE_STATUSES = [
-  "approved",
-  "sent",
-  "viewed",
-  "accepted",
-] as const satisfies readonly QuoteStatus[];
-
-export function isQuotePubliclyViewable(status: QuoteStatus | undefined): boolean {
-  return PUBLIC_QUOTE_STATUSES.includes(
-    (status ?? "draft") as (typeof PUBLIC_QUOTE_STATUSES)[number],
-  );
-}
+// Phase 1 compatibility re-export. TreatmentPlan owns public document status.
+export { PUBLIC_TREATMENT_PLAN_STATUSES as PUBLIC_QUOTE_STATUSES } from "@/lib/treatment-plan-status";
+export { isTreatmentPlanPubliclyViewable as isQuotePubliclyViewable } from "@/lib/treatment-plan-status";

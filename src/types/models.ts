@@ -299,7 +299,35 @@ export interface TreatmentPlanItem {
 }
 
 export type TreatmentPlanStatus =
-  "draft" | "awaiting_doctor_review" | "approved" | "sent_to_patient" | "archived";
+  "draft" | "doctor_review" | "approved" | "sent" | "viewed" | "accepted" | "declined" | "expired";
+
+export interface TreatmentPlanPriceItem {
+  id: string;
+  treatment_definition_id?: string;
+  treatment_key?: string;
+  treatment_group_id?: string;
+  label: string;
+  quantity: number;
+  unit_price: number;
+  category?: string;
+  manually_overridden?: boolean;
+}
+
+export interface TreatmentPlanPayment {
+  id?: string;
+  label: string;
+  amount: number;
+  due: string;
+}
+
+export interface TreatmentPlanHotelSnapshot {
+  hotel_id?: string;
+  name: string;
+  room_type?: string;
+  board_type?: string;
+  price_per_night?: number;
+  currency?: QuoteCurrency;
+}
 
 export interface TreatmentStage {
   stage_number: number;
@@ -325,6 +353,10 @@ export interface TreatmentPlan extends BaseRecord {
   clinic_id: string;
   patient_user_id: string;
   clinic_patient_id?: string;
+  lead_id?: string;
+  clinic_application_id?: string;
+  assessment_id?: string;
+  roadmap_id?: string;
   title: string;
   summary: string;
   items: TreatmentPlanItem[];
@@ -358,6 +390,32 @@ export interface TreatmentPlan extends BaseRecord {
     affected_teeth: number[];
     generated_item_ids: string[];
   }>;
+  preliminary_suggestions?: RoadmapTreatmentEstimate[];
+  selected_hotel_id?: string;
+  hotel_snapshot?: TreatmentPlanHotelSnapshot;
+  hotel_nights?: number;
+  transfers_included?: boolean;
+  flight_included?: boolean;
+  included_services?: string[];
+  excluded_services?: string[];
+  currency?: QuoteCurrency;
+  price_items?: TreatmentPlanPriceItem[];
+  hotel_total?: number;
+  transfer_total?: number;
+  optional_service_total?: number;
+  discount_type?: "none" | "fixed" | "percentage";
+  discount_value?: number;
+  calculated_discount?: number;
+  payment_schedule?: TreatmentPlanPayment[];
+  valid_until?: string;
+  patient_message?: string;
+  shared_at?: string;
+  viewed_at?: string;
+  accepted_at?: string;
+  declined_at?: string;
+  prepared_at?: string;
+  patient_document_version?: number;
+  legacy_quote_id?: string;
 }
 
 export interface QuoteItem {

@@ -1,4 +1,5 @@
 import type { Quote, QuoteCurrency } from "@/types/models";
+export { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 
 const CURRENCY_SYMBOLS: Record<QuoteCurrency, string> = {
   GBP: "£",

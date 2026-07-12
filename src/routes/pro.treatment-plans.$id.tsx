@@ -138,7 +138,7 @@ function PlanEditor() {
     );
   };
   const total = plan.items.reduce((s, i) => s + i.unit_price, 0);
-  const changeStatus = (status: "draft" | "awaiting_doctor_review" | "approved") =>
+  const changeStatus = (status: "draft" | "doctor_review" | "approved") =>
     update(plan.id, { status }, actorId);
   const openOrCreateQuote = () => {
     const quote =
@@ -242,11 +242,11 @@ function PlanEditor() {
             </div>
             <div className="flex flex-wrap gap-2">
               {(plan.status ?? "draft") === "draft" && (
-                <Button size="sm" onClick={() => changeStatus("awaiting_doctor_review")}>
+                <Button size="sm" onClick={() => changeStatus("doctor_review")}>
                   Send for Doctor Review
                 </Button>
               )}
-              {(plan.status ?? "draft") === "awaiting_doctor_review" && canApprove && (
+              {(plan.status ?? "draft") === "doctor_review" && canApprove && (
                 <Button size="sm" onClick={() => changeStatus("approved")}>
                   Approve Plan
                 </Button>
@@ -272,12 +272,12 @@ function PlanEditor() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="awaiting_doctor_review">Awaiting Doctor Review</SelectItem>
+                  <SelectItem value="doctor_review">Awaiting Doctor Review</SelectItem>
                   {(canApprove || plan.status === "approved") && (
                     <SelectItem value="approved">Approved</SelectItem>
                   )}
-                  <SelectItem value="sent_to_patient">Sent to Patient</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="sent">Sent to Patient</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
             </div>

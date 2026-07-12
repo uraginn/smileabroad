@@ -10,7 +10,8 @@ import type {
   TreatmentVisit,
   ToothTreatment,
 } from "@/types/models";
-import { calculateQuoteTotals } from "@/lib/quote";
+import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
+import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
 
 export interface CarePlanPricePresentation {
   currency: string;
@@ -126,7 +127,21 @@ export function mapClinicQuoteCarePlan(input: {
   patient?: Patient;
 }): ClinicCarePlanPresentation {
   const { plan, quote, clinic, branding, patient } = input;
-  const totals = calculateQuoteTotals(quote);
+  return mapTreatmentPlanToPatientDocument(
+    mergeLegacyQuoteIntoTreatmentPlan(plan, quote),
+    clinic,
+    patient,
+    branding,
+  );
+}
+
+export function mapTreatmentPlanToPatientDocument(
+  plan: TreatmentPlan,
+  clinic?: Clinic,
+  patient?: Patient,
+  branding?: ClinicBranding,
+): ClinicCarePlanPresentation {
+  const totals = calculateTreatmentPlanTotals(plan);
   return {
     kind: "clinic_treatment_plan",
     title: plan.title,
@@ -136,20 +151,20 @@ export function mapClinicQuoteCarePlan(input: {
     visit_information: `${plan.visits} planned visit${plan.visits === 1 ? "" : "s"}`,
     healing_information: `${plan.healing_weeks} planned healing week${plan.healing_weeks === 1 ? "" : "s"}`,
     price: {
-      currency: quote.currency,
+      currency: plan.currency ?? "EUR",
       subtotal: totals.subtotal,
       total: totals.total,
-      hotel_total: quote.hotel_total,
-      transfer_total: quote.transfer_total,
-      discount: quote.discount,
-      items: quote.items.map((item) => ({
+      hotel_total: plan.hotel_total ?? 0,
+      transfer_total: plan.transfer_total ?? 0,
+      discount: totals.discount,
+      items: (plan.price_items ?? []).map((item) => ({
         label: item.label,
-        quantity: item.qty,
+        quantity: item.quantity,
         unit_price: item.unit_price,
-        total: item.qty * item.unit_price,
+        total: item.quantity * item.unit_price,
       })),
-      payment_schedule: quote.payment_schedule,
-      valid_until: quote.valid_until,
+      payment_schedule: plan.payment_schedule,
+      valid_until: plan.valid_until,
     },
     clinic: clinic
       ? {
@@ -164,9 +179,9 @@ export function mapClinicQuoteCarePlan(input: {
       : undefined,
     plan: selectPatientFacingPlan(plan),
     quote: {
-      included_services: quote.included_services ?? [],
-      excluded_services: quote.excluded_services ?? [],
-      patient_message: quote.patient_message,
+      included_services: plan.included_services ?? [],
+      excluded_services: plan.excluded_services ?? [],
+      patient_message: plan.patient_message,
       hotel_information: branding?.hotel_info,
       transfer_information: branding?.transfer_info,
       guarantees: branding?.guarantees ?? [],
