@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   BridgeUnitRole,
   ConditionType,
@@ -403,18 +404,12 @@ export function TreatmentPlanner({
           </ToolButton>
         </div>
       </div>
-      <div
-        role="tablist"
-        aria-label="Planner mode"
-        className="inline-flex rounded-lg border bg-card p-1"
-      >
-        <ModeButton active={mode === "current"} onClick={() => setMode("current")}>
-          Current Dental Condition
-        </ModeButton>
-        <ModeButton active={mode === "proposed"} onClick={() => setMode("proposed")}>
-          Proposed Treatment Plan
-        </ModeButton>
-      </div>
+      <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
+        <TabsList>
+          <TabsTrigger value="current">Current Dental Condition</TabsTrigger>
+          <TabsTrigger value="proposed">Proposed Treatment Plan</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <p className="text-sm text-muted-foreground">
         {mode === "current"
           ? "Record the patient’s present dental condition. These observations are not priced procedures."
@@ -627,27 +622,6 @@ function ToolButton({
       onClick={onClick}
       disabled={disabled}
       className="rounded border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-    >
-      {children}
-    </button>
-  );
-}
-function ModeButton({
-  children,
-  active,
-  onClick,
-}: {
-  children: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
     >
       {children}
     </button>

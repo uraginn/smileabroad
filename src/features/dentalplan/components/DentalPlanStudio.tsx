@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -236,21 +238,28 @@ function PlannerShell({
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-6">
-        <ol className="flex gap-2 overflow-x-auto pb-2">
-          {STEPS.map((label, index) => (
-            <li key={label} className="min-w-[180px] flex-1">
-              <button
-                type="button"
-                onClick={() => change({ draftStep: index })}
-                aria-current={index === step ? "step" : undefined}
-                className={`h-full w-full rounded-lg border px-3 py-2 text-left text-sm ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "bg-secondary" : "bg-card hover:bg-muted"}`}
-              >
-                <span className="mr-2 font-semibold">{index + 1}</span>
-                {label}
-              </button>
-            </li>
-          ))}
-        </ol>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Step {step + 1} of {STEPS.length}
+            </span>
+            <span>{Math.round(((step + 1) / STEPS.length) * 100)}%</span>
+          </div>
+          <Progress value={((step + 1) / STEPS.length) * 100} aria-label="Planner progress" />
+          <Tabs
+            value={String(step)}
+            onValueChange={(value) => change({ draftStep: Number(value) })}
+          >
+            <TabsList className="h-auto w-full justify-start overflow-x-auto">
+              {STEPS.map((label, index) => (
+                <TabsTrigger key={label} value={String(index)} className="min-w-44">
+                  <span className="mr-2 font-semibold">{index + 1}</span>
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
         {result && (
           <div role="status" className="rounded-lg border bg-card p-3 text-sm">
             {result}

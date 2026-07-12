@@ -14,6 +14,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
@@ -76,6 +86,7 @@ function DentalPlannerSettings() {
   const deleteDentist = useMockStore((state) => state.deleteClinicDentist);
   const [treatment, setTreatment] = useState<ClinicTreatmentDefinition | null>(null);
   const [dentist, setDentist] = useState<Partial<User> | null>(null);
+  const [dentistToDelete, setDentistToDelete] = useState<User | null>(null);
   const [template, setTemplate] = useState<DentalPlanTemplate | null>(null);
   const [hotel, setHotel] = useState<ClinicHotel | null>(null);
   const [hotelCategories, setHotelCategories] = useState<string[]>([]);
@@ -241,14 +252,7 @@ function DentalPlannerSettings() {
                   item.active === false ? "Inactive" : "Active",
                 ]}
                 onEdit={() => setDentist(item)}
-                onDelete={() =>
-                  confirmDelete(
-                    () => deleteDentist(item.id, clinicId),
-                    plans.some((plan) => plan.dentist_id === item.id)
-                      ? "Dentist is assigned and was deactivated"
-                      : "Dentist removed",
-                  )
-                }
+                onDelete={() => setDentistToDelete(item)}
               />
             ))}
           </Section>
@@ -346,6 +350,41 @@ function DentalPlannerSettings() {
           toast.success("Dentist saved");
         }}
       />
+      <AlertDialog
+        open={!!dentistToDelete}
+        onOpenChange={(open) => !open && setDentistToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {plans.some((plan) => plan.dentist_id === dentistToDelete?.id)
+                ? "Deactivate dentist?"
+                : "Delete dentist?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {plans.some((plan) => plan.dentist_id === dentistToDelete?.id)
+                ? "This dentist has historical treatment plans and will be deactivated. Existing assignments will be preserved."
+                : "This dentist has no treatment-plan references and will be permanently removed from this clinic."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!dentistToDelete) return;
+                const referenced = plans.some((plan) => plan.dentist_id === dentistToDelete.id);
+                deleteDentist(dentistToDelete.id, clinicId);
+                toast.success(referenced ? "Dentist deactivated" : "Dentist removed");
+                setDentistToDelete(null);
+              }}
+            >
+              {plans.some((plan) => plan.dentist_id === dentistToDelete?.id)
+                ? "Deactivate"
+                : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <TemplateDialog
         value={template}
         dentists={dentists}
@@ -678,11 +717,21 @@ function DentistDialog({
   onSave: (value: Partial<User>) => void;
 }) {
   const [draft, setDraft] = useState(value);
-  if (value?.id !== draft?.id) setDraft(value);
+  useEffect(() => setDraft(value), [value]);
   if (!draft) return null;
   const patch = (next: Partial<User>) => setDraft({ ...draft, ...next });
   return (
-    <DialogFrame open title="Dentist" onClose={onClose} onSave={() => onSave(draft)}>
+    <DialogFrame
+      open
+      title="Dentist"
+      onClose={onClose}
+      onSave={() => {
+        if (!draft.name?.trim()) return toast.error("Enter the dentist's full name");
+        if (draft.email && !/^\S+@\S+\.\S+$/.test(draft.email))
+          return toast.error("Enter a valid email or leave it empty");
+        onSave({ ...draft, name: draft.name.trim(), email: draft.email?.trim() ?? "" });
+      }}
+    >
       <Field label="Full name">
         <Input value={draft.name ?? ""} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
