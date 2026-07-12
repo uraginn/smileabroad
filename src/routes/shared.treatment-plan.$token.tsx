@@ -17,6 +17,7 @@ import {
 import { formatQuoteMoney } from "@/lib/quote";
 import { mapClinicQuoteCarePlan } from "@/lib/care-plan";
 import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
+import { useAuth } from "@/lib/auth/mock-auth";
 import {
   PlanDisclaimer,
   PlanDocumentHeader,
@@ -26,13 +27,31 @@ import {
 } from "@/components/care-plan/document";
 import { CheckCircle2, ExternalLink, Mail, Phone, Printer, ShieldCheck } from "lucide-react";
 
-export const Route = createFileRoute("/shared/treatment-plan/$token")({ component: SharedPlan });
+export const Route = createFileRoute("/shared/treatment-plan/$token")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    preview:
+      search.preview === true ||
+      search.preview === "true" ||
+      search.preview === "1",
+  }),
+  component: SharedPlan,
+});
 
 function SharedPlan() {
   const { token } = Route.useParams();
+  const { preview } = Route.useSearch();
+  const activeUser = useAuth((state) => state.user);
   const hydrated = useMockStoreHydrated();
   const tokenQuote = useMockStore((s) => s.quotes.find((quote) => quote.share_token === token));
-  const quote = tokenQuote && isQuotePubliclyViewable(tokenQuote.status) ? tokenQuote : undefined;
+  const canClinicPreview =
+    Boolean(preview) &&
+    Boolean(tokenQuote) &&
+    Boolean(activeUser) &&
+    (activeUser?.role === "platform_admin" || activeUser?.clinic_id === tokenQuote?.clinic_id);
+  const quote =
+    tokenQuote && (isQuotePubliclyViewable(tokenQuote.status) || canClinicPreview)
+      ? tokenQuote
+      : undefined;
   const plan = useMockStore((s) =>
     quote
       ? s.treatmentPlans.find(
@@ -63,8 +82,9 @@ function SharedPlan() {
   const updateQuote = useMockStore((s) => s.updateQuote);
 
   useEffect(() => {
-    if (quote?.status === "sent") updateQuote(quote.id, { status: "viewed" }, "patient_shared");
-  }, [quote?.id, quote?.status, updateQuote]);
+    if (!preview && quote?.status === "sent")
+      updateQuote(quote.id, { status: "viewed" }, "patient_shared");
+  }, [preview, quote?.id, quote?.status, updateQuote]);
 
   if (!hydrated) return null;
   if (!quote || !plan || !clinic) return <SafeNotFound />;
@@ -553,6 +573,10 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
     </Card>
   );
 }
+
+
+
+
 
 
 

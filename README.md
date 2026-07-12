@@ -1,55 +1,44 @@
-# SmileAbroad shared-plan fix
+# Enable clinic-only shared-plan preview
 
-This package fixes the `View shared` behavior without using Codex.
+The previous patch intentionally disabled `View shared` for draft and review-stage quotes. That protected the public route, but it also prevented clinic staff from previewing the patient-facing page.
 
-## What it fixes
+This patch adds two separate behaviors:
 
-- The Treatment Plan page was linking with `plan.share_token`, while the public shared route resolves `quote.share_token`.
-- A share token was enough to show an active button, even when the Quote was still draft or under review.
-- Public visibility status rules were duplicated.
+- **Preview shared:** available to the authenticated clinic user, even while the quote is draft/review.
+- **View shared:** public link for approved/sent/viewed/accepted quotes.
 
-After the fix:
+Public security remains unchanged. A draft shared link opened without the correct logged-in clinic user still shows the unavailable page.
 
-- Draft/review/declined/expired quotes do not open the public shared page.
-- Approved/sent/viewed/accepted quotes can open it.
-- The Treatment Plan page uses the linked Quote's share token.
-- The Quote page and public route use the same centralized rule.
+## Install
 
-## How to install
-
-1. Extract this ZIP.
-2. Copy `apply-shared-plan-fix.ps1` into the SmileAbroad project root:
-   the folder that contains `package.json` and `src`.
-3. Open PowerShell in that folder.
-4. Run:
+Place `apply-private-preview-fix.ps1` in the SmileAbroad project root and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\apply-shared-plan-fix.ps1
+.\apply-private-preview-fix.ps1
 ```
 
-5. Validate:
+Then:
 
 ```powershell
 npx tsc --noEmit
 npm run build
 ```
 
-6. Start the project and test.
+Test:
 
-## Expected behavior
+1. Open a draft quote or treatment plan while logged in as the clinic.
+2. Click **Preview shared**.
+3. The patient-facing shared design should open.
+4. Open the same URL in an incognito window: it must remain unavailable until the quote is approved/public.
+5. Change quote status to approved and save.
+6. The action should become **View shared**.
 
-- Treatment plan is Draft or Awaiting Doctor Review:
-  `View shared` is disabled.
-- Quote is Approved, Sent, Viewed or Accepted:
-  `View shared` opens the shared page.
-- Invalid tokens continue to show the safe unavailable page.
-
-## Commit
+Commit:
 
 ```powershell
 git status
 git add .
-git commit -m "Fix shared plan availability controls"
+git commit -m "Enable secure clinic shared-plan preview"
 git push origin main
 ```

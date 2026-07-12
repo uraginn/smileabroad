@@ -174,13 +174,19 @@ function PlanEditor() {
             >
               <FileText className="size-4 mr-1" /> {existingQuote ? "Open quote" : "Create quote"}
             </Button>
-            {existingQuote?.share_token && isQuotePubliclyViewable(existingQuote.status) ? (
+            {existingQuote?.share_token ? (
               <Button asChild variant="outline">
                 <Link
                   to="/shared/treatment-plan/$token"
                   params={{ token: existingQuote.share_token }}
+                  search={
+                    isQuotePubliclyViewable(existingQuote.status) ? {} : { preview: true }
+                  }
                 >
-                  <ExternalLink className="size-4 mr-1" /> View shared
+                  <ExternalLink className="size-4 mr-1" />
+                  {isQuotePubliclyViewable(existingQuote.status)
+                    ? "View shared"
+                    : "Preview shared"}
                 </Link>
               </Button>
             ) : existingQuote ? (
@@ -188,13 +194,9 @@ function PlanEditor() {
                 type="button"
                 variant="outline"
                 disabled
-                title={
-                  existingQuote.share_token
-                    ? "Available after the quote is approved"
-                    : "Open the quote to prepare its shared link"
-                }
+                title="Open the quote to prepare its shared link"
               >
-                <ExternalLink className="size-4 mr-1" /> View shared
+                <ExternalLink className="size-4 mr-1" /> Preview shared
               </Button>
             ) : null}
           </>
@@ -850,5 +852,6 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
 
 

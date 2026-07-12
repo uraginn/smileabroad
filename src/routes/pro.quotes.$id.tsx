@@ -124,10 +124,15 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
         description={plan?.title ?? "Treatment plan quote"}
         actions={
           <div className="flex gap-2">
-            {quote.share_token && isQuotePubliclyViewable(status) ? (
+            {quote.share_token ? (
               <Button asChild variant="outline">
-                <Link to="/shared/treatment-plan/$token" params={{ token: quote.share_token }}>
-                  <ExternalLink className="size-4 mr-1" /> View shared
+                <Link
+                  to="/shared/treatment-plan/$token"
+                  params={{ token: quote.share_token }}
+                  search={isQuotePubliclyViewable(status) ? {} : { preview: true }}
+                >
+                  <ExternalLink className="size-4 mr-1" />
+                  {isQuotePubliclyViewable(status) ? "View shared" : "Preview shared"}
                 </Link>
               </Button>
             ) : (
@@ -135,13 +140,9 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
                 type="button"
                 variant="outline"
                 disabled
-                title={
-                  quote.share_token
-                    ? "Available after the quote is approved"
-                    : "A shared link has not been created yet"
-                }
+                title="A shared link has not been created yet"
               >
-                <ExternalLink className="size-4 mr-1" /> View shared
+                <ExternalLink className="size-4 mr-1" /> Preview shared
               </Button>
             )}
             <Button onClick={save}>Save quote</Button>
@@ -411,5 +412,6 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
 
 
