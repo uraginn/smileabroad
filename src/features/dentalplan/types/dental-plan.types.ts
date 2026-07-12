@@ -240,6 +240,8 @@ export interface DentalPlanStudioProps {
   onSaveAsTemplate?: (value: DentalPlanData, name: string) => void;
   readOnly?: boolean;
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
+  preliminarySuggestions?: Array<{ key: string; label: string; quantity?: number }>;
+  shareSection?: ReactNode;
   treatmentDefaults?: Array<{
     id?: string;
     treatmentKey: string;
@@ -282,3 +284,4 @@ export interface DentalPlannerContext {
   treatmentPlanId?: string;
   quoteId?: string;
 }
+import type { ReactNode } from "react";

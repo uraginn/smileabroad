@@ -833,7 +833,7 @@ export const useMockStore = create<Store>()(
                 clinic_id: quote.clinic_id,
                 lead_id: lead.id,
                 kind: "status_change",
-                body: `Quote ${quote.id.slice(0, 8)} marked as ${nextStatus}.`,
+                body: `Treatment Plan marked as ${nextStatus}.`,
                 internal: true,
                 created_at: timestamp,
                 updated_at: timestamp,

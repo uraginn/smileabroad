@@ -1,8 +1,15 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { useMockStore, selectClinicPlans } from "@/lib/mock/store";
-import { useAuth } from "@/lib/auth/mock-auth";
-import { PageHeader, EmptyState, StatusBadge } from "@/components/ui-bits";
+import { MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
+import { useShallow } from "zustand/react/shallow";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -11,42 +18,50 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useShallow } from "zustand/react/shallow";
+import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
+import { useAuth } from "@/lib/auth/mock-auth";
 import { formatCrmDate } from "@/lib/format";
+import { useMockStore, selectClinicPlans } from "@/lib/mock/store";
 import { formatQuoteMoney } from "@/lib/quote";
+import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
+import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 
 export const Route = createFileRoute("/pro/treatment-plans")({ component: Plans });
 
 function Plans() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const clinicId = useAuth((s) => s.user?.clinic_id) ?? "clinic_istanbul";
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const activeUser = useAuth((state) => state.user);
+  const clinicId = activeUser?.clinic_id ?? "clinic_istanbul";
   const plans = useMockStore(useShallow(selectClinicPlans(clinicId)));
   const patients = useMockStore(
-    useShallow((s) => s.patients.filter((p) => p.clinic_id === clinicId)),
+    useShallow((state) => state.patients.filter((patient) => patient.clinic_id === clinicId)),
   );
+  const users = useMockStore((state) => state.users);
+  const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
   if (pathname !== "/pro/treatment-plans") return <Outlet />;
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    <div className="space-y-4 p-4 sm:p-6">
       <PageHeader
-        title="Treatment plans"
-        description="FDI-based plans prepared for clinic patients."
+        title="Treatment Plans"
+        description="Prepare clinical care, travel, pricing, review and sharing in one patient-document workspace."
       />
       {plans.length === 0 ? (
         <EmptyState
           title="No treatment plans"
-          description="Create a treatment plan from a patient record to begin clinical planning."
+          description="Create a Treatment Plan from a patient or Lead to begin."
         />
       ) : (
         <Card>
-          <CardContent className="p-0 overflow-x-auto">
+          <CardContent className="overflow-x-auto p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Plan</TableHead>
                   <TableHead>Patient</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead>Estimated total</TableHead>
+                  <TableHead>Dentist</TableHead>
+                  <TableHead>Total</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Sharing</TableHead>
                   <TableHead>Updated</TableHead>
                   <TableHead />
                 </TableRow>
@@ -54,35 +69,42 @@ function Plans() {
               <TableBody>
                 {plans.map((plan) => {
                   const patient = patients.find((item) => item.id === plan.clinic_patient_id);
-                  const items = Array.isArray(plan.items) ? plan.items : [];
-                  const estimatedTotal = items.reduce(
-                    (sum, item) => sum + (Number(item.unit_price) || 0),
-                    0,
-                  );
-                  const updatedAt =
-                    plan.updated_at && !Number.isNaN(Date.parse(plan.updated_at))
-                      ? formatCrmDate(plan.updated_at)
-                      : "Not updated";
+                  const dentist = users.find((item) => item.id === plan.dentist_id);
+                  const totals = calculateTreatmentPlanTotals(plan);
                   return (
                     <TableRow key={plan.id}>
-                      <TableCell className="font-medium">{plan.title}</TableCell>
+                      <TableCell>
+                        <p className="font-medium">{plan.title}</p>
+                        <p className="max-w-64 truncate text-xs text-muted-foreground">
+                          {plan.summary}
+                        </p>
+                      </TableCell>
                       <TableCell>
                         {patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
                       </TableCell>
-                      <TableCell>{items.length}</TableCell>
-                      <TableCell>{formatQuoteMoney(estimatedTotal, "EUR")}</TableCell>
+                      <TableCell>{dentist?.name ?? "Not assigned"}</TableCell>
+                      <TableCell>
+                        {formatQuoteMoney(totals.total, plan.currency ?? "EUR")}
+                      </TableCell>
                       <TableCell>
                         <StatusBadge status={plan.status ?? "draft"} />
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{updatedAt}</TableCell>
+                      <TableCell>
+                        {plan.share_token
+                          ? isTreatmentPlanPubliclyViewable(plan.status)
+                            ? "Public link ready"
+                            : "Private preview"
+                          : "Not prepared"}
+                      </TableCell>
+                      <TableCell>{formatCrmDate(plan.updated_at)}</TableCell>
                       <TableCell className="text-right">
-                        <Link
-                          to="/pro/treatment-plans/$id"
-                          params={{ id: plan.id }}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          Open planner
-                        </Link>
+                        <PlanActions
+                          plan={plan}
+                          clinicId={clinicId}
+                          actorId={activeUser?.id}
+                          role={activeUser?.role}
+                          updateStatus={updateStatus}
+                        />
                       </TableCell>
                     </TableRow>
                   );
@@ -93,5 +115,70 @@ function Plans() {
         </Card>
       )}
     </div>
+  );
+}
+
+function PlanActions({
+  plan,
+  clinicId,
+  actorId,
+  role,
+  updateStatus,
+}: {
+  plan: ReturnType<typeof useMockStore.getState>["treatmentPlans"][number];
+  clinicId: string;
+  actorId?: string;
+  role?: string;
+  updateStatus: ReturnType<typeof useMockStore.getState>["updateTreatmentPlanStatus"];
+}) {
+  const copyLink = () => {
+    if (!plan.share_token) return;
+    void navigator.clipboard.writeText(
+      `${window.location.origin}/shared/treatment-plan/${plan.share_token}`,
+    );
+    toast.success("Share link copied");
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={`Actions for ${plan.title}`}>
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem asChild>
+          <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
+            Open Treatment Plan
+          </Link>
+        </DropdownMenuItem>
+        {plan.share_token && (
+          <DropdownMenuItem asChild>
+            <Link
+              to="/shared/treatment-plan/$token"
+              params={{ token: plan.share_token }}
+              search={{ preview: true }}
+            >
+              Preview Patient View
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {plan.share_token && isTreatmentPlanPubliclyViewable(plan.status) && (
+          <DropdownMenuItem onClick={copyLink}>Copy Share Link</DropdownMenuItem>
+        )}
+        {(plan.status ?? "draft") === "draft" && (
+          <DropdownMenuItem
+            onClick={() => updateStatus(plan.id, clinicId, "doctor_review", actorId)}
+          >
+            Send for Doctor Review
+          </DropdownMenuItem>
+        )}
+        {(plan.status ?? "draft") === "doctor_review" &&
+          ["dentist", "clinic_owner", "clinic_admin"].includes(role ?? "") && (
+            <DropdownMenuItem onClick={() => updateStatus(plan.id, clinicId, "approved", actorId)}>
+              Mark Approved
+            </DropdownMenuItem>
+          )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

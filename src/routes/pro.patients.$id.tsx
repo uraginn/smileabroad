@@ -32,8 +32,8 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
-import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
-import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
+import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
+import { formatQuoteMoney } from "@/lib/quote";
 import type { AssessmentUploads } from "@/types/models";
 
 export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDetail });
@@ -73,7 +73,6 @@ function PatientDetail() {
   const allFiles = useMockStore((s) => s.files);
   const allActivities = useMockStore((s) => s.activities);
   const allPlans = useMockStore((s) => s.treatmentPlans);
-  const allQuotes = useMockStore((s) => s.quotes);
   const allTasks = useMockStore((s) => s.tasks);
   const files = useMemo(
     () =>
@@ -119,13 +118,6 @@ function PatientDetail() {
             (!t.clinic_patient_id && t.patient_user_id === patient?.user_id)),
       ),
     [allPlans, patient?.clinic_id, patient?.id, patient?.user_id],
-  );
-  const quotes = useMemo(
-    () =>
-      allQuotes.filter(
-        (q) => q.clinic_id === patient?.clinic_id && q.patient_user_id === patient?.user_id,
-      ),
-    [allQuotes, patient?.clinic_id, patient?.user_id],
   );
 
   const clinicUsers = useMemo(
@@ -215,16 +207,8 @@ function PatientDetail() {
         detail: plan.title,
       });
     }
-    for (const quote of quotes) {
-      events.push({
-        id: `quote-${quote.id}`,
-        at: quote.created_at,
-        title: "Quote Sent",
-        detail: quote.id,
-      });
-    }
     return events.sort((a, b) => +new Date(a.at) - +new Date(b.at));
-  }, [activities, application, assessment, lead, plans, quotes, roadmap]);
+  }, [activities, application, assessment, lead, plans, roadmap]);
 
   const [internalNote, setInternalNote] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -360,12 +344,8 @@ function PatientDetail() {
         actions={
           <>
             <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
-              <Plus className="size-4 mr-1" /> Create Treatment Plan
-            </Button>
-            <Button asChild variant="outline" disabled={quotes.length === 0}>
-              <Link to="." hash="quotes">
-                View Quotes
-              </Link>
+              <Plus className="size-4 mr-1" />
+              {plans.length > 0 ? "Open Treatment Plan" : "Create Treatment Plan"}
             </Button>
             <Button variant="outline" disabled>
               <CalendarCheck2 className="size-4 mr-1" /> Schedule Appointment
@@ -516,7 +496,6 @@ function PatientDetail() {
             ["communication", "Communication"],
             ["tasks", "Tasks"],
             ["treatment-plans", "Treatment Plans"],
-            ["quotes", "Quotes"],
             ["activity", "Activity"],
           ].map(([value, label]) => (
             <TabsTrigger key={value} value={value} className="capitalize">
@@ -534,8 +513,16 @@ function PatientDetail() {
             </Card>
             <Card>
               <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground">Quotes</p>
-                <p className="text-2xl font-display font-semibold mt-1">{quotes.length}</p>
+                <p className="text-xs text-muted-foreground">Estimated plan value</p>
+                <p className="text-2xl font-display font-semibold mt-1">
+                  {formatQuoteMoney(
+                    plans.reduce(
+                      (total, plan) => total + calculateTreatmentPlanTotals(plan).total,
+                      0,
+                    ),
+                    plans[0]?.currency ?? "EUR",
+                  )}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -961,7 +948,7 @@ function PatientDetail() {
             ) : (
               plans.map((p) => {
                 const planDentist = clinicUsers.find((user) => user.id === p.dentist_id);
-                const estimatedTotal = p.items.reduce((sum, item) => sum + item.unit_price, 0);
+                const totals = calculateTreatmentPlanTotals(p);
                 return (
                   <Card key={p.id}>
                     <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
@@ -972,8 +959,8 @@ function PatientDetail() {
                           {formatDateTime(p.updated_at)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} items · €
-                          {estimatedTotal.toLocaleString()}
+                          {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} clinical
+                          items · {formatQuoteMoney(totals.total, p.currency ?? "EUR")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -981,63 +968,10 @@ function PatientDetail() {
                           {(p.status ?? "draft").replace(/_/g, " ")}
                         </Badge>
                         <Button asChild variant="outline" size="sm">
-                          <Link to="/pro/treatment-plans/$id" params={{ id: p.id }}>
-                            Open Plan
+                          <Link to="/dentalplan" search={{ treatmentPlanId: p.id }}>
+                            Open Treatment Plan
                           </Link>
                         </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </TabsContent>
-        <TabsContent value="quotes">
-          <div className="space-y-2" id="quotes">
-            {quotes.length === 0 ? (
-              <EmptyState
-                title="No quotes yet"
-                description="Once a treatment plan is priced, related quotes will appear here."
-              />
-            ) : (
-              quotes.map((q) => {
-                const quotePlan = plans.find((plan) => plan.id === q.treatment_plan_id);
-                return (
-                  <Card key={q.id}>
-                    <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <p className="font-medium">Quote {q.id.slice(0, 8)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {quotePlan?.title ?? "Treatment plan"} · Updated{" "}
-                          {formatDateTime(q.updated_at)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className="capitalize">{q.status ?? "draft"}</Badge>
-                        <span className="text-sm font-medium">
-                          {formatQuoteMoney(calculateQuoteTotals(q).total, q.currency)}
-                        </span>
-                        <Button asChild size="sm" variant="outline">
-                          <Link to="/pro/quotes/$id" params={{ id: q.id }}>
-                            Open Quote
-                          </Link>
-                        </Button>
-                        {q.share_token && (
-                          <Button asChild size="sm" variant="ghost">
-                            <Link
-                              to="/shared/treatment-plan/$token"
-                              params={{ token: q.share_token }}
-                              search={
-                                isQuotePubliclyViewable(q.status)
-                                  ? { preview: false }
-                                  : { preview: true }
-                              }
-                            >
-                              {isQuotePubliclyViewable(q.status) ? "View shared" : "Preview quote"}
-                            </Link>
-                          </Button>
-                        )}
                       </div>
                     </CardContent>
                   </Card>

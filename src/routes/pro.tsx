@@ -5,7 +5,6 @@ import {
   Kanban,
   Users,
   ClipboardList,
-  FileText,
   CalendarCheck,
   CheckSquare,
   FileBox,
@@ -34,7 +33,6 @@ const items = [
     icon: ClipboardList,
     group: "clinical" as const,
   },
-  { to: "/pro/quotes", label: "Quotes", icon: FileText, group: "clinical" as const },
 
   { to: "/pro/team", label: "Team", icon: UserRound, group: "clinic" as const },
   { to: "/pro/templates", label: "Templates", icon: FileBox, group: "clinic" as const },

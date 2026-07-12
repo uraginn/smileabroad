@@ -17,6 +17,7 @@ import {
 import { formatQuoteMoney } from "@/lib/quote";
 import { mapClinicQuoteCarePlan } from "@/lib/care-plan";
 import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
+import { mapTreatmentPlanToLegacyQuote } from "@/lib/legacy-quote-compat";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import {
   PlanDisclaimer,
@@ -41,21 +42,29 @@ function SharedPlan() {
   const authHydrated = useAuthHydrated();
   const hydrated = useMockStoreHydrated();
   const tokenQuote = useMockStore((s) => s.quotes.find((quote) => quote.share_token === token));
+  const tokenPlan = useMockStore((s) =>
+    s.treatmentPlans.find((plan) => plan.share_token === token),
+  );
+  const tokenOwnerClinicId = tokenQuote?.clinic_id ?? tokenPlan?.clinic_id;
   const canClinicPreview =
     Boolean(preview) &&
-    Boolean(tokenQuote) &&
+    Boolean(tokenQuote || tokenPlan) &&
     Boolean(activeUser) &&
-    (activeUser?.role === "platform_admin" || activeUser?.clinic_id === tokenQuote?.clinic_id);
+    (activeUser?.role === "platform_admin" || activeUser?.clinic_id === tokenOwnerClinicId);
   const quote =
     tokenQuote && (isQuotePubliclyViewable(tokenQuote.status) || canClinicPreview)
       ? tokenQuote
-      : undefined;
-  const plan = useMockStore((s) =>
-    quote
-      ? s.treatmentPlans.find(
-          (item) => item.id === quote.treatment_plan_id && item.clinic_id === quote.clinic_id,
-        )
-      : undefined,
+      : tokenPlan && (isQuotePubliclyViewable(tokenPlan.status) || canClinicPreview)
+        ? mapTreatmentPlanToLegacyQuote(tokenPlan)
+        : undefined;
+  const plan = useMockStore(
+    (s) =>
+      tokenPlan ??
+      (quote
+        ? s.treatmentPlans.find(
+            (item) => item.id === quote.treatment_plan_id && item.clinic_id === quote.clinic_id,
+          )
+        : undefined),
   );
   const clinic = useMockStore((s) =>
     quote ? s.clinics.find((item) => item.id === quote.clinic_id) : undefined,
@@ -78,11 +87,15 @@ function SharedPlan() {
       : undefined,
   );
   const updateQuote = useMockStore((s) => s.updateQuote);
+  const markPlanViewed = useMockStore((s) => s.markTreatmentPlanViewed);
+  const markPlanAccepted = useMockStore((s) => s.markTreatmentPlanAccepted);
 
   useEffect(() => {
-    if (!preview && quote?.status === "sent")
-      updateQuote(quote.id, { status: "viewed" }, "patient_shared");
-  }, [preview, quote?.id, quote?.status, updateQuote]);
+    if (!preview && quote?.status === "sent") {
+      if (tokenQuote) updateQuote(tokenQuote.id, { status: "viewed" }, "patient_shared");
+      else if (tokenPlan) markPlanViewed(tokenPlan.id, tokenPlan.clinic_id);
+    }
+  }, [markPlanViewed, preview, quote?.status, tokenPlan, tokenQuote, updateQuote]);
 
   if (!hydrated || (preview && !authHydrated)) return null;
   if (!quote || !plan || !clinic) return <SafeNotFound />;
@@ -492,7 +505,11 @@ function SharedPlan() {
                   )}
                   <Button
                     variant="outline"
-                    onClick={() => updateQuote(quote.id, { status: "accepted" }, "patient_shared")}
+                    onClick={() =>
+                      tokenQuote
+                        ? updateQuote(tokenQuote.id, { status: "accepted" }, "patient_shared")
+                        : tokenPlan && markPlanAccepted(tokenPlan.id, tokenPlan.clinic_id)
+                    }
                   >
                     Accept Plan
                   </Button>

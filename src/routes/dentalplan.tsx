@@ -6,6 +6,8 @@ import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { treatmentLabel } from "@/lib/dental";
 import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
+import { calculateCommercial } from "@/features/dentalplan/utils/commercial";
+import { UnifiedPlanShareSection } from "@/features/dentalplan/components/UnifiedPlanShareSection";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
 
 type Search = {
@@ -64,6 +66,10 @@ function DentalPlanRoute() {
   const users = useMockStore((state) => state.users);
   const treatmentDefinitions = useMockStore((state) => state.clinicTreatmentDefinitions);
   const hotels = useMockStore((state) => state.clinicHotels);
+  const clinic = useMockStore((state) => state.clinics.find((item) => item.id === user?.clinic_id));
+  const branding = useMockStore((state) =>
+    state.branding.find((item) => item.clinic_id === user?.clinic_id),
+  );
   const templates = useMockStore((state) => state.dentalPlanTemplates);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
@@ -316,6 +322,60 @@ function DentalPlanRoute() {
         </p>
       </div>
     );
+  const saveDraft = (value: DentalPlanData) => {
+    if (!existingPlan || !user?.clinic_id) return;
+    const draftItems: TreatmentPlanItem[] = value.proposedTreatments.flatMap((treatment) =>
+      treatment.toothNumbers.map((tooth) => ({
+        id: `dpi_${treatment.id}_${tooth}`,
+        tooth,
+        treatment: treatmentMap[treatment.treatmentType] ?? "crown",
+        notes: treatment.notes,
+        unit_price:
+          value.commercial.items.find((item) => item.treatmentId === treatment.id)?.unitPrice ?? 0,
+      })),
+    );
+    const totals = calculateCommercial(value.commercial);
+    updatePlan(
+      existingPlan.id,
+      {
+        title: value.patient.planTitle,
+        items: draftItems,
+        dentist_id: value.patient.dentistId,
+        coordinator_id: value.patient.coordinatorId,
+        patient_facing_notes: value.travel.patientFacingNotes,
+        internal_clinical_notes: value.travel.internalNotes,
+        dental_plan_data: value,
+        currency: value.commercial.currency,
+        price_items: value.commercial.items.map((item) => {
+          const treatment = value.proposedTreatments.find(
+            (candidate) => candidate.id === item.treatmentId,
+          );
+          return {
+            id: `price_${item.treatmentId}`,
+            label: item.label,
+            quantity: item.qty,
+            unit_price: item.unitPrice,
+            treatment_key: treatment?.treatmentType,
+            treatment_group_id: treatment?.treatmentGroupId,
+            manually_overridden: item.priceOverridden,
+          };
+        }),
+        hotel_total: value.commercial.hotelTotal,
+        transfer_total: value.commercial.transferTotal,
+        optional_service_total: value.commercial.otherServiceTotal,
+        discount_type: value.commercial.discountType,
+        discount_value: value.commercial.discountValue,
+        calculated_discount: totals.discount,
+        payment_schedule: value.commercial.paymentSchedule,
+        valid_until: value.commercial.validUntil,
+        included_services: value.travel.includedServices,
+        hotel_nights: value.travel.hotelIncluded ? value.travel.hotelNights : 0,
+        transfers_included: value.travel.airportTransfer || value.travel.localTransfer,
+        flight_included: value.travel.flightIncluded,
+      },
+      user.id,
+    );
+  };
   const finalize = async (value: DentalPlanData) => {
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
@@ -536,8 +596,8 @@ function DentalPlanRoute() {
         },
         user.id,
       );
-      navigate({ to: "/pro/quotes/$id", params: { id: existingQuote.id } });
-    } else navigate({ to: "/pro/treatment-plans/$id", params: { id: plan.id } });
+    }
+    navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id }, replace: true });
     return { treatmentPlanId: plan.id, legacyQuoteId: existingQuote?.id };
   };
   return (
@@ -549,6 +609,23 @@ function DentalPlanRoute() {
         treatmentPlanId: existingPlan?.id,
       }}
       initialValue={initial}
+      preliminarySuggestions={(roadmap?.treatment_estimates ?? []).map((item) => ({
+        key: item.treatment_key,
+        label: item.label,
+        quantity: item.estimated_quantity,
+      }))}
+      shareSection={
+        existingPlan ? (
+          <UnifiedPlanShareSection
+            plan={existingPlan}
+            clinic={clinic}
+            branding={branding}
+            patient={patient}
+            actorId={user?.id}
+            role={user?.role}
+          />
+        ) : undefined
+      }
       clinicUsers={users
         .filter(
           (member) =>
@@ -635,7 +712,7 @@ function DentalPlanRoute() {
                 },
                 user?.id,
               )
-          : undefined
+          : saveDraft
       }
     />
   );

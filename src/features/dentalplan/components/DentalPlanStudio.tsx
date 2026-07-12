@@ -46,13 +46,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-const STEPS = [
-  "Patient & Case Information",
-  "Clinical Planning",
-  "Travel, Visits & Services",
-  "Pricing & Commercial Details",
-  "Review & Finalize",
-];
+const STEPS = ["Patient", "Clinical Plan", "Travel & Services", "Pricing", "Review", "Share"];
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
   const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
   const [plan, setPlan] = useState<DentalPlan | null>(null);
@@ -82,6 +76,8 @@ function PlannerShell({
   treatmentDefaults = [],
   hotels = [],
   templates = [],
+  preliminarySuggestions = [],
+  shareSection,
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
@@ -133,7 +129,7 @@ function PlannerShell({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
-  const step = Math.max(0, Math.min(4, plan.draftStep));
+  const step = Math.max(0, Math.min(5, plan.draftStep));
   const applyTemplate = (templateId: string) => {
     const template = templates.find((item) => item.id === templateId);
     if (!template) return;
@@ -190,7 +186,7 @@ function PlannerShell({
     setFinalizing(true);
     try {
       const ids = await onFinalize({ ...plan, finalized: true });
-      change({ finalized: true });
+      change({ finalized: true, draftStep: 5 });
       toast.success("Treatment plan finalized");
       setResult(
         `Treatment plan ${ids.treatmentPlanId} saved.${ids.legacyQuoteId ? " Opening legacy quote…" : ""}`,
@@ -355,18 +351,49 @@ function PlannerShell({
           </>
         )}{" "}
         {step === 1 && (
-          <TreatmentPlanner
-            value={plan}
-            onChange={setPlan}
-            readOnly={readOnly}
-            definitions={effectiveTreatments}
-          />
+          <div className="space-y-4">
+            {preliminarySuggestions.length > 0 && (
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <CardTitle className="text-base">Preliminary Roadmap suggestions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {preliminarySuggestions.map((item) => (
+                      <Badge key={item.key} variant="outline">
+                        {item.label}
+                        {item.quantity ? ` · approximately ${item.quantity}` : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Reference only. Suggestions do not select teeth or become confirmed treatments
+                    until edited by the clinic.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            <TreatmentPlanner
+              value={plan}
+              onChange={setPlan}
+              readOnly={readOnly}
+              definitions={effectiveTreatments}
+            />
+          </div>
         )}{" "}
         {step === 2 && <TravelServicesStep plan={plan} change={change} hotels={hotels} />}{" "}
         {step === 3 && (
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
         )}
         {step === 4 && <FinalReviewStep plan={plan} hotels={hotels} />}
+        {step === 5 &&
+          (shareSection ?? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Save this Treatment Plan before sharing.
+              </CardContent>
+            </Card>
+          ))}
         <div className="flex justify-between">
           <Button
             variant="outline"
@@ -377,26 +404,28 @@ function PlannerShell({
           </Button>
           {step < 4 ? (
             <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
-          ) : context?.mode === "template" ? (
+          ) : step === 5 ? null : context?.mode === "template" ? (
             <Button onClick={save}>Save template</Button>
           ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button disabled={finalizing || !plan.proposedTreatments.length}>
-                  {finalizing ? "Finalizing…" : "Finalize and open quote"}
+                  {finalizing ? "Saving…" : "Save Treatment Plan and continue"}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Finalize this clinical plan?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This saves the existing CRM Treatment Plan and creates or updates its linked
-                    Quote.
+                    This saves clinical, travel and pricing information to the unified Treatment
+                    Plan.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={finalize}>Finalize and open quote</AlertDialogAction>
+                  <AlertDialogAction onClick={finalize}>
+                    Save and continue to Share
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

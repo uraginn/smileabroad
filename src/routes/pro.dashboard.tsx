@@ -4,7 +4,6 @@ import {
   selectClinicLeads,
   selectClinicPatients,
   selectClinicPlans,
-  selectClinicQuotes,
   selectClinicTasks,
   selectClinicAppointments,
 } from "@/lib/mock/store";
@@ -16,12 +15,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LEAD_STATUSES } from "@/lib/constants";
-import { calculateQuoteTotals } from "@/lib/quote";
+import { formatQuoteMoney } from "@/lib/quote";
+import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 import {
   Kanban,
   Users,
   ClipboardList,
-  FileText,
   CheckSquare,
   CalendarCheck,
   CheckCircle2,
@@ -39,7 +38,6 @@ function ProDashboard() {
   const leads = useMockStore(useShallow(selectClinicLeads(clinicId)));
   const patients = useMockStore(useShallow(selectClinicPatients(clinicId)));
   const plans = useMockStore(useShallow(selectClinicPlans(clinicId)));
-  const quotes = useMockStore(useShallow(selectClinicQuotes(clinicId)));
   const tasks = useMockStore(useShallow(selectClinicTasks(clinicId)));
   const appts = useMockStore(useShallow(selectClinicAppointments(clinicId)));
   const applications = useMockStore(
@@ -57,8 +55,12 @@ function ProDashboard() {
     .slice()
     .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at))
     .slice(0, 5);
-  const draftPlans = plans.filter((p) => (p.status ?? "draft") === "draft");
-  const totalQuoted = quotes.reduce((sum, quote) => sum + calculateQuoteTotals(quote).total, 0);
+  const draftPlans = plans.filter((plan) => (plan.status ?? "draft") === "draft");
+  const awaitingReview = plans.filter((plan) => plan.status === "doctor_review");
+  const totalPlanValue = plans.reduce(
+    (sum, plan) => sum + calculateTreatmentPlanTotals(plan).total,
+    0,
+  );
 
   const activityItems: ActivityItem[] = [
     ...activities.map((item) => ({
@@ -103,18 +105,6 @@ function ProDashboard() {
       to: "/pro/treatment-plans/$id",
       params: { id: plan.id },
     })),
-    ...quotes.map((quote) => ({
-      id: quote.id,
-      type: "quote" as const,
-      title: `Quote ${quote.id.slice(0, 6)}`,
-      patient: leads.find((lead) => lead.clinic_patient_id === quote.clinic_patient_id)
-        ?.patient_name,
-      status: quote.status,
-      timestamp: quote.updated_at,
-      description: `${quote.items.length} items in quote`,
-      to: "/pro/quotes/$id",
-      params: { id: quote.id },
-    })),
   ]
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
     .slice(0, 10);
@@ -153,16 +143,16 @@ function ProDashboard() {
         />
         <StatCard
           icon={ClipboardList}
-          label="Treatment plans"
+          label="Active Treatment Plans"
           value={plans.length}
           tone="success"
           comparison={`${draftPlans.length} draft`}
         />
         <StatCard
-          icon={FileText}
-          label="Quotes"
-          value={quotes.length}
-          hint={`Total ${quotes[0]?.currency === "USD" ? "$" : "€"}${totalQuoted.toLocaleString()}`}
+          icon={Clock3}
+          label="Awaiting Review"
+          value={awaitingReview.length}
+          hint={`Estimated value ${formatQuoteMoney(totalPlanValue, plans[0]?.currency ?? "EUR")}`}
         />
         <StatCard
           icon={CheckSquare}
