@@ -871,7 +871,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 9,
+      version: 10,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -999,7 +999,9 @@ export const useMockStore = create<Store>()(
           })),
           clinicHotels: (state.clinicHotels ?? []).map((item) => ({
             ...item,
-            category: item.category ?? "Standard",
+            categories: Array.isArray(item.categories)
+              ? item.categories
+              : [(item as typeof item & { category?: string }).category ?? "Standard"],
             room_types: Array.isArray(item.room_types) ? item.room_types : [],
             board_types: Array.isArray(item.board_types) ? item.board_types : [],
             images: Array.isArray(item.images) ? item.images.slice(0, 4) : [],

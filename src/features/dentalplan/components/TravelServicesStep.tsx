@@ -47,7 +47,9 @@ export function TravelServicesStep({
   const normalizedHotelQuery = hotelQuery.trim().toLocaleLowerCase();
   const filteredHotels = normalizedHotelQuery
     ? hotels.filter((hotel) =>
-        `${hotel.name} ${hotel.category}`.toLocaleLowerCase().includes(normalizedHotelQuery),
+        `${hotel.name} ${hotel.categories.join(" ")}`
+          .toLocaleLowerCase()
+          .includes(normalizedHotelQuery),
       )
     : hotels;
   const update = (patch: Partial<DentalPlan["travel"]>) =>
@@ -147,7 +149,7 @@ export function TravelServicesStep({
                     <SelectContent>
                       {filteredHotels.map((hotel) => (
                         <SelectItem key={hotel.id} value={hotel.id}>
-                          {hotel.name} · {hotel.category}
+                          {hotel.name} · {hotel.categories.join(", ")}
                           {hotel.isDefault ? " · Default" : ""}
                         </SelectItem>
                       ))}
@@ -318,16 +320,24 @@ function HotelPreview({ hotel }: { hotel: HotelOption }) {
         <div className="min-w-48 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{hotel.name}</p>
-            <Badge variant="outline">{hotel.category}</Badge>
+            {hotel.categories.map((category) => (
+              <Badge key={category} variant="outline">
+                {category}
+              </Badge>
+            ))}
           </div>
           <p className="text-sm">
             {hotel.pricePerNight} {hotel.currency} / night
           </p>
-          {hotel.companionPolicy && (
-            <p className="text-xs text-muted-foreground">Companion: {hotel.companionPolicy}</p>
-          )}
-          {hotel.description && (
-            <p className="mt-1 text-sm text-muted-foreground">{hotel.description}</p>
+          {hotel.website && (
+            <a
+              href={hotel.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block text-sm text-primary underline"
+            >
+              Visit hotel website
+            </a>
           )}
         </div>
         {hotel.images

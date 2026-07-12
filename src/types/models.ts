@@ -449,7 +449,8 @@ export interface DentalPlanTemplate extends BaseRecord {
 export interface ClinicHotel extends BaseRecord {
   clinic_id: string;
   name: string;
-  category: string;
+  categories: string[];
+  website?: string;
   description?: string;
   address?: string;
   city: string;

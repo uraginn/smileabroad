@@ -564,7 +564,8 @@ function DentalPlanRoute() {
         .map((item) => ({
           id: item.id,
           name: item.name,
-          category: item.category,
+          categories: item.categories,
+          website: item.website,
           description: item.description,
           roomTypes: item.room_types,
           boardTypes: item.board_types,

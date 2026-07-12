@@ -260,7 +260,8 @@ export interface DentalPlanStudioProps {
   hotels?: Array<{
     id: string;
     name: string;
-    category: string;
+    categories: string[];
+    website?: string;
     description?: string;
     roomTypes: string[];
     boardTypes: string[];

@@ -1,14 +1,24 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui-bits";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Attachment } from "@/components/ui/attachment";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -24,6 +34,11 @@ import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import { Tooth } from "@/features/dentalplan/components/Tooth";
 import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
 import { LocalPlannerAssetAdapter } from "@/features/dentalplan/adapters/LocalPlannerAssetAdapter";
+import {
+  HOTEL_CATEGORY_DEFAULTS,
+  normalizedTreatmentCategory,
+  treatmentCategories,
+} from "@/features/dentalplan-settings/categories";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { useMockStore } from "@/lib/mock/store";
 import { formatQuoteMoney } from "@/lib/quote";
@@ -63,7 +78,7 @@ function DentalPlannerSettings() {
   const [dentist, setDentist] = useState<Partial<User> | null>(null);
   const [template, setTemplate] = useState<DentalPlanTemplate | null>(null);
   const [hotel, setHotel] = useState<ClinicHotel | null>(null);
-  const [hotelCategory, setHotelCategory] = useState("all");
+  const [hotelCategories, setHotelCategories] = useState<string[]>([]);
   const clinicDefinitions = useMemo(
     () => definitions.filter((item) => item.clinic_id === clinicId),
     [definitions, clinicId],
@@ -98,44 +113,118 @@ function DentalPlannerSettings() {
     ),
     ...clinicDefinitions.filter((item) => !item.system),
   ];
+  const groupedTreatments = treatmentCategories(rows)
+    .map((category) => ({
+      category,
+      items: rows.filter((item) => normalizedTreatmentCategory(item) === category),
+    }))
+    .filter((group) => group.items.length > 0);
+  const availableHotelCategories = [
+    ...new Set([...HOTEL_CATEGORY_DEFAULTS, ...clinicHotels.flatMap((item) => item.categories)]),
+  ];
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <PageHeader
         title="Dental Planner"
-        description="Configure reusable clinic treatments, dentists, templates and hotels."
+        description="Configure reusable clinic treatments, dentists and hotels."
       />
       <Tabs defaultValue="treatments">
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="treatments">Treatments</TabsTrigger>
           <TabsTrigger value="dentists">Dentists</TabsTrigger>
-          <TabsTrigger value="templates">Dental Templates</TabsTrigger>
           <TabsTrigger value="hotels">Hotels</TabsTrigger>
         </TabsList>
         <TabsContent value="treatments">
-          <Section title="Treatments" action={() => setTreatment(blankTreatment(clinicId))}>
-            {rows.map((item) => (
-              <Row
-                key={item.id}
-                title={item.display_name}
-                description={`${item.category} · ${item.unit_type}`}
-                badges={[
-                  item.system ? "System" : "Custom",
-                  item.active ? "Active" : "Inactive",
-                  formatQuoteMoney(item.prices.EUR ?? 0, "EUR"),
-                ]}
-                onEdit={() => setTreatment(item)}
-                onDelete={
-                  !item.system
-                    ? () =>
-                        confirmDelete(
-                          () => deleteDefinition(item.id, clinicId),
-                          "Treatment removed",
-                        )
-                    : undefined
-                }
-              />
-            ))}
-          </Section>
+          <Tabs defaultValue="library">
+            <TabsList>
+              <TabsTrigger value="library">Treatment Library</TabsTrigger>
+              <TabsTrigger value="templates">Plan Templates</TabsTrigger>
+            </TabsList>
+            <TabsContent value="library">
+              <Section
+                title="Treatment Library"
+                action={() => setTreatment(blankTreatment(clinicId))}
+              >
+                <Accordion type="multiple" className="px-4">
+                  {groupedTreatments.map((group) => (
+                    <AccordionItem key={group.category} value={group.category}>
+                      <AccordionTrigger>
+                        <span>
+                          {group.category}{" "}
+                          <Badge variant="secondary" className="ml-2">
+                            {group.items.length}
+                          </Badge>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="divide-y">
+                        {group.items.map((item) => (
+                          <Row
+                            key={item.id}
+                            title={item.display_name}
+                            description={item.unit_type}
+                            badges={[
+                              item.system ? "System" : "Custom",
+                              item.active ? "Active" : "Inactive",
+                              priceSummary(item.prices),
+                            ]}
+                            onEdit={() => setTreatment(item)}
+                            onDelete={
+                              !item.system
+                                ? () =>
+                                    confirmDelete(
+                                      () => deleteDefinition(item.id, clinicId),
+                                      "Treatment removed",
+                                    )
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </Section>
+            </TabsContent>
+            <TabsContent value="templates">
+              <Section
+                title="Plan Templates"
+                action={() => setTemplate(blankTemplate(clinicId, user.id))}
+              >
+                {clinicTemplates.map((item) => (
+                  <Row
+                    key={item.id}
+                    title={item.name}
+                    description={item.description || item.category}
+                    badges={[item.category, item.active ? "Active" : "Inactive"]}
+                    onEdit={() =>
+                      navigate({
+                        to: "/dentalplan",
+                        search: { mode: "template", templateId: item.id },
+                      })
+                    }
+                    editLabel="Edit in Planner"
+                    onSecondary={() => setTemplate(item)}
+                    secondaryLabel="Details"
+                    onDuplicate={() => {
+                      saveTemplate(
+                        {
+                          ...item,
+                          id: crypto.randomUUID(),
+                          name: `${item.name} copy`,
+                          plan_data: createDentalPlan(item.plan_data as never),
+                        },
+                        user.id,
+                      );
+                      toast.success("Template duplicated");
+                    }}
+                    onDelete={() =>
+                      confirmDelete(() => deleteTemplate(item.id, clinicId), "Template removed")
+                    }
+                  />
+                ))}
+              </Section>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
         <TabsContent value="dentists">
           <Section
@@ -164,72 +253,46 @@ function DentalPlannerSettings() {
             ))}
           </Section>
         </TabsContent>
-        <TabsContent value="templates">
-          <Section
-            title="Dental Templates"
-            action={() => setTemplate(blankTemplate(clinicId, user.id))}
-          >
-            {clinicTemplates.map((item) => (
-              <Row
-                key={item.id}
-                title={item.name}
-                description={item.description || item.category}
-                badges={[item.category, item.active ? "Active" : "Inactive"]}
-                onEdit={() =>
-                  navigate({ to: "/dentalplan", search: { mode: "template", templateId: item.id } })
-                }
-                editLabel="Edit in Planner"
-                onSecondary={() => setTemplate(item)}
-                secondaryLabel="Details"
-                onDuplicate={() => {
-                  saveTemplate(
-                    {
-                      ...item,
-                      id: crypto.randomUUID(),
-                      name: `${item.name} copy`,
-                      plan_data: createDentalPlan(item.plan_data as never),
-                    },
-                    user.id,
-                  );
-                  toast.success("Template duplicated");
-                }}
-                onDelete={() =>
-                  confirmDelete(() => deleteTemplate(item.id, clinicId), "Template removed")
-                }
-              />
-            ))}
-          </Section>
-        </TabsContent>
         <TabsContent value="hotels">
           <Section title="Hotels" action={() => setHotel(blankHotel(clinicId, user.id))}>
             <div className="p-4">
-              <Select value={hotelCategory} onValueChange={setHotelCategory}>
-                <SelectTrigger className="max-w-xs">
-                  <SelectValue placeholder="Filter category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {[...new Set(clinicHotels.map((item) => item.category))].map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiCategoryPicker
+                values={hotelCategories}
+                options={availableHotelCategories}
+                onChange={setHotelCategories}
+                label="Filter categories"
+              />
+              {hotelCategories.length > 0 && (
+                <Button
+                  className="mt-2"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setHotelCategories([])}
+                >
+                  Clear filters
+                </Button>
+              )}
             </div>
             {clinicHotels
-              .filter((item) => hotelCategory === "all" || item.category === hotelCategory)
+              // Multiple category filters use OR semantics: a match in any selected category is shown.
+              .filter(
+                (item) =>
+                  hotelCategories.length === 0 ||
+                  item.categories.some((category) => hotelCategories.includes(category)),
+              )
               .map((item) => (
                 <Row
                   key={item.id}
                   title={item.name}
-                  description={`${item.city}, ${item.country} · ${item.images.length}/4 images`}
+                  description={`${item.images.length}/4 photos`}
                   badges={[
                     item.is_default ? "Default" : "Hotel",
-                    item.category,
+                    ...item.categories,
                     item.active ? "Active" : "Inactive",
                     formatQuoteMoney(item.price_per_night, item.currency),
                   ]}
+                  secondaryHref={item.website}
+                  secondaryLabel="Website"
                   onEdit={() => setHotel(item)}
                   onDelete={() =>
                     confirmDelete(() => deleteHotel(item.id, clinicId), "Hotel removed")
@@ -241,6 +304,7 @@ function DentalPlannerSettings() {
       </Tabs>
       <TreatmentDialog
         value={treatment}
+        categories={treatmentCategories(rows)}
         onClose={() => setTreatment(null)}
         onSave={(record) => {
           saveDefinition(record, user.id);
@@ -338,6 +402,7 @@ function Row({
   onDelete,
   editLabel = "Edit",
   onSecondary,
+  secondaryHref,
   secondaryLabel,
   onDuplicate,
 }: {
@@ -348,6 +413,7 @@ function Row({
   onDelete?: () => void;
   editLabel?: string;
   onSecondary?: () => void;
+  secondaryHref?: string;
   secondaryLabel?: string;
   onDuplicate?: () => void;
 }) {
@@ -371,6 +437,13 @@ function Row({
         {onSecondary && (
           <Button size="sm" variant="ghost" onClick={onSecondary}>
             {secondaryLabel}
+          </Button>
+        )}
+        {secondaryHref && (
+          <Button size="sm" variant="ghost" asChild>
+            <a href={secondaryHref} target="_blank" rel="noopener noreferrer">
+              {secondaryLabel}
+            </a>
           </Button>
         )}
         {onDuplicate && (
@@ -436,51 +509,36 @@ function Field({
 
 function TreatmentDialog({
   value,
+  categories,
   onClose,
   onSave,
 }: {
   value: ClinicTreatmentDefinition | null;
+  categories: string[];
   onClose: () => void;
   onSave: (value: ClinicTreatmentDefinition) => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const [pricesOpen, setPricesOpen] = useState(false);
   if (value?.id !== draft?.id) setDraft(value);
   if (!draft) return null;
   const patch = (next: Partial<ClinicTreatmentDefinition>) => setDraft({ ...draft, ...next });
   return (
-    <DialogFrame open title="Treatment definition" onClose={onClose} onSave={() => onSave(draft)}>
-      <Field label="Internal identifier">
-        <Input
-          value={draft.treatment_key}
-          disabled={draft.system}
-          onChange={(e) => patch({ treatment_key: e.target.value })}
-        />
-      </Field>
-      <Field label="Display name">
+    <DialogFrame open title="Treatment" onClose={onClose} onSave={() => onSave(draft)}>
+      <Field label="Treatment name">
         <Input
           value={draft.display_name}
           onChange={(e) => patch({ display_name: e.target.value })}
         />
       </Field>
-      <Field label="Category">
-        <Input value={draft.category} onChange={(e) => patch({ category: e.target.value })} />
-      </Field>
-      <Field label="Unit type">
-        <Select
-          value={draft.unit_type}
-          onValueChange={(unit_type) =>
-            patch({ unit_type: unit_type as ClinicTreatmentDefinition["unit_type"] })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tooth">Tooth</SelectItem>
-            <SelectItem value="arch">Arch</SelectItem>
-            <SelectItem value="case">Case</SelectItem>
-          </SelectContent>
-        </Select>
+      <Field label="Treatment category">
+        <Combobox
+          value={draft.category}
+          options={categories.map((category) => ({ value: category, label: category }))}
+          onValueChange={(category) => patch({ category })}
+          searchPlaceholder="Search categories..."
+          emptyText="No categories found"
+        />
       </Field>
       <Field label="Description" wide>
         <Textarea
@@ -488,33 +546,19 @@ function TreatmentDialog({
           onChange={(e) => patch({ description: e.target.value })}
         />
       </Field>
-      {currencies.map((currency) => (
-        <Field key={currency} label={`${currency} default price`}>
-          <Input
-            type="number"
-            min={0}
-            value={draft.prices[currency] ?? 0}
-            onChange={(e) =>
-              patch({
-                prices: { ...draft.prices, [currency]: Math.max(0, Number(e.target.value)) },
-              })
-            }
-          />
-        </Field>
-      ))}
-      <Field label="Patient-facing label">
-        <Input
-          value={draft.patient_label ?? ""}
-          onChange={(e) => patch({ patient_label: e.target.value })}
-        />
+      <Field label="Default prices" wide>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border p-3">
+          <span className="flex-1 text-sm">{priceSummary(draft.prices)}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => setPricesOpen(true)}>
+            Manage prices
+          </Button>
+        </div>
       </Field>
-      <Field label="Internal label">
-        <Input
-          value={draft.internal_label ?? ""}
-          onChange={(e) => patch({ internal_label: e.target.value })}
-        />
-      </Field>
-      <Field label="Base clinical behaviour">
+      <Field label="Treatment behaviour" wide>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Choose which existing treatment this should behave like. This controls where it can be
+          applied, conflicts and price quantity rules.
+        </p>
         <Select
           value={draft.base_treatment_key}
           onValueChange={(base_treatment_key) => {
@@ -540,19 +584,40 @@ function TreatmentDialog({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Existing diagram visual">
-        <Select value={draft.visual_key} onValueChange={(visual_key) => patch({ visual_key })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TREATMENT_DEFINITIONS.filter((item) => item.supported).map((item) => (
-              <SelectItem key={item.type} value={item.type}>
-                {item.label} visual
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <Field label="Diagram appearance" wide>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Choose how this treatment will appear on the dental diagram. You can reuse an existing
+          visual such as Implant, Crown or Extraction.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {TREATMENT_DEFINITIONS.filter((item) => item.supported).map((item) => (
+            <Button
+              key={item.type}
+              type="button"
+              variant={draft.visual_key === item.type ? "default" : "outline"}
+              className="h-auto justify-start gap-2 py-2"
+              onClick={() => patch({ visual_key: item.type })}
+            >
+              <Tooth
+                toothNumber={11}
+                currentConditions={{}}
+                proposedTreatments={[
+                  {
+                    id: `preview-${item.type}`,
+                    toothNumbers: [11],
+                    treatmentType: item.type,
+                    visualKey: item.type,
+                  },
+                ]}
+                mode="proposed"
+                selected={false}
+                readOnly
+                onSelect={() => {}}
+              />
+              <span className="text-xs">{item.label}</span>
+            </Button>
+          ))}
+        </div>
       </Field>
       <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-3 text-sm sm:col-span-2">
         <Tooth
@@ -590,6 +655,15 @@ function TreatmentDialog({
       <Field label="Active">
         <Switch checked={draft.active} onCheckedChange={(active) => patch({ active })} />
       </Field>
+      <TreatmentPriceManager
+        open={pricesOpen}
+        prices={draft.prices}
+        onClose={() => setPricesOpen(false)}
+        onSave={(prices) => {
+          patch({ prices });
+          setPricesOpen(false);
+        }}
+      />
     </DialogFrame>
   );
 }
@@ -740,7 +814,10 @@ function HotelDialog({
   const patch = (next: Partial<ClinicHotel>) => setDraft({ ...draft, ...next });
   const addImage = async (file?: File) => {
     if (!file) return;
-    if (draft.images.length >= 4) return toast.error("A hotel can have up to four images");
+    if (draft.images.length >= 4) {
+      toast.error("A hotel can have up to four images");
+      return;
+    }
     try {
       patch({ images: [...draft.images, await assetAdapter.readHotelImage(file)] });
     } catch (error) {
@@ -748,65 +825,34 @@ function HotelDialog({
     }
   };
   return (
-    <DialogFrame open title="Hotel" onClose={onClose} onSave={() => onSave(draft)}>
+    <DialogFrame
+      open
+      title="Hotel"
+      onClose={onClose}
+      onSave={() => {
+        const website = normalizeWebsite(draft.website);
+        if (website && !isValidWebsite(website)) return toast.error("Enter a valid hotel website");
+        onSave({ ...draft, website });
+      }}
+    >
       <Field label="Hotel name">
         <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
-      <Field label="Category">
-        <Select value={draft.category} onValueChange={(category) => patch({ category })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[
-              "Budget",
-              "Standard",
-              "Premium",
-              "Luxury",
-              "Apartment",
-              "Clinic Residence",
-              "Other",
-            ].map((item) => (
-              <SelectItem key={item} value={item}>
-                {item}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="City">
-        <Input value={draft.city} onChange={(e) => patch({ city: e.target.value })} />
-      </Field>
-      <Field label="Country">
-        <Input value={draft.country} onChange={(e) => patch({ country: e.target.value })} />
-      </Field>
-      <Field label="Address">
-        <Input value={draft.address ?? ""} onChange={(e) => patch({ address: e.target.value })} />
-      </Field>
-      <Field label="Distance from clinic">
+      <Field label="Hotel website">
         <Input
-          value={draft.distance_from_clinic ?? ""}
-          onChange={(e) => patch({ distance_from_clinic: e.target.value })}
+          type="url"
+          value={draft.website ?? ""}
+          placeholder="https://hotel.example"
+          onChange={(event) => patch({ website: event.target.value })}
+          onBlur={() => patch({ website: normalizeWebsite(draft.website) })}
         />
       </Field>
-      <Field label="Default nights">
-        <Input
-          type="number"
-          min={0}
-          value={draft.default_nights}
-          onChange={(e) => patch({ default_nights: Math.max(0, Number(e.target.value)) })}
-        />
-      </Field>
-      <Field label="Room types">
-        <Input
-          value={draft.room_types.join(", ")}
-          onChange={(e) => patch({ room_types: split(e.target.value) })}
-        />
-      </Field>
-      <Field label="Board types">
-        <Input
-          value={draft.board_types.join(", ")}
-          onChange={(e) => patch({ board_types: split(e.target.value) })}
+      <Field label="Hotel categories" wide>
+        <MultiCategoryPicker
+          values={draft.categories}
+          options={[...new Set([...HOTEL_CATEGORY_DEFAULTS, ...draft.categories])]}
+          onChange={(categories) => patch({ categories })}
+          label="Select categories"
         />
       </Field>
       <Field label="Price per night">
@@ -817,90 +863,18 @@ function HotelDialog({
           onChange={(e) => patch({ price_per_night: Math.max(0, Number(e.target.value)) })}
         />
       </Field>
-      <Field label="Currency">
-        <Select
-          value={draft.currency}
-          onValueChange={(currency) => patch({ currency: currency as PlannerCurrency })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {currencies.map((item) => (
-              <SelectItem key={item} value={item}>
-                {item}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Description" wide>
-        <Textarea
-          value={draft.description ?? ""}
-          onChange={(e) => patch({ description: e.target.value })}
+      <Field label="Photos" wide>
+        <Attachment
+          items={draft.images.map((image) => ({
+            id: image.id,
+            name: image.name,
+            dataUrl: image.data_url,
+          }))}
+          onAdd={addImage}
+          onRemove={(id) => patch({ images: draft.images.filter((image) => image.id !== id) })}
+          onMove={(from, to) => patch({ images: move(draft.images, from, to) })}
+          maxFiles={4}
         />
-      </Field>
-      <Field label="Companion policy">
-        <Input
-          value={draft.companion_policy ?? ""}
-          onChange={(e) => patch({ companion_policy: e.target.value })}
-        />
-      </Field>
-      <Field label="Contact">
-        <Input value={draft.contact ?? ""} onChange={(e) => patch({ contact: e.target.value })} />
-      </Field>
-      <Field label="Images" wide>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {draft.images.map((image, index) => (
-            <div key={image.id} className="relative">
-              <img
-                src={image.data_url}
-                alt={image.name}
-                className="aspect-video w-full rounded border object-cover"
-              />
-              <Button
-                size="icon"
-                variant="destructive"
-                className="absolute right-1 top-1 size-7"
-                onClick={() => patch({ images: draft.images.filter((_, i) => i !== index) })}
-              >
-                <Trash2 className="size-3" />
-              </Button>
-              <div className="mt-1 flex justify-center gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={index === 0}
-                  onClick={() => patch({ images: move(draft.images, index, index - 1) })}
-                >
-                  ←
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={index === draft.images.length - 1}
-                  onClick={() => patch({ images: move(draft.images, index, index + 1) })}
-                >
-                  →
-                </Button>
-              </div>
-            </div>
-          ))}
-          {draft.images.length < 4 && (
-            <Button asChild variant="outline" className="aspect-video h-auto">
-              <label>
-                <Upload className="size-4" /> Add image
-                <input
-                  className="hidden"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => addImage(e.target.files?.[0])}
-                />
-              </label>
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">{draft.images.length}/4 images</p>
       </Field>
       <Field label="Active">
         <Switch checked={draft.active} onCheckedChange={(active) => patch({ active })} />
@@ -911,14 +885,202 @@ function HotelDialog({
           onCheckedChange={(is_default) => patch({ is_default })}
         />
       </Field>
-      <Field label="Internal notes" wide>
-        <Textarea
-          value={draft.internal_notes ?? ""}
-          onChange={(e) => patch({ internal_notes: e.target.value })}
-        />
-      </Field>
     </DialogFrame>
   );
+}
+
+function TreatmentPriceManager({
+  open,
+  prices,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  prices: Partial<Record<PlannerCurrency, number>>;
+  onClose: () => void;
+  onSave: (prices: Partial<Record<PlannerCurrency, number>>) => void;
+}) {
+  const [draft, setDraft] = useState(prices);
+  const [nextCurrency, setNextCurrency] = useState<PlannerCurrency>("EUR");
+  useEffect(() => {
+    if (open) setDraft(prices);
+  }, [open, prices]);
+  const configured = currencies.filter((currency) => draft[currency] !== undefined);
+  const available = currencies.filter((currency) => draft[currency] === undefined);
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Manage default prices</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {configured.map((currency) => (
+            <div key={currency} className="grid grid-cols-[6rem_1fr_auto] items-center gap-2">
+              <span className="text-sm font-medium">
+                {currencySymbol(currency)} {currency}
+              </span>
+              <Input
+                type="number"
+                min={0}
+                value={draft[currency] ?? ""}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isFinite(value))
+                    setDraft({ ...draft, [currency]: Math.max(0, value) });
+                }}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label={`Remove ${currency} price`}
+                onClick={() => {
+                  const next = { ...draft };
+                  delete next[currency];
+                  setDraft(next);
+                }}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ))}
+          {available.length > 0 && (
+            <div className="flex gap-2">
+              <Select
+                value={available.includes(nextCurrency) ? nextCurrency : available[0]}
+                onValueChange={(value) => setNextCurrency(value as PlannerCurrency)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {available.map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {currencySymbol(currency)} {currency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const currency = available.includes(nextCurrency) ? nextCurrency : available[0];
+                  setDraft({ ...draft, [currency]: 0 });
+                }}
+              >
+                Add price
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSave(draft)}>Save</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MultiCategoryPicker({
+  values,
+  options,
+  onChange,
+  label,
+}: {
+  values: string[];
+  options: readonly string[];
+  onChange: (values: string[]) => void;
+  label: string;
+}) {
+  const [query, setQuery] = useState("");
+  const visibleOptions = options.filter((option) =>
+    option.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  return (
+    <div className="space-y-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-start">
+            {label}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 space-y-1">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search categories..."
+          />
+          <p className="mb-2 text-xs text-muted-foreground">
+            Multiple selections match any category.
+          </p>
+          {visibleOptions.length ? (
+            visibleOptions.map((option) => (
+              <label
+                key={option}
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+              >
+                <Checkbox
+                  checked={values.includes(option)}
+                  onCheckedChange={(checked) =>
+                    onChange(
+                      checked
+                        ? [...new Set([...values, option])]
+                        : values.filter((value) => value !== option),
+                    )
+                  }
+                />
+                {option}
+              </label>
+            ))
+          ) : (
+            <p className="py-4 text-center text-sm text-muted-foreground">No categories found</p>
+          )}
+        </PopoverContent>
+      </Popover>
+      <div className="flex flex-wrap gap-1">
+        {values.map((value) => (
+          <Badge key={value} variant="secondary">
+            {value}
+            <button
+              type="button"
+              className="ml-1"
+              aria-label={`Remove ${value}`}
+              onClick={() => onChange(values.filter((item) => item !== value))}
+            >
+              ×
+            </button>
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function priceSummary(prices: Partial<Record<PlannerCurrency, number>>) {
+  const entries = currencies.filter((currency) => prices[currency] !== undefined);
+  return entries.length
+    ? entries.map((currency) => formatQuoteMoney(prices[currency] ?? 0, currency)).join(" · ")
+    : "No default prices";
+}
+function currencySymbol(currency: PlannerCurrency) {
+  return { GBP: "£", EUR: "€", USD: "$", TRY: "₺" }[currency];
+}
+function normalizeWebsite(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+function isValidWebsite(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function systemTreatment(
@@ -977,7 +1139,7 @@ function blankHotel(clinicId: string, userId: string): ClinicHotel {
     id: crypto.randomUUID(),
     clinic_id: clinicId,
     name: "New hotel",
-    category: "Standard",
+    categories: ["Standard"],
     city: "",
     country: "",
     room_types: [],
