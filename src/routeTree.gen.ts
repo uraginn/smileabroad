@@ -43,6 +43,7 @@ import { Route as PublicForClinicsRouteImport } from './routes/_public.for-clini
 import { Route as PublicDestinationsRouteImport } from './routes/_public.destinations'
 import { Route as PublicClinicsRouteImport } from './routes/_public.clinics'
 import { Route as PublicAboutRouteImport } from './routes/_public.about'
+import { Route as ProSettingsIndexRouteImport } from './routes/pro.settings.index'
 import { Route as SharedTreatmentPlanTokenRouteImport } from './routes/shared.treatment-plan.$token'
 import { Route as ProTreatmentPlansIdRouteImport } from './routes/pro.treatment-plans.$id'
 import { Route as ProSettingsDentalPlannerRouteImport } from './routes/pro.settings.dental-planner'
@@ -219,6 +220,11 @@ const PublicAboutRoute = PublicAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => PublicRoute,
 } as any)
+const ProSettingsIndexRoute = ProSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProSettingsRoute,
+} as any)
 const SharedTreatmentPlanTokenRoute =
   SharedTreatmentPlanTokenRouteImport.update({
     id: '/shared/treatment-plan/$token',
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
+  '/pro/settings/': typeof ProSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/admin': typeof AdminRouteWithChildren
@@ -319,7 +326,6 @@ export interface FileRoutesByTo {
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
-  '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
@@ -333,6 +339,7 @@ export interface FileRoutesByTo {
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
+  '/pro/settings': typeof ProSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -376,6 +383,7 @@ export interface FileRoutesById {
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
+  '/pro/settings/': typeof ProSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -419,6 +427,7 @@ export interface FileRouteTypes {
     | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
+    | '/pro/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/admin'
@@ -446,7 +455,6 @@ export interface FileRouteTypes {
     | '/pro/leads'
     | '/pro/patients'
     | '/pro/quotes'
-    | '/pro/settings'
     | '/pro/tasks'
     | '/pro/team'
     | '/pro/templates'
@@ -460,6 +468,7 @@ export interface FileRouteTypes {
     | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
+    | '/pro/settings'
   id:
     | '__root__'
     | '/_public'
@@ -502,6 +511,7 @@ export interface FileRouteTypes {
     | '/pro/settings/dental-planner'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
+    | '/pro/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -756,6 +766,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicAboutRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/pro/settings/': {
+      id: '/pro/settings/'
+      path: '/'
+      fullPath: '/pro/settings/'
+      preLoaderRoute: typeof ProSettingsIndexRouteImport
+      parentRoute: typeof ProSettingsRoute
+    }
     '/shared/treatment-plan/$token': {
       id: '/shared/treatment-plan/$token'
       path: '/shared/treatment-plan/$token'
@@ -895,10 +912,12 @@ const ProQuotesRouteWithChildren = ProQuotesRoute._addFileChildren(
 
 interface ProSettingsRouteChildren {
   ProSettingsDentalPlannerRoute: typeof ProSettingsDentalPlannerRoute
+  ProSettingsIndexRoute: typeof ProSettingsIndexRoute
 }
 
 const ProSettingsRouteChildren: ProSettingsRouteChildren = {
   ProSettingsDentalPlannerRoute: ProSettingsDentalPlannerRoute,
+  ProSettingsIndexRoute: ProSettingsIndexRoute,
 }
 
 const ProSettingsRouteWithChildren = ProSettingsRoute._addFileChildren(
