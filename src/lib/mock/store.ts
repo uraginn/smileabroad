@@ -20,7 +20,13 @@ import type {
   ClinicTreatmentDefinition,
   DentalPlanTemplate,
   ClinicHotel,
+  RoadmapCountryTreatmentPrice,
+  RoadmapTreatmentContent,
 } from "@/types/models";
+import {
+  DEFAULT_ROADMAP_COUNTRY_PRICES,
+  DEFAULT_ROADMAP_TREATMENT_CONTENT,
+} from "@/lib/roadmap-engine";
 import {
   seedClinics,
   seedBranding,
@@ -58,6 +64,8 @@ interface Store {
   clinicTreatmentDefinitions: ClinicTreatmentDefinition[];
   dentalPlanTemplates: DentalPlanTemplate[];
   clinicHotels: ClinicHotel[];
+  roadmapCountryPrices: RoadmapCountryTreatmentPrice[];
+  roadmapTreatmentContent: RoadmapTreatmentContent[];
 
   addPatient: (
     patient: Omit<Patient, "id" | "created_at" | "updated_at" | "created_by">,
@@ -119,6 +127,15 @@ interface Store {
     changedBy?: string,
   ) => User;
   deleteClinicDentist: (id: string, clinicId: string) => void;
+  saveRoadmapCountryPrice: (
+    record: Omit<RoadmapCountryTreatmentPrice, "created_at" | "updated_at" | "created_by">,
+    changedBy?: string,
+  ) => void;
+  deleteRoadmapCountryPrice: (id: string, clinicId?: string) => void;
+  saveRoadmapTreatmentContent: (
+    record: Omit<RoadmapTreatmentContent, "created_at" | "updated_at" | "created_by">,
+    changedBy?: string,
+  ) => void;
 }
 
 const makeShareToken = () =>
@@ -244,6 +261,8 @@ export const useMockStore = create<Store>()(
       clinicTreatmentDefinitions: [],
       dentalPlanTemplates: [],
       clinicHotels: [],
+      roadmapCountryPrices: DEFAULT_ROADMAP_COUNTRY_PRICES,
+      roadmapTreatmentContent: DEFAULT_ROADMAP_TREATMENT_CONTENT,
 
       addPatient: (patient, createdBy = "system") => {
         const timestamp = now();
@@ -871,10 +890,46 @@ export const useMockStore = create<Store>()(
                 (item) => item.id !== id || item.clinic_id !== clinicId || item.role !== "dentist",
               ),
         })),
+      saveRoadmapCountryPrice: (record, changedBy = "system") =>
+        set((s) => {
+          const existing = s.roadmapCountryPrices.find(
+            (item) => item.id === record.id && item.clinic_id === record.clinic_id,
+          );
+          const timestamp = now();
+          const next: RoadmapCountryTreatmentPrice = existing
+            ? { ...existing, ...record, updated_at: timestamp }
+            : { ...record, created_at: timestamp, updated_at: timestamp, created_by: changedBy };
+          return {
+            roadmapCountryPrices: existing
+              ? s.roadmapCountryPrices.map((item) => (item.id === next.id ? next : item))
+              : [...s.roadmapCountryPrices, next],
+          };
+        }),
+      deleteRoadmapCountryPrice: (id, clinicId) =>
+        set((s) => ({
+          roadmapCountryPrices: s.roadmapCountryPrices.filter(
+            (item) => item.id !== id || item.clinic_id !== clinicId,
+          ),
+        })),
+      saveRoadmapTreatmentContent: (record, changedBy = "system") =>
+        set((s) => {
+          const existing = s.roadmapTreatmentContent.find(
+            (item) => item.id === record.id && item.clinic_id === record.clinic_id,
+          );
+          const timestamp = now();
+          const next: RoadmapTreatmentContent = existing
+            ? { ...existing, ...record, updated_at: timestamp }
+            : { ...record, created_at: timestamp, updated_at: timestamp, created_by: changedBy };
+          return {
+            roadmapTreatmentContent: existing
+              ? s.roadmapTreatmentContent.map((item) => (item.id === next.id ? next : item))
+              : [...s.roadmapTreatmentContent, next],
+          };
+        }),
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 11,
+      version: 12,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -1025,8 +1080,23 @@ export const useMockStore = create<Store>()(
             images: Array.isArray(item.images) ? item.images.slice(0, 4) : [],
             active: item.active !== false,
           })),
+          roadmapCountryPrices: Array.isArray(state.roadmapCountryPrices)
+            ? state.roadmapCountryPrices
+            : DEFAULT_ROADMAP_COUNTRY_PRICES,
+          roadmapTreatmentContent: Array.isArray(state.roadmapTreatmentContent)
+            ? state.roadmapTreatmentContent
+            : DEFAULT_ROADMAP_TREATMENT_CONTENT,
           roadmaps: (state.roadmaps ?? []).map((roadmap) => ({
             ...roadmap,
+            treatment_estimates: Array.isArray(roadmap.treatment_estimates)
+              ? roadmap.treatment_estimates
+              : [],
+            treatment_journey: Array.isArray(roadmap.treatment_journey)
+              ? roadmap.treatment_journey
+              : [],
+            missing_price_keys: Array.isArray(roadmap.missing_price_keys)
+              ? roadmap.missing_price_keys
+              : [],
             recommended_clinic_ids: Array.isArray(roadmap.recommended_clinic_ids)
               ? roadmap.recommended_clinic_ids
               : [],

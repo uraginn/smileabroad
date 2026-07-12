@@ -488,4 +488,51 @@ export interface Roadmap extends BaseRecord {
   price_max: number;
   currency: string;
   recommended_clinic_ids: string[];
+  treatment_estimates?: RoadmapTreatmentEstimate[];
+  treatment_journey?: RoadmapJourneyStep[];
+  timeline_summary?: string;
+  stay_summary?: string;
+  missing_price_keys?: string[];
+}
+
+export type RoadmapEstimateSource = "assessment" | "future_ai" | "manual";
+export interface RoadmapTreatmentEstimate {
+  treatment_key: string;
+  label: string;
+  minimum_quantity?: number;
+  maximum_quantity?: number;
+  estimated_quantity?: number;
+  likelihood: "expected" | "possible" | "uncertain";
+  source: RoadmapEstimateSource;
+  confidence?: number;
+  patient_explanation?: string;
+}
+export interface RoadmapJourneyStep {
+  id: string;
+  title: string;
+  description: string;
+}
+export interface RoadmapCountryTreatmentPrice extends BaseRecord {
+  clinic_id?: string;
+  country: string;
+  currency: QuoteCurrency;
+  treatment_key: string;
+  minimum_price: number;
+  maximum_price: number;
+  unit: "per_tooth" | "per_implant" | "per_arch" | "per_case";
+  notes?: string;
+  active: boolean;
+}
+export interface RoadmapTreatmentContent extends BaseRecord {
+  clinic_id?: string;
+  treatment_key: string;
+  title: string;
+  short_description: string;
+  why_it_may_be_needed: string;
+  procedure_steps: string[];
+  usual_visits?: string;
+  typical_timeline?: string;
+  temporary_solution?: string;
+  considerations: string[];
+  active: boolean;
 }

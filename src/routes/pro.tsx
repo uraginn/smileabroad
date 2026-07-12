@@ -13,6 +13,7 @@ import {
   Palette,
   UserRound,
   SlidersHorizontal,
+  Map,
 } from "lucide-react";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { PageLoading } from "@/components/ui-bits";
@@ -45,6 +46,7 @@ const items = [
     icon: SlidersHorizontal,
     group: "clinic" as const,
   },
+  { to: "/pro/settings/roadmap", label: "Roadmap", icon: Map, group: "clinic" as const },
 ];
 
 function ProLayout() {

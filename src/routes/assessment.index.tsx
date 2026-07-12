@@ -213,7 +213,7 @@ function Assessment() {
       status: "submitted",
     });
     const roadmap = store.addRoadmap({
-      ...generateRoadmap(assessment, submissionId),
+      ...generateRoadmap(assessment, submissionId, store.roadmapCountryPrices),
       status: "ready",
     });
     window.localStorage.removeItem(DRAFT_KEY);

@@ -46,6 +46,7 @@ import { Route as PublicAboutRouteImport } from './routes/_public.about'
 import { Route as ProSettingsIndexRouteImport } from './routes/pro.settings.index'
 import { Route as SharedTreatmentPlanTokenRouteImport } from './routes/shared.treatment-plan.$token'
 import { Route as ProTreatmentPlansIdRouteImport } from './routes/pro.treatment-plans.$id'
+import { Route as ProSettingsRoadmapRouteImport } from './routes/pro.settings.roadmap'
 import { Route as ProSettingsDentalPlannerRouteImport } from './routes/pro.settings.dental-planner'
 import { Route as ProQuotesIdRouteImport } from './routes/pro.quotes.$id'
 import { Route as ProPatientsIdRouteImport } from './routes/pro.patients.$id'
@@ -236,6 +237,11 @@ const ProTreatmentPlansIdRoute = ProTreatmentPlansIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ProTreatmentPlansRoute,
 } as any)
+const ProSettingsRoadmapRoute = ProSettingsRoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
+  getParentRoute: () => ProSettingsRoute,
+} as any)
 const ProSettingsDentalPlannerRoute =
   ProSettingsDentalPlannerRouteImport.update({
     id: '/dental-planner',
@@ -296,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
+  '/pro/settings/roadmap': typeof ProSettingsRoadmapRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
   '/pro/settings/': typeof ProSettingsIndexRoute
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
+  '/pro/settings/roadmap': typeof ProSettingsRoadmapRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
   '/pro/settings': typeof ProSettingsIndexRoute
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   '/pro/patients/$id': typeof ProPatientsIdRoute
   '/pro/quotes/$id': typeof ProQuotesIdRoute
   '/pro/settings/dental-planner': typeof ProSettingsDentalPlannerRoute
+  '/pro/settings/roadmap': typeof ProSettingsRoadmapRoute
   '/pro/treatment-plans/$id': typeof ProTreatmentPlansIdRoute
   '/shared/treatment-plan/$token': typeof SharedTreatmentPlanTokenRoute
   '/pro/settings/': typeof ProSettingsIndexRoute
@@ -425,6 +434,7 @@ export interface FileRouteTypes {
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
     | '/pro/settings/dental-planner'
+    | '/pro/settings/roadmap'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
     | '/pro/settings/'
@@ -466,6 +476,7 @@ export interface FileRouteTypes {
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
     | '/pro/settings/dental-planner'
+    | '/pro/settings/roadmap'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
     | '/pro/settings'
@@ -509,6 +520,7 @@ export interface FileRouteTypes {
     | '/pro/patients/$id'
     | '/pro/quotes/$id'
     | '/pro/settings/dental-planner'
+    | '/pro/settings/roadmap'
     | '/pro/treatment-plans/$id'
     | '/shared/treatment-plan/$token'
     | '/pro/settings/'
@@ -787,6 +799,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProTreatmentPlansIdRouteImport
       parentRoute: typeof ProTreatmentPlansRoute
     }
+    '/pro/settings/roadmap': {
+      id: '/pro/settings/roadmap'
+      path: '/roadmap'
+      fullPath: '/pro/settings/roadmap'
+      preLoaderRoute: typeof ProSettingsRoadmapRouteImport
+      parentRoute: typeof ProSettingsRoute
+    }
     '/pro/settings/dental-planner': {
       id: '/pro/settings/dental-planner'
       path: '/dental-planner'
@@ -912,11 +931,13 @@ const ProQuotesRouteWithChildren = ProQuotesRoute._addFileChildren(
 
 interface ProSettingsRouteChildren {
   ProSettingsDentalPlannerRoute: typeof ProSettingsDentalPlannerRoute
+  ProSettingsRoadmapRoute: typeof ProSettingsRoadmapRoute
   ProSettingsIndexRoute: typeof ProSettingsIndexRoute
 }
 
 const ProSettingsRouteChildren: ProSettingsRouteChildren = {
   ProSettingsDentalPlannerRoute: ProSettingsDentalPlannerRoute,
+  ProSettingsRoadmapRoute: ProSettingsRoadmapRoute,
   ProSettingsIndexRoute: ProSettingsIndexRoute,
 }
 
