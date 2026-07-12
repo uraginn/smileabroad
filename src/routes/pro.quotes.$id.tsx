@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { PageHeader, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { calculateQuoteTotals, formatQuoteMoney } from "@/lib/quote";
+import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
 import type { Quote, QuoteCurrency, QuoteStatus } from "@/types/models";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/mock-auth";
@@ -123,11 +124,24 @@ function QuoteForm({ quote, actorId }: { quote: Quote; actorId: string }) {
         description={plan?.title ?? "Treatment plan quote"}
         actions={
           <div className="flex gap-2">
-            {quote.share_token && (
+            {quote.share_token && isQuotePubliclyViewable(status) ? (
               <Button asChild variant="outline">
                 <Link to="/shared/treatment-plan/$token" params={{ token: quote.share_token }}>
-                  <ExternalLink className="size-4 mr-1" /> Preview shared
+                  <ExternalLink className="size-4 mr-1" /> View shared
                 </Link>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                title={
+                  quote.share_token
+                    ? "Available after the quote is approved"
+                    : "A shared link has not been created yet"
+                }
+              >
+                <ExternalLink className="size-4 mr-1" /> View shared
               </Button>
             )}
             <Button onClick={save}>Save quote</Button>
@@ -397,3 +411,5 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+

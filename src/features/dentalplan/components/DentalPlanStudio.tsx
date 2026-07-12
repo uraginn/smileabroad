@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Combobox } from "@/components/ui/combobox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -123,6 +125,9 @@ function PlannerShell({
   }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
+  const [pendingTemplateId, setPendingTemplateId] = useState<string>();
+  const [templateNameOpen, setTemplateNameOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
   const change = (patch: Partial<DentalPlan>) =>
     setPlan({ ...plan, ...patch, updatedAt: new Date().toISOString() });
   const onChangeRef = useRef(onChange);
@@ -132,13 +137,6 @@ function PlannerShell({
   const applyTemplate = (templateId: string) => {
     const template = templates.find((item) => item.id === templateId);
     if (!template) return;
-    const hasPlanningData =
-      Object.keys(plan.currentConditions).length > 0 || plan.proposedTreatments.length > 0;
-    if (
-      hasPlanningData &&
-      !window.confirm("Replace the current dental planning data with this template?")
-    )
-      return;
     const source = createDentalPlan(template.planData);
     setPlan({
       ...plan,
@@ -163,6 +161,12 @@ function PlannerShell({
       updatedAt: new Date().toISOString(),
     });
     toast.success(`${template.name} applied`);
+  };
+  const requestTemplate = (templateId: string) => {
+    const hasPlanningData =
+      Object.keys(plan.currentConditions).length > 0 || plan.proposedTreatments.length > 0;
+    if (hasPlanningData) setPendingTemplateId(templateId);
+    else applyTemplate(templateId);
   };
   const save = () => {
     repository.savePlan(plan);
@@ -221,16 +225,7 @@ function PlannerShell({
               Save draft
             </Button>
             {context?.mode === "crm" && onSaveAsTemplate && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const name = window.prompt("Template name");
-                  if (name?.trim()) {
-                    onSaveAsTemplate(plan, name.trim());
-                    toast.success("Template saved");
-                  }
-                }}
-              >
+              <Button variant="outline" onClick={() => setTemplateNameOpen(true)}>
                 Save as template
               </Button>
             )}
@@ -265,6 +260,60 @@ function PlannerShell({
             {result}
           </div>
         )}
+        <AlertDialog
+          open={!!pendingTemplateId}
+          onOpenChange={(open) => !open && setPendingTemplateId(undefined)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace current planning data?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The selected template will replace the current diagram, treatments and linked
+                groups. Patient identity, medical data and CRM references will be preserved.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingTemplateId) applyTemplate(pendingTemplateId);
+                  setPendingTemplateId(undefined);
+                }}
+              >
+                Apply template
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <Dialog open={templateNameOpen} onOpenChange={setTemplateNameOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save as template</DialogTitle>
+            </DialogHeader>
+            <Input
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="Template name"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setTemplateNameOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const name = templateName.trim();
+                  if (!name || !onSaveAsTemplate) return;
+                  onSaveAsTemplate(plan, name);
+                  toast.success("Template saved");
+                  setTemplateName("");
+                  setTemplateNameOpen(false);
+                }}
+              >
+                Save template
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         {step === 0 && (
           <>
             {context?.mode !== "template" && templates.length > 0 && (
@@ -273,19 +322,18 @@ function PlannerShell({
                   <CardTitle>Choose a clinic template</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Select onValueChange={applyTemplate}>
-                    <SelectTrigger className="max-w-xl">
-                      <SelectValue placeholder="Select a reusable template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name} · {template.category} ·{" "}
-                          {template.planData.proposedTreatments.length} treatments
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="max-w-xl">
+                    <Combobox
+                      options={templates.map((template) => ({
+                        value: template.id,
+                        label: `${template.name} · ${template.category} · ${template.planData.proposedTreatments.length} treatments`,
+                      }))}
+                      onValueChange={requestTemplate}
+                      placeholder="Select a reusable template"
+                      searchPlaceholder="Search templates..."
+                      emptyText="No templates found"
+                    />
+                  </div>
                 </CardContent>
               </Card>
             )}

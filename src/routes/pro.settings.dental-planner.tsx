@@ -1,7 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/ui-bits";
 import {
   Accordion,
@@ -90,6 +96,17 @@ function DentalPlannerSettings() {
   const [template, setTemplate] = useState<DentalPlanTemplate | null>(null);
   const [hotel, setHotel] = useState<ClinicHotel | null>(null);
   const [hotelCategories, setHotelCategories] = useState<string[]>([]);
+  const [treatmentSearch, setTreatmentSearch] = useState("");
+  const [treatmentStatus, setTreatmentStatus] = useState("all");
+  const [treatmentKind, setTreatmentKind] = useState("all");
+  const [hotelSearch, setHotelSearch] = useState("");
+  const [hotelStatus, setHotelStatus] = useState("all");
+  const [pendingDelete, setPendingDelete] = useState<{
+    title: string;
+    description: string;
+    action: () => void;
+    message: string;
+  } | null>(null);
   const clinicDefinitions = useMemo(
     () => definitions.filter((item) => item.clinic_id === clinicId),
     [definitions, clinicId],
@@ -124,10 +141,16 @@ function DentalPlannerSettings() {
     ),
     ...clinicDefinitions.filter((item) => !item.system),
   ];
+  const visibleTreatments = rows.filter(
+    (item) =>
+      item.display_name.toLowerCase().includes(treatmentSearch.trim().toLowerCase()) &&
+      (treatmentStatus === "all" || (treatmentStatus === "active" ? item.active : !item.active)) &&
+      (treatmentKind === "all" || (treatmentKind === "system" ? item.system : !item.system)),
+  );
   const groupedTreatments = treatmentCategories(rows)
     .map((category) => ({
       category,
-      items: rows.filter((item) => normalizedTreatmentCategory(item) === category),
+      items: visibleTreatments.filter((item) => normalizedTreatmentCategory(item) === category),
     }))
     .filter((group) => group.items.length > 0);
   const availableHotelCategories = [
@@ -154,17 +177,59 @@ function DentalPlannerSettings() {
             <TabsContent value="library">
               <Section
                 title="Treatment Library"
+                description="Browse clinic treatments, pricing defaults and planner behaviour."
                 action={() => setTreatment(blankTreatment(clinicId))}
               >
+                <div className="grid gap-2 border-b p-4 sm:grid-cols-[1fr_10rem_10rem_auto]">
+                  <Input
+                    value={treatmentSearch}
+                    onChange={(event) => setTreatmentSearch(event.target.value)}
+                    placeholder="Search treatments"
+                  />
+                  <Select value={treatmentStatus} onValueChange={setTreatmentStatus}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={treatmentKind} onValueChange={setTreatmentKind}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">System & custom</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(treatmentSearch || treatmentStatus !== "all" || treatmentKind !== "all") && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setTreatmentSearch("");
+                        setTreatmentStatus("all");
+                        setTreatmentKind("all");
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
                 <Accordion type="multiple" className="px-4">
                   {groupedTreatments.map((group) => (
                     <AccordionItem key={group.category} value={group.category}>
                       <AccordionTrigger>
                         <span>
                           {group.category}{" "}
-                          <Badge variant="secondary" className="ml-2">
-                            {group.items.length}
-                          </Badge>
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            {group.items.length} treatments ·{" "}
+                            {group.items.filter((item) => item.active).length} active ·{" "}
+                            {group.items.filter((item) => !item.system).length} custom
+                          </span>
                         </span>
                       </AccordionTrigger>
                       <AccordionContent className="divide-y">
@@ -172,7 +237,7 @@ function DentalPlannerSettings() {
                           <Row
                             key={item.id}
                             title={item.display_name}
-                            description={item.unit_type}
+                            description={`Appears as: ${treatmentName(item.visual_key)} · Behaves like: ${treatmentName(item.base_treatment_key)}`}
                             badges={[
                               item.system ? "System" : "Custom",
                               item.active ? "Active" : "Inactive",
@@ -182,10 +247,12 @@ function DentalPlannerSettings() {
                             onDelete={
                               !item.system
                                 ? () =>
-                                    confirmDelete(
-                                      () => deleteDefinition(item.id, clinicId),
-                                      "Treatment removed",
-                                    )
+                                    setPendingDelete({
+                                      title: "Delete treatment?",
+                                      description: `${item.display_name} will be removed from this clinic's library.`,
+                                      action: () => deleteDefinition(item.id, clinicId),
+                                      message: "Treatment removed",
+                                    })
                                 : undefined
                             }
                           />
@@ -199,13 +266,22 @@ function DentalPlannerSettings() {
             <TabsContent value="templates">
               <Section
                 title="Plan Templates"
-                action={() => setTemplate(blankTemplate(clinicId, user.id))}
+                description="Create reusable clinical plans and edit them in the real Dental Planner."
+                action={() => {
+                  const record = blankTemplate(clinicId, user.id);
+                  saveTemplate(record, user.id);
+                  navigate({
+                    to: "/dentalplan",
+                    search: { mode: "template", templateId: record.id },
+                  });
+                }}
+                actionLabel="Create template"
               >
                 {clinicTemplates.map((item) => (
                   <Row
                     key={item.id}
                     title={item.name}
-                    description={item.description || item.category}
+                    description={templateSummary(item)}
                     badges={[item.category, item.active ? "Active" : "Inactive"]}
                     onEdit={() =>
                       navigate({
@@ -229,7 +305,12 @@ function DentalPlannerSettings() {
                       toast.success("Template duplicated");
                     }}
                     onDelete={() =>
-                      confirmDelete(() => deleteTemplate(item.id, clinicId), "Template removed")
+                      setPendingDelete({
+                        title: "Delete template?",
+                        description: `${item.name} will be permanently removed.`,
+                        action: () => deleteTemplate(item.id, clinicId),
+                        message: "Template removed",
+                      })
                     }
                   />
                 ))}
@@ -240,38 +321,78 @@ function DentalPlannerSettings() {
         <TabsContent value="dentists">
           <Section
             title="Dentists"
+            description="Manage the clinicians available to new Dental Plans."
             action={() => setDentist({ role: "dentist", active: true, languages: [] })}
           >
             {dentists.map((item) => (
               <Row
                 key={item.id}
                 title={item.name}
-                description={[item.title, item.specialty].filter(Boolean).join(" · ") || "Dentist"}
+                description={
+                  [item.title, item.specialty, item.languages?.join(", ")]
+                    .filter(Boolean)
+                    .join(" · ") || "Dentist"
+                }
                 badges={[
                   item.default_planner_dentist ? "Default" : "Dentist",
                   item.active === false ? "Inactive" : "Active",
                 ]}
                 onEdit={() => setDentist(item)}
+                onSecondary={
+                  !item.default_planner_dentist
+                    ? () => {
+                        dentists.forEach((dentistItem) =>
+                          updateDentist(dentistItem.id, clinicId, {
+                            default_planner_dentist: dentistItem.id === item.id,
+                          }),
+                        );
+                        toast.success(`${item.name} is now the default planner dentist`);
+                      }
+                    : undefined
+                }
+                secondaryLabel="Set as default"
                 onDelete={() => setDentistToDelete(item)}
               />
             ))}
           </Section>
         </TabsContent>
         <TabsContent value="hotels">
-          <Section title="Hotels" action={() => setHotel(blankHotel(clinicId, user.id))}>
-            <div className="p-4">
+          <Section
+            title="Hotels"
+            description="Hotels configured here become selectable in the planner Travel step."
+            action={() => setHotel(blankHotel(clinicId, user.id))}
+          >
+            <div className="grid gap-2 border-b p-4 sm:grid-cols-[1fr_16rem_10rem_auto]">
+              <Input
+                value={hotelSearch}
+                onChange={(event) => setHotelSearch(event.target.value)}
+                placeholder="Search hotels"
+              />
               <MultiCategoryPicker
                 values={hotelCategories}
                 options={availableHotelCategories}
                 onChange={setHotelCategories}
                 label="Filter categories"
               />
-              {hotelCategories.length > 0 && (
+              <Select value={hotelStatus} onValueChange={setHotelStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              {(hotelSearch || hotelCategories.length > 0 || hotelStatus !== "all") && (
                 <Button
-                  className="mt-2"
                   size="sm"
                   variant="ghost"
-                  onClick={() => setHotelCategories([])}
+                  onClick={() => {
+                    setHotelSearch("");
+                    setHotelCategories([]);
+                    setHotelStatus("all");
+                  }}
                 >
                   Clear filters
                 </Button>
@@ -281,13 +402,17 @@ function DentalPlannerSettings() {
               // Multiple category filters use OR semantics: a match in any selected category is shown.
               .filter(
                 (item) =>
-                  hotelCategories.length === 0 ||
-                  item.categories.some((category) => hotelCategories.includes(category)),
+                  item.name.toLowerCase().includes(hotelSearch.trim().toLowerCase()) &&
+                  (hotelCategories.length === 0 ||
+                    item.categories.some((category) => hotelCategories.includes(category))) &&
+                  (hotelStatus === "all" ||
+                    (hotelStatus === "active" ? item.active : !item.active)),
               )
               .map((item) => (
                 <Row
                   key={item.id}
                   title={item.name}
+                  thumbnail={item.images[0]?.data_url}
                   description={`${item.images.length}/4 photos`}
                   badges={[
                     item.is_default ? "Default" : "Hotel",
@@ -299,7 +424,12 @@ function DentalPlannerSettings() {
                   secondaryLabel="Website"
                   onEdit={() => setHotel(item)}
                   onDelete={() =>
-                    confirmDelete(() => deleteHotel(item.id, clinicId), "Hotel removed")
+                    setPendingDelete({
+                      title: "Delete hotel?",
+                      description: `${item.name} will be removed from the hotel library.`,
+                      action: () => deleteHotel(item.id, clinicId),
+                      message: "Hotel removed",
+                    })
                   }
                 />
               ))}
@@ -385,6 +515,26 @@ function DentalPlannerSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pendingDelete?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{pendingDelete?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                pendingDelete?.action();
+                if (pendingDelete) toast.success(pendingDelete.message);
+                setPendingDelete(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <TemplateDialog
         value={template}
         dentists={dentists}
@@ -410,19 +560,26 @@ function DentalPlannerSettings() {
 
 function Section({
   title,
+  description,
   action,
+  actionLabel = "Add",
   children,
 }: {
   title: string;
+  description?: string;
   action: () => void;
+  actionLabel?: string;
   children: React.ReactNode;
 }) {
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="flex-row items-start justify-between gap-3">
+        <div>
+          <CardTitle>{title}</CardTitle>
+          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        </div>
         <Button size="sm" onClick={action}>
-          <Plus className="size-4" /> Add
+          <Plus className="size-4" /> {actionLabel}
         </Button>
       </CardHeader>
       <CardContent className="divide-y p-0">
@@ -435,6 +592,7 @@ function Section({
 }
 function Row({
   title,
+  thumbnail,
   description,
   badges,
   onEdit,
@@ -446,6 +604,7 @@ function Row({
   onDuplicate,
 }: {
   title: string;
+  thumbnail?: string;
   description: string;
   badges: string[];
   onEdit: () => void;
@@ -458,6 +617,9 @@ function Row({
 }) {
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+      {thumbnail && (
+        <img src={thumbnail} alt="" className="h-14 w-20 rounded-md border object-cover" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -469,15 +631,7 @@ function Row({
           ))}
         </div>
       </div>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onEdit}>
-          {editLabel}
-        </Button>
-        {onSecondary && (
-          <Button size="sm" variant="ghost" onClick={onSecondary}>
-            {secondaryLabel}
-          </Button>
-        )}
+      <div className="flex items-center gap-2">
         {secondaryHref && (
           <Button size="sm" variant="ghost" asChild>
             <a href={secondaryHref} target="_blank" rel="noopener noreferrer">
@@ -485,16 +639,25 @@ function Row({
             </a>
           </Button>
         )}
-        {onDuplicate && (
-          <Button size="sm" variant="ghost" onClick={onDuplicate}>
-            Duplicate
-          </Button>
-        )}
-        {onDelete && (
-          <Button size="icon" variant="ghost" aria-label={`Delete ${title}`} onClick={onDelete}>
-            <Trash2 className="size-4" />
-          </Button>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" variant="ghost" aria-label={`Actions for ${title}`}>
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>{editLabel}</DropdownMenuItem>
+            {onSecondary && (
+              <DropdownMenuItem onSelect={onSecondary}>{secondaryLabel}</DropdownMenuItem>
+            )}
+            {onDuplicate && <DropdownMenuItem onSelect={onDuplicate}>Duplicate</DropdownMenuItem>}
+            {onDelete && (
+              <DropdownMenuItem className="text-destructive" onSelect={onDelete}>
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -1115,6 +1278,19 @@ function priceSummary(prices: Partial<Record<PlannerCurrency, number>>) {
     ? entries.map((currency) => formatQuoteMoney(prices[currency] ?? 0, currency)).join(" · ")
     : "No default prices";
 }
+function treatmentName(key: string) {
+  return TREATMENT_DEFINITIONS.find((item) => item.type === key)?.label ?? "Other";
+}
+function templateSummary(template: DentalPlanTemplate) {
+  const plan = createDentalPlan(template.plan_data as never);
+  const upper = plan.proposedTreatments.some((item) =>
+    item.toothNumbers.some((tooth) => tooth < 30),
+  );
+  const lower = plan.proposedTreatments.some((item) =>
+    item.toothNumbers.some((tooth) => tooth > 30),
+  );
+  return `${upper && lower ? "Both arches" : upper ? "Upper arch" : lower ? "Lower arch" : "No arch"} · ${plan.proposedTreatments.length} treatments · ${plan.treatmentGroups.length} linked groups`;
+}
 function currencySymbol(currency: PlannerCurrency) {
   return { GBP: "£", EUR: "€", USD: "$", TRY: "₺" }[currency];
 }
@@ -1215,10 +1391,4 @@ function move<T>(items: T[], from: number, to: number) {
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   return next;
-}
-function confirmDelete(action: () => void, message: string) {
-  if (window.confirm("Are you sure?")) {
-    action();
-    toast.success(message);
-  }
 }

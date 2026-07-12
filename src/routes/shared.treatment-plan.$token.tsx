@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { DentalDiagram } from "@/components/dental-diagram";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatQuoteMoney } from "@/lib/quote";
 import { mapClinicQuoteCarePlan } from "@/lib/care-plan";
+import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
 import {
   PlanDisclaimer,
   PlanDocumentHeader,
@@ -26,17 +27,12 @@ import {
 import { CheckCircle2, ExternalLink, Mail, Phone, Printer, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/shared/treatment-plan/$token")({ component: SharedPlan });
-const PUBLIC_STATUSES = ["approved", "sent", "viewed", "accepted"] as const;
 
 function SharedPlan() {
   const { token } = Route.useParams();
   const hydrated = useMockStoreHydrated();
   const tokenQuote = useMockStore((s) => s.quotes.find((quote) => quote.share_token === token));
-  const quote =
-    tokenQuote &&
-    PUBLIC_STATUSES.includes((tokenQuote.status ?? "draft") as (typeof PUBLIC_STATUSES)[number])
-      ? tokenQuote
-      : undefined;
+  const quote = tokenQuote && isQuotePubliclyViewable(tokenQuote.status) ? tokenQuote : undefined;
   const plan = useMockStore((s) =>
     quote
       ? s.treatmentPlans.find(
@@ -195,7 +191,7 @@ function SharedPlan() {
                 {carePlan.plan.procedures.map((procedure) => (
                   <div key={procedure.id} className="rounded-lg border p-3 text-sm">
                     <p className="font-medium">
-                      Tooth {procedure.tooth} · {procedure.treatment.replace(/_/g, " ")}
+                      Tooth {procedure.tooth} Â· {procedure.treatment.replace(/_/g, " ")}
                     </p>
                     {procedure.material && (
                       <p className="mt-1 text-muted-foreground">{procedure.material}</p>
@@ -492,7 +488,7 @@ function SharedPlan() {
       <footer className="max-w-5xl mx-auto px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
         <p>
           {branding?.phone || ""}
-          {branding?.phone && branding?.email ? " · " : ""}
+          {branding?.phone && branding?.email ? " Â· " : ""}
           {branding?.email || ""}
         </p>
         <p className="mt-2">Delivered securely by SmileAbroad</p>
@@ -521,7 +517,7 @@ function DetailList({ title, items }: { title: string; items: string[] }) {
       <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
         {items.map((item) => (
           <li key={item} className="flex gap-2">
-            <span aria-hidden="true">•</span>
+            <span aria-hidden="true">â€¢</span>
             <span>{item}</span>
           </li>
         ))}
@@ -557,3 +553,6 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
     </Card>
   );
 }
+
+
+

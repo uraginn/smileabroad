@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { PageHeader, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import {
 import type { TreatmentPlanItem, TreatmentStage, ToothTreatment } from "@/types/models";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { formatQuoteMoney } from "@/lib/quote";
+import { isQuotePubliclyViewable } from "@/lib/quote-visibility";
 
 export const Route = createFileRoute("/pro/treatment-plans/$id")({ component: PlanEditor });
 
@@ -146,7 +147,7 @@ function PlanEditor() {
         currency: "EUR",
         items: plan.items.map((item) => ({
           id: `qi_${item.id}`,
-          label: `Tooth ${item.tooth} · ${treatmentLabel(item.treatment)}${item.material ? ` (${item.material})` : ""}`,
+          label: `Tooth ${item.tooth} Â· ${treatmentLabel(item.treatment)}${item.material ? ` (${item.material})` : ""}`,
           qty: 1,
           unit_price: item.unit_price,
         })),
@@ -173,13 +174,29 @@ function PlanEditor() {
             >
               <FileText className="size-4 mr-1" /> {existingQuote ? "Open quote" : "Create quote"}
             </Button>
-            {plan.share_token && (
+            {existingQuote?.share_token && isQuotePubliclyViewable(existingQuote.status) ? (
               <Button asChild variant="outline">
-                <Link to="/shared/treatment-plan/$token" params={{ token: plan.share_token }}>
+                <Link
+                  to="/shared/treatment-plan/$token"
+                  params={{ token: existingQuote.share_token }}
+                >
                   <ExternalLink className="size-4 mr-1" /> View shared
                 </Link>
               </Button>
-            )}
+            ) : existingQuote ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                title={
+                  existingQuote.share_token
+                    ? "Available after the quote is approved"
+                    : "Open the quote to prepare its shared link"
+                }
+              >
+                <ExternalLink className="size-4 mr-1" /> View shared
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -532,7 +549,7 @@ function PlanEditor() {
                         onChange={(event) =>
                           updateStage(index, { healing_period_after: event.target.value })
                         }
-                        placeholder="e.g. 10–12 weeks"
+                        placeholder="e.g. 10â€“12 weeks"
                       />
                     </Field>
                     <Field label="Patient instructions">
@@ -667,7 +684,7 @@ function PlanEditor() {
                 onChange={(event) =>
                   update(plan.id, { estimated_stay: event.target.value }, actorId)
                 }
-                placeholder="e.g. 7–10 days"
+                placeholder="e.g. 7â€“10 days"
               />
             </Field>
             <Field label="Timeline description">
@@ -750,7 +767,7 @@ function PlanEditor() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Unit price (€)</Label>
+              <Label>Unit price (â‚¬)</Label>
               <Input
                 type="number"
                 value={activeItem?.unit_price ?? 0}
@@ -833,3 +850,5 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+

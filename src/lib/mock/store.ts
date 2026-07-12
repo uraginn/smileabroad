@@ -871,7 +871,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 10,
+      version: 11,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -964,8 +964,23 @@ export const useMockStore = create<Store>()(
           ...state,
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
+            ...(clinic.id === "clinic_istanbul"
+              ? { name: "DTKURT Aesthetic Dentistry", slug: "dtkurt-aesthetic-dentistry" }
+              : {}),
             languages: Array.isArray(clinic.languages) ? clinic.languages : [],
           })),
+          users: [
+            ...(state.users ?? seedUsers).map((member) =>
+              member.id === "u_owner"
+                ? { ...member, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
+                : member,
+            ),
+            ...seedUsers.filter(
+              (seedUser) =>
+                seedUser.role === "dentist" &&
+                !(state.users ?? []).some((member) => member.id === seedUser.id),
+            ),
+          ],
           branding: (state.branding ?? seedBranding).map((item) => ({
             ...item,
             doctors: Array.isArray(item.doctors) ? item.doctors : [],
