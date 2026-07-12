@@ -34,7 +34,9 @@ export function TreatmentSummary({
                     className="text-left text-sm hover:text-primary"
                     onClick={() => onHighlight(item.toothNumbers)}
                   >
-                    <span className="font-medium">{treatmentByType(item.treatmentType).label}</span>
+                    <span className="font-medium">
+                      {item.displayName ?? treatmentByType(item.treatmentType).label}
+                    </span>
                     <span className="ml-2 text-xs text-muted-foreground">
                       Teeth {orderedByArch(item.toothNumbers).join(", ")}
                     </span>
@@ -50,7 +52,7 @@ export function TreatmentSummary({
                     type="button"
                     onClick={() => onDelete(item.id)}
                     className="text-xs text-muted-foreground hover:text-destructive"
-                    aria-label={`Remove ${treatmentByType(item.treatmentType).label}`}
+                    aria-label={`Remove ${item.displayName ?? treatmentByType(item.treatmentType).label}`}
                   >
                     Remove
                   </button>

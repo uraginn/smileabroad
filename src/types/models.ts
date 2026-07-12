@@ -421,7 +421,9 @@ export interface ClinicTreatmentDefinition extends BaseRecord {
   unit_type: "tooth" | "arch" | "case";
   availability: "current" | "proposed" | "both";
   active: boolean;
-  svg_asset?: PlannerAssetMetadata;
+  base_treatment_key: string;
+  visual_key: string;
+  rule_profile_key: string;
 }
 
 export interface PlannerAssetMetadata {
@@ -447,6 +449,7 @@ export interface DentalPlanTemplate extends BaseRecord {
 export interface ClinicHotel extends BaseRecord {
   clinic_id: string;
   name: string;
+  category: string;
   description?: string;
   address?: string;
   city: string;

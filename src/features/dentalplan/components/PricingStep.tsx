@@ -30,6 +30,7 @@ export function PricingStep({
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
   treatmentDefaults?: Array<{
+    id?: string;
     treatmentKey: string;
     displayName: string;
     prices: Partial<Record<DentalPlan["commercial"]["currency"], number>>;
@@ -43,7 +44,7 @@ export function PricingStep({
     if (JSON.stringify(synced) !== JSON.stringify(commercial.items)) update({ items: synced });
     // Sync only when dental treatment structure changes; prices are retained by treatment ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan.proposedTreatments]);
+  }, [plan.proposedTreatments, commercial.currency, treatmentDefaults]);
   const billableCommercial = {
     ...commercial,
     hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
@@ -116,7 +117,11 @@ export function PricingStep({
                           update({
                             items: commercial.items.map((entry) =>
                               entry.treatmentId === item.treatmentId
-                                ? { ...entry, unitPrice: Math.max(0, Number(e.target.value)) }
+                                ? {
+                                    ...entry,
+                                    unitPrice: Math.max(0, Number(e.target.value)),
+                                    priceOverridden: true,
+                                  }
                                 : entry,
                             ),
                           })

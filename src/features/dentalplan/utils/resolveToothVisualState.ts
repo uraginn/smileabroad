@@ -27,7 +27,7 @@ export function resolveToothVisualState({
 }): ResolvedVisualState {
   const current = currentConditions[toothNumber]?.conditions ?? [];
   const proposed = proposedTreatments.filter((item) => item.toothNumbers.includes(toothNumber));
-  const proposedTypes = proposed.map((item) => item.treatmentType);
+  const proposedTypes = proposed.map((item) => item.visualKey ?? item.treatmentType);
   const willExtract =
     mode === "proposed" &&
     (current.includes("extraction-required") || proposedTypes.includes("extraction"));

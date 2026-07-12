@@ -9,6 +9,7 @@ import type {
   ToothCondition,
   ToothNumber,
   TreatmentType,
+  EffectiveTreatmentDefinition,
 } from "../types/dental-plan.types";
 import { useHistoryState } from "../hooks/useHistoryState";
 import { useToothSelection } from "../hooks/useToothSelection";
@@ -34,8 +35,14 @@ export type TreatmentPlannerProps = {
   value: DentalPlan;
   onChange: (plan: DentalPlan) => void;
   readOnly?: boolean;
+  definitions: EffectiveTreatmentDefinition[];
 };
-export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlannerProps) {
+export function TreatmentPlanner({
+  value,
+  onChange,
+  readOnly,
+  definitions,
+}: TreatmentPlannerProps) {
   const history = useHistoryState(value);
   const initialized = useRef(false);
   const onChangeRef = useRef(onChange);
@@ -55,6 +62,9 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
   const proposedSelection = useToothSelection();
   const selection = mode === "current" ? currentSelection : proposedSelection;
   const [bridgeTeeth, setBridgeTeeth] = useState<ToothNumber[] | null>(null);
+  const [bridgeDefinition, setBridgeDefinition] = useState<EffectiveTreatmentDefinition | null>(
+    null,
+  );
   const defaults = derivePlanDefaults(history.state);
   useEffect(() => {
     history.set(
@@ -138,7 +148,8 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
     [history],
   );
   const applyTreatmentToSelection = useCallback(
-    (treatment: TreatmentType) => {
+    (selectedDefinition: EffectiveTreatmentDefinition) => {
+      const treatment = selectedDefinition.baseTreatmentKey;
       if (!selection.selected.length) {
         setMessage("Select at least one tooth first.");
         return;
@@ -232,6 +243,7 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           return;
         }
         setBridgeTeeth([...selection.selected]);
+        setBridgeDefinition(selectedDefinition);
         return;
       }
       for (const tooth of selection.selected) {
@@ -253,12 +265,20 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
             next.proposedTreatments.push({
               id: crypto.randomUUID(),
               treatmentType: treatment,
+              treatmentDefinitionId: selectedDefinition.id,
+              treatmentKey: selectedDefinition.treatmentKey,
+              visualKey: selectedDefinition.visualKey,
+              displayName: selectedDefinition.displayName,
               toothNumbers: [tooth],
             });
         else
           next.proposedTreatments.push({
             id: crypto.randomUUID(),
             treatmentType: treatment,
+            treatmentDefinitionId: selectedDefinition.id,
+            treatmentKey: selectedDefinition.treatmentKey,
+            visualKey: selectedDefinition.visualKey,
+            displayName: selectedDefinition.displayName,
             toothNumbers: [...selection.selected],
           });
         next.updatedAt = new Date().toISOString();
@@ -287,6 +307,10 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
           {
             id: treatmentId,
             treatmentType: "bridge",
+            treatmentDefinitionId: bridgeDefinition?.id,
+            treatmentKey: bridgeDefinition?.treatmentKey,
+            visualKey: bridgeDefinition?.visualKey,
+            displayName: bridgeDefinition?.displayName,
             toothNumbers: [...bridgeTeeth],
             treatmentGroupId: groupId,
             bridgeRoles: roles,
@@ -308,8 +332,9 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
         updatedAt: new Date().toISOString(),
       }));
       setBridgeTeeth(null);
+      setBridgeDefinition(null);
     },
-    [bridgeTeeth, history],
+    [bridgeDefinition, bridgeTeeth, history],
   );
   const deleteTreatment = useCallback(
     (id: string) =>
@@ -436,13 +461,17 @@ export function TreatmentPlanner({ value, onChange, readOnly }: TreatmentPlanner
               <TreatmentSelector
                 disabled={!!readOnly || !selection.selected.length}
                 onApply={applyTreatmentToSelection}
+                definitions={definitions}
               />
             )}
           </div>
           {bridgeTeeth && (
             <BridgeConfigurator
               teeth={bridgeTeeth}
-              onCancel={() => setBridgeTeeth(null)}
+              onCancel={() => {
+                setBridgeTeeth(null);
+                setBridgeDefinition(null);
+              }}
               onConfirm={confirmBridge}
             />
           )}

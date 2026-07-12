@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Upload } from "lucide-react";
@@ -21,6 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TREATMENT_DEFINITIONS } from "@/features/dentalplan/data/treatmentDefinitions";
 import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
+import { Tooth } from "@/features/dentalplan/components/Tooth";
+import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
 import { LocalPlannerAssetAdapter } from "@/features/dentalplan/adapters/LocalPlannerAssetAdapter";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { useMockStore } from "@/lib/mock/store";
@@ -41,6 +43,7 @@ const assetAdapter = new LocalPlannerAssetAdapter();
 
 function DentalPlannerSettings() {
   const user = useAuth((state) => state.user);
+  const navigate = useNavigate();
   const clinicId = user?.clinic_id;
   const definitions = useMockStore((state) => state.clinicTreatmentDefinitions);
   const templates = useMockStore((state) => state.dentalPlanTemplates);
@@ -60,6 +63,7 @@ function DentalPlannerSettings() {
   const [dentist, setDentist] = useState<Partial<User> | null>(null);
   const [template, setTemplate] = useState<DentalPlanTemplate | null>(null);
   const [hotel, setHotel] = useState<ClinicHotel | null>(null);
+  const [hotelCategory, setHotelCategory] = useState("all");
   const clinicDefinitions = useMemo(
     () => definitions.filter((item) => item.clinic_id === clinicId),
     [definitions, clinicId],
@@ -171,7 +175,24 @@ function DentalPlannerSettings() {
                 title={item.name}
                 description={item.description || item.category}
                 badges={[item.category, item.active ? "Active" : "Inactive"]}
-                onEdit={() => setTemplate(item)}
+                onEdit={() =>
+                  navigate({ to: "/dentalplan", search: { mode: "template", templateId: item.id } })
+                }
+                editLabel="Edit in Planner"
+                onSecondary={() => setTemplate(item)}
+                secondaryLabel="Details"
+                onDuplicate={() => {
+                  saveTemplate(
+                    {
+                      ...item,
+                      id: crypto.randomUUID(),
+                      name: `${item.name} copy`,
+                      plan_data: createDentalPlan(item.plan_data as never),
+                    },
+                    user.id,
+                  );
+                  toast.success("Template duplicated");
+                }}
                 onDelete={() =>
                   confirmDelete(() => deleteTemplate(item.id, clinicId), "Template removed")
                 }
@@ -181,22 +202,40 @@ function DentalPlannerSettings() {
         </TabsContent>
         <TabsContent value="hotels">
           <Section title="Hotels" action={() => setHotel(blankHotel(clinicId, user.id))}>
-            {clinicHotels.map((item) => (
-              <Row
-                key={item.id}
-                title={item.name}
-                description={`${item.city}, ${item.country} · ${item.images.length}/4 images`}
-                badges={[
-                  item.is_default ? "Default" : "Hotel",
-                  item.active ? "Active" : "Inactive",
-                  formatQuoteMoney(item.price_per_night, item.currency),
-                ]}
-                onEdit={() => setHotel(item)}
-                onDelete={() =>
-                  confirmDelete(() => deleteHotel(item.id, clinicId), "Hotel removed")
-                }
-              />
-            ))}
+            <div className="p-4">
+              <Select value={hotelCategory} onValueChange={setHotelCategory}>
+                <SelectTrigger className="max-w-xs">
+                  <SelectValue placeholder="Filter category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {[...new Set(clinicHotels.map((item) => item.category))].map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {clinicHotels
+              .filter((item) => hotelCategory === "all" || item.category === hotelCategory)
+              .map((item) => (
+                <Row
+                  key={item.id}
+                  title={item.name}
+                  description={`${item.city}, ${item.country} · ${item.images.length}/4 images`}
+                  badges={[
+                    item.is_default ? "Default" : "Hotel",
+                    item.category,
+                    item.active ? "Active" : "Inactive",
+                    formatQuoteMoney(item.price_per_night, item.currency),
+                  ]}
+                  onEdit={() => setHotel(item)}
+                  onDelete={() =>
+                    confirmDelete(() => deleteHotel(item.id, clinicId), "Hotel removed")
+                  }
+                />
+              ))}
           </Section>
         </TabsContent>
       </Tabs>
@@ -297,12 +336,20 @@ function Row({
   badges,
   onEdit,
   onDelete,
+  editLabel = "Edit",
+  onSecondary,
+  secondaryLabel,
+  onDuplicate,
 }: {
   title: string;
   description: string;
   badges: string[];
   onEdit: () => void;
   onDelete?: () => void;
+  editLabel?: string;
+  onSecondary?: () => void;
+  secondaryLabel?: string;
+  onDuplicate?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -319,8 +366,18 @@ function Row({
       </div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={onEdit}>
-          Edit
+          {editLabel}
         </Button>
+        {onSecondary && (
+          <Button size="sm" variant="ghost" onClick={onSecondary}>
+            {secondaryLabel}
+          </Button>
+        )}
+        {onDuplicate && (
+          <Button size="sm" variant="ghost" onClick={onDuplicate}>
+            Duplicate
+          </Button>
+        )}
         {onDelete && (
           <Button size="icon" variant="ghost" aria-label={`Delete ${title}`} onClick={onDelete}>
             <Trash2 className="size-4" />
@@ -457,45 +514,79 @@ function TreatmentDialog({
           onChange={(e) => patch({ internal_label: e.target.value })}
         />
       </Field>
-      <Field label="SVG icon" wide>
-        <div className="flex flex-wrap items-center gap-3">
-          {draft.svg_asset?.data_url ? (
-            <img
-              src={draft.svg_asset.data_url}
-              alt="Treatment icon preview"
-              className="size-16 rounded border object-contain p-2"
-            />
-          ) : (
-            <div className="grid size-16 place-items-center rounded border text-xs text-muted-foreground">
-              Default
-            </div>
-          )}
-          <Button asChild type="button" variant="outline">
-            <label>
-              <Upload className="size-4" /> Select SVG
-              <input
-                className="hidden"
-                type="file"
-                accept="image/svg+xml,.svg"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    patch({ svg_asset: await assetAdapter.readSvg(file) });
-                  } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Invalid SVG");
-                  }
-                }}
-              />
-            </label>
-          </Button>
-          {draft.svg_asset && (
-            <Button variant="ghost" onClick={() => patch({ svg_asset: undefined })}>
-              Reset
-            </Button>
-          )}
-        </div>
+      <Field label="Base clinical behaviour">
+        <Select
+          value={draft.base_treatment_key}
+          onValueChange={(base_treatment_key) => {
+            const definition = TREATMENT_DEFINITIONS.find(
+              (item) => item.type === base_treatment_key,
+            );
+            patch({
+              base_treatment_key,
+              rule_profile_key: base_treatment_key,
+              unit_type: definition?.perTooth === false ? "arch" : "tooth",
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TREATMENT_DEFINITIONS.map((item) => (
+              <SelectItem key={item.type} value={item.type}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
+      <Field label="Existing diagram visual">
+        <Select value={draft.visual_key} onValueChange={(visual_key) => patch({ visual_key })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TREATMENT_DEFINITIONS.filter((item) => item.supported).map((item) => (
+              <SelectItem key={item.type} value={item.type}>
+                {item.label} visual
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-3 text-sm sm:col-span-2">
+        <Tooth
+          toothNumber={11}
+          currentConditions={{}}
+          proposedTreatments={[
+            {
+              id: "visual-preview",
+              toothNumbers: [11],
+              treatmentType: draft.base_treatment_key as TreatmentType,
+              visualKey: draft.visual_key as TreatmentType,
+            },
+          ]}
+          mode="proposed"
+          selected={false}
+          readOnly
+          onSelect={() => {}}
+        />
+        <div>
+          <p>
+            <b>Behaves like:</b>{" "}
+            {TREATMENT_DEFINITIONS.find((item) => item.type === draft.base_treatment_key)?.label ??
+              draft.base_treatment_key}
+          </p>
+          <p>
+            <b>Uses visual:</b>{" "}
+            {TREATMENT_DEFINITIONS.find((item) => item.type === draft.visual_key)?.label ??
+              draft.visual_key}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Compatibility rules are inherited from the base treatment and cannot be bypassed.
+          </p>
+        </div>
+      </div>
       <Field label="Active">
         <Switch checked={draft.active} onCheckedChange={(active) => patch({ active })} />
       </Field>
@@ -661,6 +752,28 @@ function HotelDialog({
       <Field label="Hotel name">
         <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
+      <Field label="Category">
+        <Select value={draft.category} onValueChange={(category) => patch({ category })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[
+              "Budget",
+              "Standard",
+              "Premium",
+              "Luxury",
+              "Apartment",
+              "Clinic Residence",
+              "Other",
+            ].map((item) => (
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
       <Field label="City">
         <Input value={draft.city} onChange={(e) => patch({ city: e.target.value })} />
       </Field>
@@ -825,6 +938,9 @@ function systemTreatment(
     unit_type: perTooth ? "tooth" : "arch",
     availability: "proposed",
     active: true,
+    base_treatment_key: key,
+    visual_key: key,
+    rule_profile_key: key,
     created_at: "",
     updated_at: "",
     created_by: "system",
@@ -836,6 +952,9 @@ function blankTreatment(clinicId: string): ClinicTreatmentDefinition {
     id: crypto.randomUUID(),
     system: false,
     category: "Custom",
+    base_treatment_key: "other",
+    visual_key: "dental-implant",
+    rule_profile_key: "other",
   };
 }
 function blankTemplate(clinicId: string, userId: string): DentalPlanTemplate {
@@ -858,6 +977,7 @@ function blankHotel(clinicId: string, userId: string): ClinicHotel {
     id: crypto.randomUUID(),
     clinic_id: clinicId,
     name: "New hotel",
+    category: "Standard",
     city: "",
     country: "",
     room_types: [],

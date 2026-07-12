@@ -20,7 +20,12 @@ import { PricingStep } from "./PricingStep";
 import { FinalReviewStep } from "./FinalReviewStep";
 import { TreatmentPlanner } from "./TreatmentPlanner";
 import { DentalChart } from "./DentalChart";
-import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
+import type {
+  DentalPlan,
+  DentalPlanStudioProps,
+  EffectiveTreatmentDefinition,
+} from "../types/dental-plan.types";
+import { TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
 import { createDentalPlan } from "../utils/createDentalPlan";
 import { LocalStorageDentalPlanRepository } from "../adapters/LocalStorageDentalPlanRepository";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -66,17 +71,54 @@ function PlannerShell({
   onChange,
   onSave,
   onFinalize,
+  onSaveAsTemplate,
   readOnly,
   context,
   clinicUsers = [],
   treatmentDefaults = [],
   hotels = [],
+  templates = [],
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
   repository: LocalStorageDentalPlanRepository;
 } & DentalPlanStudioProps) {
   const { lastSavedAt, saving } = useAutoSave(plan, repository);
+  const effectiveTreatments = useMemo<EffectiveTreatmentDefinition[]>(() => {
+    const system = TREATMENT_DEFINITIONS.flatMap((base) => {
+      const override = treatmentDefaults.find(
+        (item) => item.system !== false && item.treatmentKey === base.type,
+      );
+      if (override && !override.active) return [];
+      return [
+        {
+          id: override?.id ?? `system_${base.type}`,
+          treatmentKey: override?.treatmentKey ?? base.type,
+          displayName: override?.displayName ?? base.label,
+          category: override?.category ?? "System",
+          baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
+          visualKey: override?.visualKey ?? base.type,
+          perTooth: override?.perTooth ?? base.perTooth,
+          system: true,
+          prices: override?.prices ?? {},
+        },
+      ];
+    });
+    const custom = treatmentDefaults
+      .filter((item) => item.system === false && item.active)
+      .map((item) => ({
+        id: item.id ?? item.treatmentKey,
+        treatmentKey: item.treatmentKey,
+        displayName: item.displayName,
+        category: item.category ?? "Clinic custom",
+        baseTreatmentKey: item.baseTreatmentKey ?? "other",
+        visualKey: item.visualKey ?? item.baseTreatmentKey ?? "other",
+        perTooth: item.perTooth ?? true,
+        system: false,
+        prices: item.prices,
+      }));
+    return [...system, ...custom];
+  }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
   const change = (patch: Partial<DentalPlan>) =>
@@ -85,6 +127,41 @@ function PlannerShell({
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
   const step = Math.max(0, Math.min(4, plan.draftStep));
+  const applyTemplate = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) return;
+    const hasPlanningData =
+      Object.keys(plan.currentConditions).length > 0 || plan.proposedTreatments.length > 0;
+    if (
+      hasPlanningData &&
+      !window.confirm("Replace the current dental planning data with this template?")
+    )
+      return;
+    const source = createDentalPlan(template.planData);
+    setPlan({
+      ...plan,
+      currentConditions: source.currentConditions,
+      proposedTreatments: source.proposedTreatments,
+      treatmentGroups: source.treatmentGroups,
+      planningPreferences: source.planningPreferences,
+      travel: {
+        ...plan.travel,
+        selectedHotelId: source.travel.selectedHotelId,
+        hotelIncluded: source.travel.hotelIncluded,
+        hotelRequired: source.travel.hotelRequired,
+        hotelNights: source.travel.hotelNights,
+        roomType: source.travel.roomType,
+        boardType: source.travel.boardType,
+        airportTransfer: source.travel.airportTransfer,
+        localTransfer: source.travel.localTransfer,
+        flightIncluded: source.travel.flightIncluded,
+        includedServices: source.travel.includedServices,
+      },
+      commercial: { ...plan.commercial, items: source.commercial.items },
+      updatedAt: new Date().toISOString(),
+    });
+    toast.success(`${template.name} applied`);
+  };
   const save = () => {
     repository.savePlan(plan);
     onSave?.(plan);
@@ -125,7 +202,9 @@ function PlannerShell({
             <p className="text-sm text-muted-foreground">
               {context?.mode === "crm"
                 ? "CRM-connected clinical workflow"
-                : "Standalone development workflow"}
+                : context?.mode === "template"
+                  ? "Clinic template editor · patient data excluded"
+                  : "Standalone development workflow"}
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -139,6 +218,20 @@ function PlannerShell({
             <Button variant="outline" onClick={save}>
               Save draft
             </Button>
+            {context?.mode === "crm" && onSaveAsTemplate && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const name = window.prompt("Template name");
+                  if (name?.trim()) {
+                    onSaveAsTemplate(plan, name.trim());
+                    toast.success("Template saved");
+                  }
+                }}
+              >
+                Save as template
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -163,8 +256,53 @@ function PlannerShell({
             {result}
           </div>
         )}
-        {step === 0 && <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />}{" "}
-        {step === 1 && <TreatmentPlanner value={plan} onChange={setPlan} readOnly={readOnly} />}{" "}
+        {step === 0 && (
+          <>
+            {context?.mode !== "template" && templates.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Choose a clinic template</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Select onValueChange={applyTemplate}>
+                    <SelectTrigger className="max-w-xl">
+                      <SelectValue placeholder="Select a reusable template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name} · {template.category} ·{" "}
+                          {template.planData.proposedTreatments.length} treatments
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+            )}
+            {context?.mode === "template" ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Template mode</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Patient identity, contact, assessment and medical data are never stored in
+                  templates. Continue to Clinical Planning to edit the reusable diagram.
+                </CardContent>
+              </Card>
+            ) : (
+              <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />
+            )}
+          </>
+        )}{" "}
+        {step === 1 && (
+          <TreatmentPlanner
+            value={plan}
+            onChange={setPlan}
+            readOnly={readOnly}
+            definitions={effectiveTreatments}
+          />
+        )}{" "}
         {step === 2 && <TravelServicesStep plan={plan} change={change} hotels={hotels} />}{" "}
         {step === 3 && (
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
@@ -180,6 +318,8 @@ function PlannerShell({
           </Button>
           {step < 4 ? (
             <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
+          ) : context?.mode === "template" ? (
+            <Button onClick={save}>Save template</Button>
           ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>

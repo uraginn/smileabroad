@@ -871,7 +871,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 8,
+      version: 9,
       migrate: (persistedState) => {
         const state = persistedState as Store;
         const patients = state.patients ?? [];
@@ -978,17 +978,28 @@ export const useMockStore = create<Store>()(
           leads,
           treatmentPlans,
           quotes,
-          clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((item) => ({
-            ...item,
-            prices: item.prices ?? {},
-            active: item.active !== false,
-          })),
+          clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((legacy) => {
+            const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
+              svg_asset?: unknown;
+            };
+            const baseTreatmentKey =
+              item.base_treatment_key ?? (item.system ? item.treatment_key : "other");
+            return {
+              ...item,
+              prices: item.prices ?? {},
+              active: item.active !== false,
+              base_treatment_key: baseTreatmentKey,
+              visual_key: item.visual_key ?? (item.system ? baseTreatmentKey : "dental-implant"),
+              rule_profile_key: item.rule_profile_key ?? baseTreatmentKey,
+            };
+          }),
           dentalPlanTemplates: (state.dentalPlanTemplates ?? []).map((item) => ({
             ...item,
             active: item.active !== false,
           })),
           clinicHotels: (state.clinicHotels ?? []).map((item) => ({
             ...item,
+            category: item.category ?? "Standard",
             room_types: Array.isArray(item.room_types) ? item.room_types : [],
             board_types: Array.isArray(item.board_types) ? item.board_types : [],
             images: Array.isArray(item.images) ? item.images.slice(0, 4) : [],

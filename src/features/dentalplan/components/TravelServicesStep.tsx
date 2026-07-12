@@ -40,9 +40,16 @@ export function TravelServicesStep({
   hotels?: HotelOption[];
 }) {
   const [custom, setCustom] = useState("");
+  const [hotelQuery, setHotelQuery] = useState("");
   const defaults = derivePlanDefaults(plan);
   const selectedHotel = hotels.find((hotel) => hotel.id === plan.travel.selectedHotelId);
   const defaultHotel = hotels.find((hotel) => hotel.isDefault) ?? hotels[0];
+  const normalizedHotelQuery = hotelQuery.trim().toLocaleLowerCase();
+  const filteredHotels = normalizedHotelQuery
+    ? hotels.filter((hotel) =>
+        `${hotel.name} ${hotel.category}`.toLocaleLowerCase().includes(normalizedHotelQuery),
+      )
+    : hotels;
   const update = (patch: Partial<DentalPlan["travel"]>) =>
     change({ travel: { ...plan.travel, ...patch } });
   const setService = (service: string, checked: boolean) => {
@@ -64,18 +71,27 @@ export function TravelServicesStep({
   const chooseHotel = (hotelId: string, extra: Partial<DentalPlan["travel"]> = {}) => {
     const hotel = hotels.find((item) => item.id === hotelId);
     if (!hotel) return;
-    update({
-      ...extra,
-      selectedHotelId: hotel.id,
-      hotelName: hotel.name,
-      hotelDescription: hotel.description,
-      hotelNights: plan.travel.hotelNights || hotel.defaultNights,
-      roomType: hotel.roomTypes.includes(plan.travel.roomType ?? "")
-        ? plan.travel.roomType
-        : hotel.roomTypes[0],
-      boardType: hotel.boardTypes.includes(plan.travel.boardType ?? "")
-        ? plan.travel.boardType
-        : hotel.boardTypes[0],
+    const hotelNights = plan.travel.hotelNights || hotel.defaultNights;
+    change({
+      travel: {
+        ...plan.travel,
+        ...extra,
+        selectedHotelId: hotel.id,
+        hotelName: hotel.name,
+        hotelDescription: hotel.description,
+        hotelNights,
+        roomType: hotel.roomTypes.includes(plan.travel.roomType ?? "")
+          ? plan.travel.roomType
+          : hotel.roomTypes[0],
+        boardType: hotel.boardTypes.includes(plan.travel.boardType ?? "")
+          ? plan.travel.boardType
+          : hotel.boardTypes[0],
+      },
+      commercial: {
+        ...plan.commercial,
+        currency: hotel.currency,
+        hotelTotal: hotel.pricePerNight * hotelNights,
+      },
     });
   };
   return (
@@ -116,15 +132,22 @@ export function TravelServicesStep({
           <CardContent className="space-y-4">
             {hotels.length ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Filter hotels">
+                  <Input
+                    value={hotelQuery}
+                    onChange={(event) => setHotelQuery(event.target.value)}
+                    placeholder="Name or category"
+                  />
+                </Field>
                 <Field label="Configured hotel">
                   <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select hotel" />
                     </SelectTrigger>
                     <SelectContent>
-                      {hotels.map((hotel) => (
+                      {filteredHotels.map((hotel) => (
                         <SelectItem key={hotel.id} value={hotel.id}>
-                          {hotel.name}
+                          {hotel.name} · {hotel.category}
                           {hotel.isDefault ? " · Default" : ""}
                         </SelectItem>
                       ))}
@@ -136,9 +159,16 @@ export function TravelServicesStep({
                     type="number"
                     min={0}
                     value={plan.travel.hotelNights}
-                    onChange={(event) =>
-                      update({ hotelNights: Math.max(0, Number(event.target.value)) })
-                    }
+                    onChange={(event) => {
+                      const hotelNights = Math.max(0, Number(event.target.value));
+                      change({
+                        travel: { ...plan.travel, hotelNights },
+                        commercial: {
+                          ...plan.commercial,
+                          hotelTotal: (selectedHotel?.pricePerNight ?? 0) * hotelNights,
+                        },
+                      });
+                    }}
                   />
                 </Field>
                 <Field label="Room type">
@@ -286,7 +316,16 @@ function HotelPreview({ hotel }: { hotel: HotelOption }) {
     <div className="rounded-lg border p-3">
       <div className="flex flex-wrap gap-3">
         <div className="min-w-48 flex-1">
-          <p className="font-medium">{hotel.name}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">{hotel.name}</p>
+            <Badge variant="outline">{hotel.category}</Badge>
+          </div>
+          <p className="text-sm">
+            {hotel.pricePerNight} {hotel.currency} / night
+          </p>
+          {hotel.companionPolicy && (
+            <p className="text-xs text-muted-foreground">Companion: {hotel.companionPolicy}</p>
+          )}
           {hotel.description && (
             <p className="mt-1 text-sm text-muted-foreground">{hotel.description}</p>
           )}

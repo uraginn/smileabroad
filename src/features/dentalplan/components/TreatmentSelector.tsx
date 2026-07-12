@@ -1,5 +1,5 @@
 import { TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
-import type { TreatmentType } from "../types/dental-plan.types";
+import type { EffectiveTreatmentDefinition, TreatmentType } from "../types/dental-plan.types";
 const GROUPS: Array<{ label: string; types: TreatmentType[] }> = [
   {
     label: "Restorative",
@@ -23,42 +23,58 @@ const GROUPS: Array<{ label: string; types: TreatmentType[] }> = [
 export function TreatmentSelector({
   disabled,
   onApply,
+  definitions,
 }: {
   disabled: boolean;
-  onApply: (treatment: TreatmentType) => void;
+  onApply: (treatment: EffectiveTreatmentDefinition) => void;
+  definitions: EffectiveTreatmentDefinition[];
 }) {
+  const customGroups = [
+    ...new Set(definitions.filter((item) => !item.system).map((item) => item.category)),
+  ].map((category) => ({
+    label: category,
+    types: [] as TreatmentType[],
+    definitions: definitions.filter((item) => !item.system && item.category === category),
+  }));
   return (
     <div className="space-y-2">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">
         Apply proposed treatment
       </div>
       <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-        {GROUPS.map((group) => (
+        {[
+          ...GROUPS.map((group) => ({
+            ...group,
+            definitions: definitions.filter(
+              (item) => item.system && group.types.includes(item.baseTreatmentKey),
+            ),
+          })),
+          ...customGroups,
+        ].map((group) => (
           <section key={group.label}>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{group.label}</p>
             <div className="grid grid-cols-2 gap-2">
-              {group.types
-                .map((type) => TREATMENT_DEFINITIONS.find((item) => item.type === type))
-                .filter(Boolean)
-                .map(
-                  (treatment) =>
-                    treatment && (
-                      <button
-                        key={treatment.type}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onApply(treatment.type)}
-                        className="flex items-center gap-2 rounded border px-2 py-1.5 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                        title={`${treatment.label}${treatment.supported ? "" : " (placeholder visual)"}`}
-                      >
-                        <span
-                          className="size-3 rounded-sm border"
-                          style={{ background: treatment.color }}
-                        />
-                        <span className="truncate">{treatment.label}</span>
-                      </button>
-                    ),
-                )}
+              {group.definitions.map((treatment) => {
+                const visual = TREATMENT_DEFINITIONS.find(
+                  (item) => item.type === treatment.visualKey,
+                );
+                return (
+                  <button
+                    key={treatment.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onApply(treatment)}
+                    className="flex items-center gap-2 rounded border px-2 py-1.5 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    title={`${treatment.displayName} · behaves like ${treatment.baseTreatmentKey}`}
+                  >
+                    <span
+                      className="size-3 rounded-sm border"
+                      style={{ background: visual?.color }}
+                    />
+                    <span className="truncate">{treatment.displayName}</span>
+                  </button>
+                );
+              })}
             </div>
           </section>
         ))}

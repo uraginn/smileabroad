@@ -13,6 +13,8 @@ type Search = {
   treatmentPlanId?: string;
   leadId?: string;
   assessmentId?: string;
+  mode?: "template";
+  templateId?: string;
 };
 export const Route = createFileRoute("/dentalplan")({
   validateSearch: (search: Record<string, unknown>): Search => ({
@@ -21,8 +23,10 @@ export const Route = createFileRoute("/dentalplan")({
       typeof search.treatmentPlanId === "string" ? search.treatmentPlanId : undefined,
     leadId: typeof search.leadId === "string" ? search.leadId : undefined,
     assessmentId: typeof search.assessmentId === "string" ? search.assessmentId : undefined,
+    mode: search.mode === "template" ? "template" : undefined,
+    templateId: typeof search.templateId === "string" ? search.templateId : undefined,
   }),
-  head: () => ({ meta: [{ title: "DentalPlan Studio — SmileAbroad" }] }),
+  head: () => ({ meta: [{ title: "DentalPlan Studio â€” SmileAbroad" }] }),
   component: DentalPlanRoute,
 });
 const treatmentMap: Partial<Record<TreatmentType, ToothTreatment>> = {
@@ -60,12 +64,18 @@ function DentalPlanRoute() {
   const users = useMockStore((state) => state.users);
   const treatmentDefinitions = useMockStore((state) => state.clinicTreatmentDefinitions);
   const hotels = useMockStore((state) => state.clinicHotels);
+  const templates = useMockStore((state) => state.dentalPlanTemplates);
   const addPlan = useMockStore((state) => state.addTreatmentPlan);
   const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const addQuote = useMockStore((state) => state.addQuote);
   const updateQuote = useMockStore((state) => state.updateQuote);
   const addPatient = useMockStore((state) => state.addPatient);
   const updatePatient = useMockStore((state) => state.updatePatient);
+  const saveTemplate = useMockStore((state) => state.saveDentalPlanTemplate);
+  const templateMode = search.mode === "template";
+  const activeTemplate = templates.find(
+    (item) => item.id === search.templateId && item.clinic_id === user?.clinic_id,
+  );
   const existingPlan = plans.find(
     (item) => item.id === search.treatmentPlanId && item.clinic_id === user?.clinic_id,
   );
@@ -98,6 +108,13 @@ function DentalPlanRoute() {
     (item) => item.id === (lead?.roadmap_id ?? patient?.roadmap_id ?? application?.roadmap_id),
   );
   const crmMode = !!user && !!user.clinic_id && !!(patient || existingPlan || lead || assessment);
+  const defaultDentist = users.find(
+    (member) =>
+      member.clinic_id === user?.clinic_id &&
+      member.role === "dentist" &&
+      member.active !== false &&
+      member.default_planner_dentist,
+  );
   const requestedCrmContext = !!(
     search.patientId ||
     search.treatmentPlanId ||
@@ -136,6 +153,11 @@ function DentalPlanRoute() {
     [assessment],
   );
   const initial = useMemo(() => {
+    if (templateMode && activeTemplate)
+      return createDentalPlan({
+        ...(activeTemplate.plan_data as Partial<DentalPlanData>),
+        draftStep: 1,
+      });
     if (!crmMode) return undefined;
     const linkedPatient =
       patient ??
@@ -208,7 +230,7 @@ function DentalPlanRoute() {
           uploadedFiles: caseFiles,
           treatmentInterest:
             linkedPatient?.treatment_interest ?? embedded.patient.treatmentInterest,
-          dentistId: existingPlan?.dentist_id,
+          dentistId: existingPlan?.dentist_id ?? embedded.patient.dentistId ?? defaultDentist?.id,
           coordinatorId: existingPlan?.coordinator_id,
           planTitle: existingPlan?.title ?? embedded.patient.planTitle,
         },
@@ -245,7 +267,7 @@ function DentalPlanRoute() {
         applicationId: application?.id,
         leadId: lead?.id,
         uploadedFiles: caseFiles,
-        dentistId: existingPlan?.dentist_id,
+        dentistId: existingPlan?.dentist_id ?? defaultDentist?.id,
         coordinatorId: existingPlan?.coordinator_id,
         planTitle: existingPlan?.title ?? "Dental treatment plan",
         preparationDate: new Date().toISOString().slice(0, 10),
@@ -281,8 +303,13 @@ function DentalPlanRoute() {
     caseFiles,
     importedAssessment,
     contextQuote,
+    defaultDentist?.id,
+    templateMode,
+    activeTemplate,
   ]);
-  if (!hydrated && requestedCrmContext) return <div className="p-8">Loading CRM context…</div>;
+  if (hydrated && templateMode && !activeTemplate)
+    return <div className="p-8">Template unavailable for the active clinic.</div>;
+  if (!hydrated && requestedCrmContext) return <div className="p-8">Loading CRM contextâ€¦</div>;
   if (hydrated && requestedCrmContext && !crmMode)
     return (
       <div className="p-8">
@@ -402,12 +429,17 @@ function DentalPlanRoute() {
     const existingQuote = quotes.find(
       (quote) => quote.treatment_plan_id === plan.id && quote.clinic_id === user.clinic_id,
     );
-    const quoteItems = items.map((item) => ({
-      id: `qi_${item.id}`,
-      label: `Tooth ${item.tooth} · ${treatmentLabel(item.treatment)}`,
-      qty: 1,
-      unit_price: item.unit_price,
-    }));
+    const quoteItems = items.map((item) => {
+      const customTreatment = value.proposedTreatments.find((treatment) =>
+        item.id.startsWith(`dpi_${treatment.id}_`),
+      );
+      return {
+        id: `qi_${item.id}`,
+        label: `Tooth ${item.tooth} · ${customTreatment?.displayName ?? treatmentLabel(item.treatment)}`,
+        qty: 1,
+        unit_price: item.unit_price,
+      };
+    });
     if (value.commercial.otherServiceTotal > 0)
       quoteItems.push({
         id: "qi_other_services",
@@ -433,7 +465,7 @@ function DentalPlanRoute() {
           ? Math.min(beforeDiscount, Math.max(0, value.commercial.discountValue))
           : 0;
     const hotelSummary = value.travel.hotelIncluded
-      ? `Hotel: ${value.travel.hotelName || "To be confirmed"} · ${value.travel.hotelNights} nights${value.travel.roomType ? ` · ${value.travel.roomType}` : ""}${value.travel.boardType ? ` · ${value.travel.boardType}` : ""}`
+      ? `Hotel: ${value.travel.hotelName || "To be confirmed"} Â· ${value.travel.hotelNights} nights${value.travel.roomType ? ` Â· ${value.travel.roomType}` : ""}${value.travel.boardType ? ` Â· ${value.travel.boardType}` : ""}`
       : undefined;
     const includedServices = [
       ...value.travel.includedServices.filter((service) => !service.startsWith("Hotel: ")),
@@ -483,32 +515,63 @@ function DentalPlanRoute() {
   return (
     <DentalPlanStudio
       context={{
-        mode: crmMode ? "crm" : "standalone",
+        mode: templateMode ? "template" : crmMode ? "crm" : "standalone",
         clinicId: user?.clinic_id,
         patientId: patient?.id,
         treatmentPlanId: existingPlan?.id,
       }}
       initialValue={initial}
       clinicUsers={users
-        .filter((member) => member.clinic_id === user?.clinic_id)
-        .map(({ id, name, role }) => ({ id, name, role }))}
+        .filter(
+          (member) =>
+            member.clinic_id === user?.clinic_id &&
+            (member.active !== false || member.id === initial?.patient.dentistId),
+        )
+        .map(({ id, name, role, title, specialty }) => ({
+          id,
+          name: [name, title, specialty].filter(Boolean).join(" Â· "),
+          role,
+        }))}
       treatmentDefaults={treatmentDefinitions
-        .filter((item) => item.clinic_id === user?.clinic_id && item.active)
+        .filter((item) => item.clinic_id === user?.clinic_id)
         .map((item) => ({
+          id: item.id,
           treatmentKey: item.treatment_key,
           displayName: item.display_name,
           active: item.active,
+          system: item.system,
+          category: item.category,
+          baseTreatmentKey: item.base_treatment_key as TreatmentType,
+          visualKey: item.visual_key as TreatmentType,
+          perTooth: item.unit_type === "tooth",
           prices: item.prices,
         }))}
-      hotels={hotels
+      templates={templates
         .filter((item) => item.clinic_id === user?.clinic_id && item.active)
         .map((item) => ({
           id: item.id,
           name: item.name,
           description: item.description,
+          category: item.category,
+          planData: createDentalPlan(item.plan_data as Partial<DentalPlanData>),
+        }))}
+      hotels={hotels
+        .filter(
+          (item) =>
+            item.clinic_id === user?.clinic_id &&
+            (item.active || item.id === initial?.travel.selectedHotelId),
+        )
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          description: item.description,
           roomTypes: item.room_types,
           boardTypes: item.board_types,
           defaultNights: item.default_nights,
+          pricePerNight: item.price_per_night,
+          currency: item.currency,
+          companionPolicy: item.companion_policy,
           isDefault: item.is_default,
           images: item.images.map((image) => ({
             id: image.id,
@@ -517,6 +580,64 @@ function DentalPlanRoute() {
           })),
         }))}
       onFinalize={finalize}
+      onSaveAsTemplate={(value, name) => {
+        if (!user?.clinic_id) return;
+        saveTemplate(
+          {
+            id: crypto.randomUUID(),
+            clinic_id: user.clinic_id,
+            name,
+            description: "Saved from a clinic treatment plan",
+            category: "Custom",
+            active: true,
+            default_dentist_id: value.patient.dentistId,
+            plan_data: sanitizeTemplatePlan(value),
+          },
+          user.id,
+        );
+      }}
+      onSave={
+        templateMode && activeTemplate
+          ? (value) =>
+              saveTemplate(
+                {
+                  ...activeTemplate,
+                  plan_data: sanitizeTemplatePlan(value),
+                },
+                user?.id,
+              )
+          : undefined
+      }
     />
   );
+}
+
+function sanitizeTemplatePlan(value: DentalPlanData): DentalPlanData {
+  const clean = createDentalPlan({
+    ...value,
+    id: crypto.randomUUID(),
+    patientName: "",
+    patient: {
+      firstName: "",
+      lastName: "",
+      fullName: "",
+      uploadedFiles: [],
+      planTitle: value.patient.planTitle || "Template",
+      preparationDate: "",
+      currency: value.commercial.currency,
+      dentistId: value.patient.dentistId,
+    },
+    importedAssessment: { medicalConditions: [], preferredCities: [] },
+    travel: {
+      ...value.travel,
+      firstVisitDate: undefined,
+      secondVisitDate: undefined,
+      timelineNotes: undefined,
+      internalNotes: undefined,
+      patientFacingNotes: undefined,
+    },
+    finalized: false,
+    draftStep: 0,
+  });
+  return clean;
 }

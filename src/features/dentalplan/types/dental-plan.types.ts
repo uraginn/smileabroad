@@ -81,6 +81,10 @@ export type ToothTreatment = {
   id: string;
   toothNumbers: ToothNumber[];
   treatmentType: TreatmentType;
+  treatmentDefinitionId?: string;
+  treatmentKey?: string;
+  visualKey?: TreatmentType;
+  displayName?: string;
   treatmentGroupId?: string;
   sequence?: number;
   notes?: string;
@@ -181,6 +185,18 @@ export type DentalPricingItem = {
   label: string;
   qty: number;
   unitPrice: number;
+  priceOverridden?: boolean;
+};
+export type EffectiveTreatmentDefinition = {
+  id: string;
+  treatmentKey: string;
+  displayName: string;
+  category: string;
+  baseTreatmentKey: TreatmentType;
+  visualKey: TreatmentType;
+  perTooth: boolean;
+  system: boolean;
+  prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
 };
 export type DentalPlannerCommercial = {
   currency: "GBP" | "EUR" | "USD" | "TRY";
@@ -219,27 +235,45 @@ export interface DentalPlanStudioProps {
   onChange?: (value: DentalPlanData) => void;
   onSave?: (value: DentalPlanData) => void;
   onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string; quoteId: string }>;
+  onSaveAsTemplate?: (value: DentalPlanData, name: string) => void;
   readOnly?: boolean;
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
   treatmentDefaults?: Array<{
+    id?: string;
     treatmentKey: string;
     displayName: string;
     active: boolean;
+    system?: boolean;
+    category?: string;
+    baseTreatmentKey?: TreatmentType;
+    visualKey?: TreatmentType;
+    perTooth?: boolean;
     prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
+  }>;
+  templates?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    category: string;
+    planData: DentalPlanData;
   }>;
   hotels?: Array<{
     id: string;
     name: string;
+    category: string;
     description?: string;
     roomTypes: string[];
     boardTypes: string[];
     defaultNights: number;
+    pricePerNight: number;
+    currency: "GBP" | "EUR" | "USD" | "TRY";
+    companionPolicy?: string;
     isDefault: boolean;
     images: Array<{ id: string; name: string; dataUrl?: string }>;
   }>;
 }
 export interface DentalPlannerContext {
-  mode: "standalone" | "crm";
+  mode: "standalone" | "crm" | "template";
   clinicId?: string;
   patientId?: string;
   treatmentPlanId?: string;
