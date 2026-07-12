@@ -89,7 +89,10 @@ function Assessment() {
       const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? "null");
       if (saved) {
         setSubmissionId(saved.submissionId || `anonymous_${crypto.randomUUID()}`);
-        setStep(Math.max(0, Math.min(saved.step ?? 0, STEPS.length - 1)));
+        const resumedStep = saved.resumeSection
+          ? STEPS.findIndex((section) => section === saved.resumeSection)
+          : saved.step;
+        setStep(Math.max(0, Math.min(resumedStep ?? 0, STEPS.length - 1)));
         setTreatment(saved.treatment ?? "");
         setCustomTreatmentOpen(!!saved.treatment && !TREATMENTS.includes(saved.treatment));
         setCountry(saved.country ?? "");

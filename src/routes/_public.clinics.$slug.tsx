@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Star, ShieldCheck, Hotel, Car, Clock, CheckCircle2, Languages } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageLoading } from "@/components/ui-bits";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/_public/clinics/$slug")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -18,9 +19,21 @@ function ClinicDetail() {
   const hydrated = useMockStoreHydrated();
   const { slug } = Route.useParams();
   const { roadmap: roadmapId } = Route.useSearch();
+  const [storedRoadmapId, setStoredRoadmapId] = useState<string>();
+  useEffect(() => {
+    try {
+      const journey = JSON.parse(
+        window.localStorage.getItem("smileabroad-active-journey-v1") ?? "null",
+      );
+      if (typeof journey?.roadmapId === "string") setStoredRoadmapId(journey.roadmapId);
+    } catch {
+      setStoredRoadmapId(undefined);
+    }
+  }, []);
+  const activeRoadmapId = roadmapId ?? storedRoadmapId;
   const clinic = useMockStore((s) => s.clinics.find((c) => c.slug === slug));
   const roadmap = useMockStore((s) =>
-    roadmapId ? s.roadmaps.find((item) => item.id === roadmapId) : undefined,
+    activeRoadmapId ? s.roadmaps.find((item) => item.id === activeRoadmapId) : undefined,
   );
   const assessment = useMockStore((s) =>
     roadmap ? s.assessments.find((item) => item.id === roadmap.assessment_id) : undefined,

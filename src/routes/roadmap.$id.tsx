@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, CheckCircle2, Clock, EuroIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, EuroIcon, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -21,12 +21,9 @@ import {
 } from "@/components/care-plan/document";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { mapPreliminaryRoadmap } from "@/lib/care-plan";
-import {
-  buildRoadmapTreatmentJourney,
-  DEFAULT_ROADMAP_TREATMENT_CONTENT,
-  deriveAssessmentTreatmentEstimates,
-} from "@/lib/roadmap-engine";
-import type { Assessment, RoadmapTreatmentEstimate } from "@/types/models";
+import { DEFAULT_ROADMAP_TREATMENT_CONTENT } from "@/lib/roadmap-engine";
+import { createPatientRoadmapViewModel } from "@/lib/roadmap-view-model";
+import type { RoadmapTreatmentEstimate } from "@/types/models";
 
 export const Route = createFileRoute("/roadmap/$id")({ component: RoadmapPage });
 
@@ -47,14 +44,11 @@ function RoadmapPage() {
     roadmap.recommended_clinic_ids.includes(clinic.id),
   );
   const carePlan = mapPreliminaryRoadmap({ roadmap, assessment });
-  const estimates = roadmap.treatment_estimates?.length
-    ? roadmap.treatment_estimates
-    : deriveAssessmentTreatmentEstimates(assessment);
-  const journey = roadmap.treatment_journey?.length
-    ? roadmap.treatment_journey
-    : buildRoadmapTreatmentJourney(estimates);
   const platformContent = treatmentContent.filter((item) => !item.clinic_id && item.active);
   const content = platformContent.length ? platformContent : DEFAULT_ROADMAP_TREATMENT_CONTENT;
+  const view = createPatientRoadmapViewModel({ roadmap, assessment, content });
+  const estimates = view.treatmentEstimates;
+  const journey = view.journey;
   const completePrice =
     estimates.length > 0 && !roadmap.missing_price_keys?.length && roadmap.price_max > 0;
   const legacyPrice = !roadmap.treatment_estimates?.length && roadmap.price_max > 0;
@@ -75,6 +69,32 @@ function RoadmapPage() {
     navigate({ to: "/confirmation/$id", params: { id: application.id } });
     toast.success("Application sent — the clinic will be in touch.");
   };
+  const addMoreInformation = () => {
+    window.localStorage.setItem(
+      "smileabroad-assessment-draft-v1",
+      JSON.stringify({
+        submissionId: assessment.patient_user_id,
+        resumeSection: "Uploads",
+        treatment: assessment.dental.treatment_interest,
+        country: assessment.travel.destination_country,
+        cities: assessment.travel.preferred_cities,
+        timeline: assessment.travel.treatment_timeline,
+        personal: {
+          firstName: assessment.personal.first_name,
+          lastName: assessment.personal.last_name,
+          age: assessment.personal.age,
+        },
+        conditions: { selected: assessment.medical.conditions, other: "" },
+        medications: { selected: assessment.medical.medication_groups ?? [], other: "" },
+        allergies: { selected: assessment.medical.allergy_groups ?? [], other: "" },
+        uploads: {
+          dentalPhotos: assessment.uploads.uploaded_dental_photos,
+          panoramic: assessment.uploads.uploaded_panoramic,
+        },
+      }),
+    );
+    navigate({ to: "/assessment" });
+  };
   return (
     <PlanDocumentShell variant="preliminary">
       <div className="container-app max-w-5xl py-8 sm:py-10">
@@ -94,6 +114,15 @@ function RoadmapPage() {
             </Button>
           }
         />
+        <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+          <span>Destination: {assessment.travel.destination_country || "Not selected"}</span>
+          <span>Focus: {assessment.dental.treatment_interest || "To be confirmed"}</span>
+          <span>Prepared: {formatRoadmapDate(view.preparedAt)}</span>
+          <span>Reference: {view.reference}</span>
+          <Badge variant={view.freshness === "Current" ? "secondary" : "outline"}>
+            {view.freshness}
+          </Badge>
+        </div>
         <PlanDisclaimer preliminary>{carePlan.disclaimer}</PlanDisclaimer>
         <div className="my-6">
           <PlanSummaryGrid
@@ -120,6 +149,52 @@ function RoadmapPage() {
             ]}
           />
         </div>
+        <PlanSection
+          title="Information available"
+          description="This shows which assessment information currently supports your preliminary Roadmap."
+          className="mb-6"
+        >
+          <div className="mb-4">
+            <Badge>{view.detailLabel}</Badge>
+          </div>
+          <div className="divide-y">
+            {view.informationCompleteness.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+              >
+                <span>{item.label}</span>
+                <Badge
+                  variant={
+                    item.status === "Provided" || item.status === "Completed"
+                      ? "secondary"
+                      : "outline"
+                  }
+                >
+                  {item.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          {(view.missingPhotos || view.missingPanoramic) && (
+            <Alert className="mt-4">
+              <AlertTitle>More dental information may improve the estimate</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>
+                  {view.missingPhotos && view.missingPanoramic
+                    ? "Add dental photos and a panoramic X-ray where available."
+                    : view.missingPhotos
+                      ? "Add dental photos for a more detailed preliminary estimate."
+                      : "Add a panoramic X-ray to support implant and root-canal review."}{" "}
+                  This does not guarantee a diagnosis.
+                </p>
+                <Button type="button" size="sm" variant="outline" onClick={addMoreInformation}>
+                  Add more dental information
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+        </PlanSection>
         <PlanSection
           title="Your assessment summary"
           description="These details come from your answers and are not clinical findings."
@@ -177,7 +252,7 @@ function RoadmapPage() {
           >
             <Accordion type="multiple">
               {estimates.map((estimate) => {
-                const detail = content.find(
+                const detail = view.treatmentInformation.find(
                   (item) => item.treatment_key === estimate.treatment_key,
                 );
                 if (!detail) return null;
@@ -281,15 +356,118 @@ function RoadmapPage() {
             </Alert>
           )}
         </PlanSection>
-        <PlanSection title="What may change the plan" className="mb-8">
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <PlanSection title="What this estimate includes">
+            <div className="space-y-2 text-sm">
+              {view.inclusions.map((item) => (
+                <p key={item} className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+                  {item}
+                </p>
+              ))}
+            </div>
+          </PlanSection>
+          <PlanSection title="Not included unless stated">
+            <div className="space-y-2 text-sm">
+              {view.exclusions.map((item) => (
+                <p key={item} className="flex gap-2">
+                  <XCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  {item}
+                </p>
+              ))}
+            </div>
+          </PlanSection>
+        </div>
+        {view.alternatives.length > 0 && (
+          <PlanSection
+            title="Treatment alternatives that may be discussed"
+            description="These are discussion options, not recommendations. Suitability depends on clinical findings."
+            className="mb-6"
+          >
+            <Accordion type="multiple">
+              {view.alternatives.map((alternative) => (
+                <AccordionItem key={alternative.title} value={alternative.title}>
+                  <AccordionTrigger>{alternative.title}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="flex flex-wrap gap-2">
+                      {alternative.options.map((option) => (
+                        <Badge key={option} variant="outline">
+                          {option}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">{alternative.note}</p>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </PlanSection>
+        )}
+        <PlanSection
+          title="Questions to ask your clinic"
+          description="Use these questions when comparing a confirmed plan and Quote."
+          className="mb-6"
+        >
           <div className="grid gap-2 text-sm sm:grid-cols-2">
-            {changeFactors(assessment).map((factor) => (
-              <p key={factor} className="flex gap-2">
+            {view.clinicQuestions.map((question) => (
+              <p key={question} className="flex gap-2">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                {factor}
+                {question}
               </p>
             ))}
           </div>
+        </PlanSection>
+        <PlanSection
+          title="What may change the estimate"
+          description="These factors may affect treatment quantities, sequence, timing or price and can only be confirmed clinically."
+          className="mb-6"
+        >
+          <Accordion type="multiple">
+            {view.changeFactors.map((group) => (
+              <AccordionItem key={group.title} value={group.title}>
+                <AccordionTrigger>{group.title}</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    {group.items.map((item) => (
+                      <p key={item}>{item}</p>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </PlanSection>
+        <PlanSection title="Preliminary Roadmap and final treatment plan" className="mb-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border p-4">
+              <Badge variant="secondary">Preliminary</Badge>
+              <h3 className="mt-3 font-medium">Preliminary Roadmap</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>Based on information you provided</li>
+                <li>Shows possible treatments, journey and estimated range</li>
+                <li>Does not contain a confirmed diagnosis</li>
+                <li>May change after photos, X-rays and examination are reviewed</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border p-4">
+              <Badge>Dentist-confirmed</Badge>
+              <h3 className="mt-3 font-medium">Final Treatment Plan</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>Prepared or approved by a dentist</li>
+                <li>Follows clinical examination and diagnostic review</li>
+                <li>May contain tooth-level procedures and materials</li>
+                <li>Includes confirmed pricing, visits and Quote details</li>
+              </ul>
+            </div>
+          </div>
+        </PlanSection>
+        <PlanSection title="Roadmap preparation and freshness" className="mb-8">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <Row label="Prepared" value={formatRoadmapDate(view.preparedAt)} />
+            <Row label="Last updated" value={formatRoadmapDate(view.updatedAt)} />
+            <Row label="Roadmap reference" value={view.reference} />
+            <Row label="Estimate freshness" value={view.freshness} />
+          </dl>
         </PlanSection>
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -297,17 +475,24 @@ function RoadmapPage() {
               Next step: compare recommended clinics
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Review clinic profiles, choose a clinic and submit this assessment for a confirmed
-              clinical plan and Quote.
+              Review this Roadmap, compare clinics, select a clinic, submit your information and
+              receive a dentist-reviewed treatment plan and Quote.
             </p>
           </div>
-          <Button asChild>
-            <a href="#recommended-clinics">Compare clinics</a>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <a href="#recommended-clinics">Compare recommended clinics</a>
+            </Button>
+            {(view.missingPhotos || view.missingPanoramic) && (
+              <Button type="button" variant="outline" onClick={addMoreInformation}>
+                Add more dental information
+              </Button>
+            )}
+          </div>
         </div>
         <div id="recommended-clinics" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {recommended.map((clinic) => (
-            <ClinicCard key={clinic.id} clinic={clinic} onApply={onApply} roadmapId={roadmap.id} />
+            <ClinicCard key={clinic.id} clinic={clinic} onApply={onApply} />
           ))}
         </div>
       </div>
@@ -321,19 +506,12 @@ function quantityLabel(estimate: RoadmapTreatmentEstimate) {
     return `Estimated: ${estimate.minimum_quantity}–${estimate.maximum_quantity}`;
   return "Quantity to be confirmed";
 }
-function changeFactors(assessment: Assessment) {
-  const factors = [
-    "Bone and gum condition",
-    "Hidden infection or root-canal findings",
-    "Final cosmetic preference",
-    "Selected material or implant system",
-  ];
-  if (assessment.medical.conditions.length || assessment.medical.medication_groups?.length)
-    factors.push("Medical history and current medication");
-  if (assessment.medical.smoking) factors.push("Smoking and healing response");
-  if (!assessment.uploads.uploaded_panoramic && !assessment.uploads.uploaded_dental_photos)
-    factors.push("Findings from dental photographs or an X-ray not yet provided");
-  return factors;
+function formatRoadmapDate(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 }
 function Row({ label, value }: { label: string; value: string }) {
   return (
