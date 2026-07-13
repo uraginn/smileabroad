@@ -564,6 +564,7 @@ export interface ClinicBranding extends BaseRecord {
   shared_view_logo_url?: string;
   shared_view_banner_url?: string;
   shared_view_tagline?: string;
+  shared_view_introduction?: string;
   shared_view_accent_color?: string;
   primary_color: string;
   secondary_color: string;

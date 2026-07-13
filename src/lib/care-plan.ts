@@ -8,6 +8,7 @@ import type {
   TreatmentPlan,
   TreatmentPlanPayment,
   ToothTreatment,
+  User,
 } from "@/types/models";
 import type { DentalPlanData } from "@/features/dentalplan";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
@@ -35,6 +36,9 @@ export interface CarePlanClinicPresentation {
   logo_url?: string;
   banner_url?: string;
   tagline?: string;
+  introduction?: string;
+  primary_color?: string;
+  secondary_color?: string;
   accent_color?: string;
   phone?: string;
   email?: string;
@@ -96,6 +100,7 @@ export interface PatientTreatmentDocument extends CarePlanPresentation {
   included_services: string[];
   patient_notes: string[];
   diagrams?: Pick<DentalPlanData, "currentConditions" | "proposedTreatments">;
+  coordinator?: { name: string; title?: string; avatar_url?: string };
 }
 
 export function mapPreliminaryRoadmap(input: {
@@ -213,6 +218,7 @@ export function mapTreatmentPlanToPatientDocument(
   clinic: Clinic,
   patient?: Patient,
   branding?: ClinicBranding,
+  coordinator?: User,
 ): PatientTreatmentDocument {
   const totals = calculateTreatmentPlanTotals(plan);
   const treatment_groups = groupTreatmentPlanItemsForPatient(plan);
@@ -248,14 +254,20 @@ export function mapTreatmentPlanToPatientDocument(
       name: clinic.name,
       city: clinic.city,
       country: clinic.country,
-      logo_url: branding?.shared_view_logo_url ?? branding?.logo_url,
-      banner_url: branding?.shared_view_banner_url ?? clinic.cover_image,
-      tagline: branding?.shared_view_tagline,
+      logo_url: branding?.logo_url ?? branding?.shared_view_logo_url,
+      banner_url: clinic.cover_image || branding?.shared_view_banner_url,
+      tagline: branding?.shared_view_tagline ?? clinic.short_description,
+      introduction: branding?.shared_view_introduction,
+      primary_color: branding?.primary_color,
+      secondary_color: branding?.secondary_color,
       accent_color: branding?.shared_view_accent_color ?? branding?.primary_color,
       phone: branding?.phone,
       email: branding?.email,
       website: branding?.website ?? clinic.website,
     },
+    coordinator: coordinator
+      ? { name: coordinator.name, title: coordinator.title, avatar_url: coordinator.avatar_url }
+      : undefined,
     price: {
       currency: plan.currency ?? "EUR",
       subtotal: totals.subtotal,

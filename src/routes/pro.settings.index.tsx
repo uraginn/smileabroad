@@ -297,10 +297,17 @@ function Profile({
   const [phone, setPhone] = useState(brand?.phone ?? "");
   const [email, setEmail] = useState(brand?.email ?? "");
   const [sharedLogo, setSharedLogo] = useState(
-    brand?.shared_view_logo_url ?? brand?.logo_url ?? "",
+    brand?.logo_url ?? brand?.shared_view_logo_url ?? "",
   );
-  const [sharedBanner, setSharedBanner] = useState(brand?.shared_view_banner_url ?? "");
+  const [sharedBanner, setSharedBanner] = useState(
+    clinic.cover_image || brand?.shared_view_banner_url || "",
+  );
   const [sharedTagline, setSharedTagline] = useState(brand?.shared_view_tagline ?? "");
+  const [sharedIntroduction, setSharedIntroduction] = useState(
+    brand?.shared_view_introduction ?? "",
+  );
+  const [primaryColor, setPrimaryColor] = useState(brand?.primary_color ?? "#0f766e");
+  const [secondaryColor, setSecondaryColor] = useState(brand?.secondary_color ?? "#334155");
   const [sharedAccent, setSharedAccent] = useState(
     brand?.shared_view_accent_color ?? brand?.primary_color ?? "#0f766e",
   );
@@ -334,19 +341,49 @@ function Profile({
           </Field>
         </div>
         <div className="sm:col-span-2 border-t pt-4">
-          <h3 className="font-medium">Shared Patient View branding</h3>
+          <h3 className="font-medium">Clinic branding</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Public logo and banner URLs are shown only on clinic Treatment Plans.
+            Your clinic identity is used automatically across patient-facing Treatment Plans.
           </p>
         </div>
-        <Field label="Shared-view logo URL">
+        <Field label="Clinic logo URL">
           <Input value={sharedLogo} onChange={(e) => setSharedLogo(e.target.value)} />
         </Field>
-        <Field label="Shared-view banner URL">
+        <Field label="Clinic banner URL">
           <Input value={sharedBanner} onChange={(e) => setSharedBanner(e.target.value)} />
         </Field>
-        <Field label="Shared-view tagline">
+        <Field label="Tagline">
           <Input value={sharedTagline} onChange={(e) => setSharedTagline(e.target.value)} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Shared Treatment Plan introduction">
+            <Textarea
+              value={sharedIntroduction}
+              maxLength={250}
+              rows={4}
+              placeholder="A short, reassuring welcome shown at the beginning of each patient Treatment Plan."
+              onChange={(e) => setSharedIntroduction(e.target.value)}
+            />
+          </Field>
+          <p className="mt-1 text-right text-xs text-muted-foreground">
+            {sharedIntroduction.length}/250
+          </p>
+        </div>
+        <Field label="Primary color">
+          <Input
+            type="color"
+            className="h-10"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+          />
+        </Field>
+        <Field label="Secondary color">
+          <Input
+            type="color"
+            className="h-10"
+            value={secondaryColor}
+            onChange={(e) => setSecondaryColor(e.target.value)}
+          />
         </Field>
         <Field label="Accent color">
           <Input
@@ -367,14 +404,23 @@ function Profile({
           className="sm:col-span-2 sm:w-fit"
           onClick={() =>
             save(
-              { name, website, country, city, short_description: description },
+              {
+                name,
+                website,
+                country,
+                city,
+                cover_image: sharedBanner,
+                short_description: description,
+              },
               {
                 website,
                 phone,
                 email,
-                shared_view_logo_url: sharedLogo || undefined,
-                shared_view_banner_url: sharedBanner || undefined,
+                logo_url: sharedLogo || undefined,
                 shared_view_tagline: sharedTagline || undefined,
+                shared_view_introduction: sharedIntroduction.trim() || undefined,
+                primary_color: primaryColor,
+                secondary_color: secondaryColor,
                 shared_view_accent_color: sharedAccent,
               },
             )

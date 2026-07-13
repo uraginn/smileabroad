@@ -14,7 +14,6 @@ import {
   HeartHandshake,
   Link2,
   Mail,
-  MapPin,
   Phone,
   Plane,
   Printer,
@@ -42,6 +41,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import {
   Dialog,
   DialogContent,
@@ -103,6 +109,24 @@ function SharedPlan() {
         )
       : undefined,
   );
+  const coordinator = useMockStore((s) =>
+    plan
+      ? s.users.find(
+          (user) =>
+            user.clinic_id === plan.clinic_id &&
+            user.id === (plan.coordinator_id ?? patient?.coordinator_id),
+        )
+      : undefined,
+  );
+  const configuredHotel = useMockStore((s) =>
+    plan
+      ? s.clinicHotels.find(
+          (hotel) =>
+            hotel.clinic_id === plan.clinic_id &&
+            (hotel.id === plan.selected_hotel_id || hotel.id === plan.hotel_snapshot?.hotel_id),
+        )
+      : undefined,
+  );
   const markViewed = useMockStore((s) => s.markTreatmentPlanViewed);
   const markAccepted = useMockStore((s) => s.markTreatmentPlanAccepted);
   const markDeclined = useMockStore((s) => s.markTreatmentPlanDeclined);
@@ -112,9 +136,9 @@ function SharedPlan() {
   const document = useMemo(
     () =>
       plan && clinic
-        ? mapTreatmentPlanToPatientDocument(plan, clinic, patient, branding)
+        ? mapTreatmentPlanToPatientDocument(plan, clinic, patient, branding, coordinator)
         : undefined,
-    [plan, clinic, patient, branding],
+    [plan, clinic, patient, branding, coordinator],
   );
   const nav = useMemo(
     () =>
@@ -128,9 +152,6 @@ function SharedPlan() {
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
             { id: "payment", label: "Payment" },
-            ...(document.included_services.length
-              ? [{ id: "included-services", label: "Included Services" }]
-              : []),
             ...(document.patient_notes.length
               ? [{ id: "important-information", label: "Important Information" }]
               : []),
@@ -142,12 +163,24 @@ function SharedPlan() {
   if (!hydrated || (preview && !authHydrated)) return null;
   if (!plan || !document) return <SafeNotFound />;
   const accent = document.clinic?.accent_color ?? "#0f766e";
+  const primary = document.clinic?.primary_color ?? accent;
+  const secondary = document.clinic?.secondary_color ?? "#334155";
+  const hasAdditionalCosts =
+    (document.price.hotel_total ?? 0) > 0 ||
+    (document.price.transfer_total ?? 0) > 0 ||
+    (document.price.optional_service_total ?? 0) > 0;
   return (
     <div
       className="shared-plan min-h-screen bg-slate-50 text-slate-900"
-      style={{ "--shared-accent": accent } as React.CSSProperties}
+      style={
+        {
+          "--shared-primary": primary,
+          "--shared-secondary": secondary,
+          "--shared-accent": accent,
+        } as React.CSSProperties
+      }
     >
-      <style>{`@media print{@page{margin:14mm}.no-print{display:none!important}.shared-plan,.shared-section,.print-cta{background:#fff!important;color:#0f172a!important}.print-cta *{color:#0f172a!important}.print-card,.print-row,.payment-summary,.dental-preview{break-inside:avoid;box-shadow:none!important}.print-grid{display:block!important}.payment-summary{position:static!important;margin-bottom:1rem}.shared-section{scroll-margin-top:0!important;margin-block:1rem!important;padding-block:1rem!important}.shared-section>h2,.shared-section>div>h2{break-after:avoid}.shared-hero{min-height:10rem!important}.shared-hero img{max-height:9rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}.shared-plan a{text-decoration:none!important}}`}</style>
+      <style>{`.shared-plan [role="tab"][data-state="active"]{box-shadow:inset 0 -2px 0 var(--shared-accent)}@media print{@page{margin:14mm}.no-print{display:none!important}.shared-plan,.shared-section,.print-cta{background:#fff!important;color:#0f172a!important}.print-cta *{color:#0f172a!important}.print-card,.print-row,.payment-summary,.dental-preview{break-inside:avoid;box-shadow:none!important}.print-grid{display:block!important}.payment-summary{position:static!important;margin-bottom:1rem}.shared-section{scroll-margin-top:0!important;margin-block:1rem!important;padding-block:1rem!important}.shared-section>h2,.shared-section>div>h2{break-after:avoid}.shared-hero{min-height:10rem!important}.shared-hero img{max-height:9rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}.shared-plan a{text-decoration:none!important}}`}</style>
       <Header document={document} />
       <SectionNavigation items={nav} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -155,41 +188,51 @@ function SharedPlan() {
           id="treatment-plan"
           className="shared-section -mx-4 scroll-mt-24 rounded-b-[2rem] bg-stone-100/70 px-4 py-12 sm:-mx-6 sm:px-6 sm:py-16"
         >
-          <div className="grid items-center gap-8 md:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.3fr)] lg:gap-14">
-            <div className="flex justify-center md:justify-start">
+          <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:text-left">
+            {document.coordinator?.avatar_url ||
+            document.clinic?.logo_url ||
+            document.clinic?.banner_url ? (
               <img
-                src="/shared-plan/medical-care.svg"
-                alt="Personalized medical care illustration"
-                className="h-auto w-full max-w-56 sm:max-w-64"
+                src={
+                  document.coordinator?.avatar_url ??
+                  document.clinic?.logo_url ??
+                  document.clinic?.banner_url
+                }
+                alt={
+                  document.coordinator
+                    ? `${document.coordinator.name}, your clinic coordinator`
+                    : `${document.clinic?.name} logo`
+                }
+                className="size-24 shrink-0 rounded-full bg-white object-cover p-1 shadow-lg ring-4 ring-white sm:size-28"
+                style={{ outline: `2px solid ${accent}` }}
               />
-            </div>
-            <div className="max-w-3xl text-center md:text-left">
+            ) : (
+              <span
+                className="grid size-24 shrink-0 place-items-center rounded-full text-3xl font-semibold text-white shadow-lg sm:size-28"
+                style={{ background: primary }}
+                aria-hidden="true"
+              >
+                {document.clinic?.name.charAt(0)}
+              </span>
+            )}
+            <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Prepared specifically for you
+                A personal welcome from {document.clinic?.name}
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
-                Hi {document.patient_name?.split(" ")[0] ?? "there"},
+                Prepared specifically for {document.patient_name?.split(" ")[0] ?? "you"}
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:mx-0 sm:text-lg sm:leading-8">
-                Your clinic has prepared this personalized Treatment Plan following your clinical
-                review. It brings together your proposed treatment, treatment journey, travel
-                arrangements and payment information in one clear document.
+              <p className="mt-4 whitespace-pre-line text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                {document.clinic?.introduction ??
+                  "Your clinic has prepared this personalized Treatment Plan following your clinical review. It brings together the information you need to understand your proposed care and next steps."}
               </p>
-              <div className="mt-7 flex flex-wrap justify-center gap-2 text-sm text-slate-600 md:justify-start">
-                <span className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 ring-1 ring-slate-200/70">
-                  <MapPin className="size-4" aria-hidden="true" />
-                  {document.clinic?.city}, {document.clinic?.country}
-                </span>
-                <span className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 ring-1 ring-slate-200/70">
-                  <Sparkles className="size-4" aria-hidden="true" />
-                  Personalized treatment
-                </span>
-                {document.price.valid_until && (
-                  <span className="rounded-full bg-white/80 px-3 py-1.5 ring-1 ring-slate-200/70">
-                    Valid until {new Date(document.price.valid_until).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
+              {document.coordinator && (
+                <p className="mt-5 text-sm text-slate-600">
+                  <span className="font-medium text-slate-900">{document.coordinator.name}</span>
+                  {document.coordinator.title ? ` · ${document.coordinator.title}` : ""}
+                  <span className="block text-muted-foreground">Your clinic contact</span>
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -199,32 +242,38 @@ function SharedPlan() {
             title="Your Treatment Plan"
             description="Your dentist-confirmed treatments, grouped into a simple overview."
           />
-          <div
-            className={`print-grid mt-8 grid items-start gap-8 lg:gap-10 ${document.diagrams ? "lg:grid-cols-[minmax(20rem,5fr)_minmax(0,7fr)]" : ""}`}
-          >
-            <div className="overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80">
-              {document.treatment_groups.length ? (
-                <div className="divide-y">
-                  {document.treatment_groups.map((group) => (
-                    <TreatmentRow
-                      key={group.id}
-                      group={group}
-                      currency={document.price.currency}
-                      diagrams={document.diagrams}
-                      explanation={document.treatment_explanations.find(
-                        (item) => item.id === group.id,
-                      )}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="p-6 text-sm text-muted-foreground">
-                  The clinic has not added confirmed treatment items yet.
-                </p>
-              )}
-            </div>
-            {document.diagrams && <DentalPlanPreview diagrams={document.diagrams} />}
+          <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80">
+            {document.treatment_groups.length ? (
+              <div className="divide-y">
+                {document.treatment_groups.map((group) => (
+                  <TreatmentRow key={group.id} group={group} diagrams={document.diagrams} />
+                ))}
+              </div>
+            ) : (
+              <p className="p-6 text-sm text-muted-foreground">
+                The clinic has not added confirmed treatment items yet.
+              </p>
+            )}
           </div>
+          {document.price.items?.length ? (
+            <div className="mt-12">
+              <SectionHeading
+                eyebrow="Treatment table"
+                title="Your Treatment at a Glance"
+                description="A clear commercial summary using the confirmed pricing in your Treatment Plan."
+                compact
+              />
+              <TreatmentPricingTable
+                items={document.price.items}
+                currency={document.price.currency}
+              />
+            </div>
+          ) : null}
+          {document.diagrams && (
+            <div className="mt-12">
+              <DentalPlanPreview diagrams={document.diagrams} />
+            </div>
+          )}
         </section>
         {document.treatment_explanations.length > 0 && (
           <section
@@ -274,7 +323,7 @@ function SharedPlan() {
                 <img
                   src="/shared-plan/treatment-guide.svg"
                   alt="Treatment guide document illustration"
-                  className="h-auto w-full max-w-56 lg:max-w-72"
+                  className="h-auto w-full max-w-48 lg:max-w-56"
                 />
               </div>
             </div>
@@ -284,18 +333,11 @@ function SharedPlan() {
           id="journey"
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <SectionHeading
-              eyebrow="How it works"
-              title="Treatment Journey"
-              description="The expected sequence of your confirmed clinic Treatment Plan."
-            />
-            <img
-              src="/shared-plan/treatment-journey.svg"
-              alt="Treatment schedule illustration"
-              className="h-auto w-full max-w-40 self-center sm:max-w-48"
-            />
-          </div>
+          <SectionHeading
+            eyebrow="How it works"
+            title="Treatment Journey"
+            description="The expected sequence of your confirmed clinic Treatment Plan."
+          />
           <div className="relative mt-10 space-y-0 before:absolute before:bottom-7 before:left-5 before:top-6 before:w-px before:bg-gradient-to-b before:from-slate-400 before:to-slate-200 md:flex md:gap-5 md:before:bottom-auto md:before:left-8 md:before:right-8 md:before:top-5 md:before:h-px md:before:w-auto">
             {document.journey.map((step, index) => (
               <div
@@ -342,63 +384,77 @@ function SharedPlan() {
               title="Travel & Accommodation"
               description="The practical arrangements currently included with your Treatment Plan."
             />
-            <div
-              className={`mt-8 overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.4)] ring-1 ring-slate-200/80 ${document.travel.hotel ? "md:grid md:grid-cols-[1.2fr_0.8fr]" : "max-w-3xl"}`}
-            >
-              {document.travel.hotel ? (
-                <div className="p-6 sm:p-8">
-                  <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                    <BedDouble className="size-5" aria-hidden="true" />
-                  </div>
-                  <h3 className="mt-5 text-xl font-semibold">{document.travel.hotel.name}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {[
-                      document.travel.hotel.room_type,
-                      document.travel.hotel.board_type,
-                      document.travel.nights ? `${document.travel.nights} nights` : undefined,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                  {document.travel.hotel.website && (
-                    <Button className="no-print mt-3" size="sm" variant="outline" asChild>
-                      <a href={document.travel.hotel.website} target="_blank" rel="noreferrer">
-                        Hotel information <ExternalLink />
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="hidden items-center justify-center p-6 sm:p-8 md:flex">
-                  <img
-                    src="/shared-plan/travel.svg"
-                    alt="Travel arrangements illustration"
-                    className="h-auto w-full max-w-56"
-                  />
-                </div>
-              )}
+            <div className="mt-8 max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.4)] ring-1 ring-slate-200/80">
+              {document.travel.hotel && configuredHotel?.images.length ? (
+                <HotelCarousel
+                  images={configuredHotel.images}
+                  hotelName={document.travel.hotel.name}
+                />
+              ) : null}
               <div
-                className={`bg-slate-50/80 p-6 sm:p-8 ${document.travel.hotel ? "border-t md:border-l md:border-t-0" : ""}`}
+                className={
+                  document.travel.hotel && document.travel.services.length
+                    ? "md:grid md:grid-cols-[1.1fr_0.9fr]"
+                    : ""
+                }
               >
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Travel support
-                </p>
-                <h3 className="mt-2 text-lg font-semibold">Arrangements for your stay</h3>
-                <div className="mt-4 space-y-3">
-                  {document.travel.services.map((service) => (
-                    <p
-                      key={service}
-                      className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 text-sm ring-1 ring-slate-200/60"
-                    >
-                      {service.toLowerCase().includes("flight") ? (
-                        <Plane className="size-4" aria-hidden="true" />
-                      ) : (
-                        <Check className="size-4" style={{ color: accent }} aria-hidden="true" />
-                      )}
-                      <span>{service}</span>
+                {document.travel.hotel ? (
+                  <div className="p-6 sm:p-8">
+                    <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                      <BedDouble className="size-5" aria-hidden="true" />
+                    </div>
+                    <h3 className="mt-5 text-xl font-semibold">{document.travel.hotel.name}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {[
+                        document.travel.hotel.room_type,
+                        document.travel.hotel.board_type,
+                        document.travel.nights ? `${document.travel.nights} nights` : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
-                  ))}
-                </div>
+                    {(configuredHotel?.website ?? document.travel.hotel.website) && (
+                      <Button className="no-print mt-3" size="sm" variant="outline" asChild>
+                        <a
+                          href={configuredHotel?.website ?? document.travel.hotel.website}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Hotel information <ExternalLink />
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
+                {document.travel.services.length > 0 && (
+                  <div
+                    className={`bg-slate-50/80 p-6 sm:p-8 ${document.travel.hotel ? "border-t md:border-l md:border-t-0" : ""}`}
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Travel support
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold">Arrangements for your stay</h3>
+                    <div className="mt-4 space-y-3">
+                      {document.travel.services.map((service) => (
+                        <p
+                          key={service}
+                          className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 text-sm ring-1 ring-slate-200/60"
+                        >
+                          {service.toLowerCase().includes("flight") ? (
+                            <Plane className="size-4" aria-hidden="true" />
+                          ) : (
+                            <Check
+                              className="size-4"
+                              style={{ color: accent }}
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span>{service}</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -407,60 +463,26 @@ function SharedPlan() {
           id="payment"
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <SectionHeading
-              eyebrow="Clear pricing"
-              title="Your Treatment Cost"
-              description="A transparent breakdown of treatment, services and payment stages."
-            />
-            <img
-              src="/shared-plan/investment.svg"
-              alt="Treatment investment illustration"
-              className="h-auto w-full max-w-36 self-center sm:max-w-44"
-            />
-          </div>
-          <div className="print-grid mt-8 grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:items-start">
-            <div className="order-2 min-w-0 space-y-8 lg:order-1">
-              <div className="pt-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Detailed reference
-                </p>
-                <h3 className="mt-2 text-lg font-semibold">Treatment breakdown</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  The detailed items that make up your final total.
-                </p>
-              </div>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Treatment</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit price</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {document.price.items?.map((item) => (
-                      <TableRow key={item.label} className="hover:bg-slate-50/70">
-                        <TableCell>{item.label}</TableCell>
-                        <TableCell className="text-right">{item.quantity}</TableCell>
-                        <TableCell className="text-right">
-                          {formatQuoteMoney(item.unit_price, document.price.currency)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatQuoteMoney(item.total, document.price.currency)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {((document.price.hotel_total ?? 0) > 0 ||
-                (document.price.transfer_total ?? 0) > 0 ||
-                (document.price.optional_service_total ?? 0) > 0) && (
-                <div className="mt-5 space-y-2 border-t pt-4">
-                  <h3 className="font-medium">Travel and additional costs</h3>
+          <SectionHeading
+            eyebrow="Clear pricing"
+            title="Your Treatment Cost"
+            description="A transparent breakdown of treatment, services and payment stages."
+          />
+          <div
+            className={`print-grid mt-8 grid gap-8 lg:items-start ${hasAdditionalCosts ? "lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]" : "max-w-xl"}`}
+          >
+            {hasAdditionalCosts && (
+              <div className="order-2 min-w-0 space-y-8 lg:order-1">
+                <div className="pt-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Additional costs
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold">Travel and selected services</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Additional items included in the final estimate.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5 shadow-sm sm:p-6">
                   {(document.price.hotel_total ?? 0) > 0 && (
                     <PriceRow
                       label="Hotel"
@@ -469,7 +491,7 @@ function SharedPlan() {
                         document.price.currency,
                       )}
                     />
-                  )}{" "}
+                  )}
                   {(document.price.transfer_total ?? 0) > 0 && (
                     <PriceRow
                       label="Transfers"
@@ -478,7 +500,7 @@ function SharedPlan() {
                         document.price.currency,
                       )}
                     />
-                  )}{" "}
+                  )}
                   {(document.price.optional_service_total ?? 0) > 0 && (
                     <PriceRow
                       label="Additional services"
@@ -489,8 +511,8 @@ function SharedPlan() {
                     />
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             <aside className="payment-summary order-1 overflow-hidden rounded-3xl bg-slate-900 p-7 text-white shadow-[0_24px_60px_-28px_rgba(15,23,42,0.7)] lg:order-2 lg:sticky lg:top-20">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex size-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
@@ -530,6 +552,9 @@ function SharedPlan() {
               </div>
             </aside>
           </div>
+          {document.included_services.length > 0 && (
+            <IncludedServicesPanel services={document.included_services} accent={accent} />
+          )}
           {document.price.payment_schedule?.length ? (
             <div className="mt-12 border-t border-slate-200/80 pt-10">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -572,50 +597,6 @@ function SharedPlan() {
             </p>
           ) : null}
         </section>
-        {document.included_services.length > 0 && (
-          <section
-            id="included-services"
-            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-14"
-          >
-            <SectionHeading
-              eyebrow="Your package"
-              title="Included in Your Plan"
-              description="Services included with your Treatment Plan, grouped for easy review."
-            />
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {groupIncludedServices(document.included_services).map((group) => (
-                <div
-                  key={group.label}
-                  className="print-row min-w-0 rounded-2xl bg-white p-5 shadow-[0_12px_36px_-30px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/70 sm:p-6"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-10 place-items-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
-                      <ServiceGroupIcon label={group.label} />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Included
-                      </p>
-                      <h3 className="mt-0.5 font-semibold">{group.label}</h3>
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-3">
-                    {group.services.map((service) => (
-                      <p key={service} className="flex gap-2.5 text-sm leading-6 text-slate-700">
-                        <Check
-                          className="mt-0.5 size-4 shrink-0"
-                          style={{ color: accent }}
-                          aria-hidden="true"
-                        />
-                        {service}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
         {document.patient_notes.length > 0 && (
           <section id="important-information" className="shared-section py-8 sm:py-10">
             <Alert className="rounded-2xl border-slate-200 bg-slate-50/70 px-5 py-4 text-slate-700">
@@ -713,6 +694,13 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
   const clinic = document.clinic!;
   return (
     <header className="shared-hero relative overflow-hidden bg-slate-950 text-white">
+      <div
+        className="absolute inset-x-0 top-0 z-20 h-1"
+        style={{
+          background:
+            "linear-gradient(90deg, var(--shared-primary), var(--shared-secondary), var(--shared-accent))",
+        }}
+      />
       <div className="absolute inset-0">
         {clinic.banner_url && (
           <img src={clinic.banner_url} alt="" className="size-full object-cover" />
@@ -721,11 +709,21 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/45 to-transparent" />
       </div>
       <div className="relative mx-auto flex min-h-72 max-w-6xl flex-col justify-end gap-6 px-4 py-9 sm:min-h-80 sm:flex-row sm:items-end sm:px-6 sm:py-12">
-        <img
-          src={clinic.logo_url ?? clinic.banner_url}
-          alt={`${clinic.name} logo`}
-          className="size-16 rounded-2xl border border-white/30 bg-white object-contain p-1.5 shadow-xl ring-4 ring-white/10 sm:size-20"
-        />
+        {clinic.logo_url ? (
+          <img
+            src={clinic.logo_url}
+            alt={`${clinic.name} logo`}
+            className="h-16 w-28 rounded-2xl border border-white/20 bg-white object-contain p-3 shadow-xl ring-4 ring-white/10 sm:h-20 sm:w-36"
+          />
+        ) : (
+          <span
+            className="grid h-16 w-20 place-items-center rounded-2xl border border-white/20 text-2xl font-semibold text-white shadow-xl ring-4 ring-white/10 sm:h-20 sm:w-24"
+            style={{ background: "var(--shared-primary)" }}
+            aria-label={`${clinic.name} logo fallback`}
+          >
+            {clinic.name.charAt(0)}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
             {clinic.name}
@@ -798,9 +796,10 @@ function SectionNavigation({ items }: { items: { id: string; label: string }[] }
             variant="ghost"
             className={
               active === item.id
-                ? "bg-slate-900 text-white shadow-sm hover:bg-slate-800 hover:text-white"
+                ? "text-white shadow-sm hover:text-white"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
             }
+            style={active === item.id ? { background: "var(--shared-primary)" } : undefined}
             aria-current={active === item.id ? "location" : undefined}
             onClick={() =>
               document
@@ -817,20 +816,15 @@ function SectionNavigation({ items }: { items: { id: string; label: string }[] }
 }
 function TreatmentRow({
   group,
-  currency,
   diagrams,
-  explanation,
 }: {
   group: PatientTreatmentGroup;
-  currency: PlanCurrency;
   diagrams?: ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"];
-  explanation?: ReturnType<
-    typeof mapTreatmentPlanToPatientDocument
-  >["treatment_explanations"][number];
 }) {
   const [open, setOpen] = useState(false);
   const selected = group.teeth as ToothNumber[];
   const Icon = treatmentIcon(group.treatment);
+  const hasDetails = Boolean(diagrams || group.patient_notes.length);
   return (
     <>
       <div className="print-row group relative flex flex-col gap-5 p-5 transition-all duration-200 hover:bg-slate-50/80 focus-within:bg-slate-50/80 sm:flex-row sm:items-center sm:p-6">
@@ -840,36 +834,18 @@ function TreatmentRow({
           </span>
           <div className="min-w-0">
             <p className="text-lg font-semibold tracking-[-0.02em]">{group.label}</p>
-            {explanation && (
-              <p className="mt-1 line-clamp-2 max-w-md text-sm leading-5 text-muted-foreground">
-                {explanation.what_it_is}
-              </p>
-            )}
-            <p className="mt-1 text-sm text-muted-foreground">
-              {group.quantity} {group.quantity === 1 ? "unit" : "units"}
-              {group.teeth.length > 0 ? ` · ${group.teeth.length} teeth included` : ""}
-            </p>
           </div>
         </div>
-        <div className="border-t border-slate-100 pt-4 sm:border-0 sm:pt-0 sm:text-right">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Treatment total
-          </p>
-          <p className="text-lg font-semibold">{formatQuoteMoney(group.total, currency)}</p>
-          {group.unit_price > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {formatQuoteMoney(group.unit_price, currency)} per unit
-            </p>
-          )}
-        </div>
-        <Button
-          className="no-print shrink-0 justify-between text-slate-600 hover:text-slate-950 sm:justify-center"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(true)}
-        >
-          View details <ChevronRight className="size-4" aria-hidden="true" />
-        </Button>
+        {hasDetails && (
+          <Button
+            className="no-print shrink-0 justify-between text-slate-600 hover:text-slate-950 sm:justify-center"
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(true)}
+          >
+            View details <ChevronRight className="size-4" aria-hidden="true" />
+          </Button>
+        )}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
@@ -879,79 +855,25 @@ function TreatmentRow({
                 <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/70">
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
-                <Badge variant="secondary">
-                  {group.quantity} {group.quantity === 1 ? "unit" : "units"}
-                </Badge>
               </div>
               <DialogTitle className="text-2xl tracking-[-0.03em] sm:text-3xl">
                 {group.label}
               </DialogTitle>
               <DialogDescription className="max-w-2xl leading-6">
-                {explanation?.what_it_is ??
-                  `${group.quantity} ${group.quantity === 1 ? "unit" : "units"} included in this Treatment Plan.`}
+                Review the clinical location and patient-specific notes for this treatment.
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[62vh] pr-3">
-              <Tabs defaultValue="overview">
-                <TabsList className="mt-1 grid h-11 w-full grid-flow-col justify-stretch overflow-x-auto rounded-xl bg-slate-100 p-1">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  {diagrams && <TabsTrigger value="dental-plan">Dental Plan</TabsTrigger>}
-                  <TabsTrigger value="pricing">Pricing Details</TabsTrigger>
-                </TabsList>
-                <TabsContent value="overview" className="space-y-7 pt-6">
-                  {explanation && (
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div className="rounded-2xl bg-slate-50 p-5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Treatment overview
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          {explanation.what_it_is}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-slate-50 p-5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Personalized for you
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          {explanation.plan_context}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {group.teeth.length > 0 && (
-                    <p className="text-sm">
-                      <strong>Teeth included:</strong>{" "}
-                      {[...group.teeth].sort((a, b) => a - b).join(", ")}
-                    </p>
-                  )}
-                  {group.patient_notes.map((note) => (
-                    <Alert key={note}>
-                      <AlertDescription>{note}</AlertDescription>
-                    </Alert>
-                  ))}
-                </TabsContent>
-                {diagrams && (
-                  <TabsContent value="dental-plan" className="pt-4">
-                    <DentalDiagramTabs diagrams={diagrams} selected={selected} />
-                  </TabsContent>
-                )}
-                <TabsContent value="pricing" className="pt-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Fact label="Quantity" value={String(group.quantity)} />
-                    <Fact label="Unit price" value={formatQuoteMoney(group.unit_price, currency)} />
-                    <Fact label="Group total" value={formatQuoteMoney(group.total, currency)} />
-                  </div>
-                </TabsContent>
-              </Tabs>
+              <div className="space-y-5 pt-5">
+                {diagrams && <DentalDiagramTabs diagrams={diagrams} selected={selected} />}
+                {group.patient_notes.map((note) => (
+                  <Alert key={note} className="rounded-2xl bg-slate-50/70">
+                    <AlertDescription>{note}</AlertDescription>
+                  </Alert>
+                ))}
+              </div>
             </ScrollArea>
-            <DialogFooter className="border-t border-slate-200/80 pt-5 sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Treatment subtotal:{" "}
-                <strong className="text-foreground">
-                  {formatQuoteMoney(group.total, currency)}
-                </strong>
-              </p>
+            <DialogFooter className="border-t border-slate-200/80 pt-5">
               <DialogClose asChild>
                 <Button variant="outline" className="min-w-44">
                   Back to Treatment Plan
@@ -964,6 +886,45 @@ function TreatmentRow({
     </>
   );
 }
+function TreatmentPricingTable({
+  items,
+  currency,
+}: {
+  items: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["items"]>;
+  currency: PlanCurrency;
+}) {
+  return (
+    <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+      <Table className="min-w-[36rem]">
+        <TableHeader className="bg-slate-50/80">
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-12 px-5">Treatment</TableHead>
+            <TableHead className="h-12 text-center">Units</TableHead>
+            <TableHead className="h-12 text-right">Unit Price</TableHead>
+            <TableHead className="h-12 px-5 text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <TableRow key={item.label} className="hover:bg-slate-50/60">
+              <TableCell className="px-5 py-4 font-medium">{item.label}</TableCell>
+              <TableCell className="py-4 text-center">
+                <Badge variant="secondary">{item.quantity}</Badge>
+              </TableCell>
+              <TableCell className="py-4 text-right text-slate-600">
+                {formatQuoteMoney(item.unit_price, currency)}
+              </TableCell>
+              <TableCell className="px-5 py-4 text-right font-semibold">
+                {formatQuoteMoney(item.total, currency)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 function DentalPlanPreview({
   diagrams,
 }: {
@@ -971,30 +932,28 @@ function DentalPlanPreview({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="dental-preview min-w-0 overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80">
-      <div className="border-b border-slate-200/80 bg-slate-50/70 p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="dental-preview min-w-0 overflow-hidden rounded-3xl bg-slate-900 text-white shadow-[0_22px_55px_-34px_rgba(15,23,42,0.75)]">
+      <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+        <div className="flex gap-4">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+            <Stethoscope className="size-5" aria-hidden="true" />
+          </span>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
               Clinical illustration
             </p>
-            <p className="mt-2 text-lg font-semibold tracking-tight">Your dental plan</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your current condition and dentist-confirmed proposed treatment.
+            <p className="mt-2 text-2xl font-semibold tracking-tight">View on Diagram</p>
+            <p className="mt-2 text-sm leading-6 text-white/65">
+              View your complete dental treatment visually.
             </p>
           </div>
-          <Button
-            className="no-print shrink-0"
-            size="sm"
-            variant="outline"
-            onClick={() => setOpen(true)}
-          >
-            View Dental Plan <ExternalLink className="size-4" aria-hidden="true" />
-          </Button>
         </div>
-      </div>
-      <div className="bg-gradient-to-b from-white to-slate-50/50 p-4 sm:p-6">
-        <DentalDiagramTabs diagrams={diagrams} selected={[]} />
+        <Button
+          className="no-print min-h-11 shrink-0 bg-white px-6 text-slate-950 hover:bg-white/90"
+          onClick={() => setOpen(true)}
+        >
+          View on Diagram <ExternalLink className="size-4" aria-hidden="true" />
+        </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
@@ -1085,19 +1044,90 @@ function SectionHeading({
     </div>
   );
 }
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-2 font-semibold">{value}</p>
-    </div>
-  );
-}
 function PriceRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 py-1 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span>{value}</span>
+    </div>
+  );
+}
+
+function HotelCarousel({
+  images,
+  hotelName,
+}: {
+  images: Array<{ id: string; name: string; data_url?: string }>;
+  hotelName: string;
+}) {
+  const visibleImages = images.filter(
+    (image): image is { id: string; name: string; data_url: string } => Boolean(image.data_url),
+  );
+  if (!visibleImages.length) return null;
+  return (
+    <Carousel opts={{ loop: visibleImages.length > 1 }} aria-label={`${hotelName} photos`}>
+      <CarouselContent className="ml-0">
+        {visibleImages.map((image, index) => (
+          <CarouselItem key={image.id} className="pl-0">
+            <img
+              src={image.data_url}
+              alt={`${hotelName}, photo ${index + 1}`}
+              className="aspect-[4/3] w-full object-cover sm:aspect-[16/7]"
+            />
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+      {visibleImages.length > 1 && (
+        <>
+          <CarouselPrevious className="no-print left-4 border-white/30 bg-slate-950/60 text-white hover:bg-slate-950/80 hover:text-white" />
+          <CarouselNext className="no-print right-4 border-white/30 bg-slate-950/60 text-white hover:bg-slate-950/80 hover:text-white" />
+        </>
+      )}
+    </Carousel>
+  );
+}
+
+function IncludedServicesPanel({ services, accent }: { services: string[]; accent: string }) {
+  return (
+    <div className="mt-12 border-t border-slate-200/80 pt-10">
+      <SectionHeading
+        eyebrow="Included services"
+        title="What Your Plan Includes"
+        description="Your confirmed services, grouped so you can see what is covered at a glance."
+        compact
+      />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {groupIncludedServices(services).map((group) => (
+          <div
+            key={group.label}
+            className="print-row min-w-0 rounded-2xl bg-slate-50/70 p-5 ring-1 ring-slate-200/70 sm:p-6"
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
+                <ServiceGroupIcon label={group.label} />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Included
+                </p>
+                <h3 className="mt-0.5 font-semibold">{group.label}</h3>
+              </div>
+            </div>
+            <div className="mt-4 space-y-3">
+              {group.services.map((service) => (
+                <p key={service} className="flex gap-2.5 text-sm leading-6 text-slate-700">
+                  <Check
+                    className="mt-1 size-4 shrink-0"
+                    style={{ color: accent }}
+                    aria-hidden="true"
+                  />
+                  {service}
+                </p>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
