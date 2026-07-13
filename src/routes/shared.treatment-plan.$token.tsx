@@ -1,19 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   BedDouble,
+  Bone,
+  CalendarCheck,
   Check,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
+  CircleDot,
+  Crown,
   ExternalLink,
+  HeartHandshake,
+  Link2,
   Mail,
   MapPin,
   Phone,
   Plane,
   Printer,
   ShieldCheck,
+  Sparkles,
+  Stethoscope,
   WalletCards,
+  type LucideIcon,
 } from "lucide-react";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
@@ -22,7 +31,7 @@ import { mapTreatmentPlanToPatientDocument, type PatientTreatmentGroup } from "@
 import { formatQuoteMoney } from "@/lib/quote";
 import { DentalChart } from "@/features/dentalplan/components/DentalChart";
 import type { ToothNumber } from "@/features/dentalplan";
-import type { PlanCurrency } from "@/types/models";
+import type { PlanCurrency, ToothTreatment } from "@/types/models";
 import {
   Accordion,
   AccordionContent,
@@ -36,7 +45,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -227,7 +238,7 @@ function SharedPlan() {
                       <AccordionTrigger className="gap-4 text-left text-base hover:no-underline">
                         <span className="flex min-w-0 items-center gap-3">
                           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100">
-                            <CircleHelp className="size-4" aria-hidden="true" />
+                            <TreatmentGuideIcon treatmentId={item.id} />
                           </span>
                           <span>
                             <span className="block font-medium">{item.title}</span>
@@ -376,13 +387,26 @@ function SharedPlan() {
           id="payment"
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
-          <SectionHeading
-            eyebrow="Clear pricing"
-            title="Your Treatment Cost"
-            description="A transparent breakdown of treatment, services and payment stages."
-          />
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeading
+              eyebrow="Clear pricing"
+              title="Your Treatment Cost"
+              description="A transparent breakdown of treatment, services and payment stages."
+            />
+            <img
+              src="/shared-plan/investment.svg"
+              alt="Treatment investment illustration"
+              className="h-auto w-full max-w-36 self-center sm:max-w-44"
+            />
+          </div>
           <div className="print-grid mt-7 grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:items-start">
             <div className="order-2 min-w-0 space-y-8 lg:order-1">
+              <div>
+                <h3 className="text-lg font-semibold">Treatment breakdown</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The detailed items that make up your final total.
+                </p>
+              </div>
               <div className="overflow-x-auto rounded-2xl border bg-white">
                 <Table>
                   <TableHeader>
@@ -459,7 +483,7 @@ function SharedPlan() {
                 />
                 {(document.price.discount ?? 0) > 0 && (
                   <PriceRow
-                    label="Discount"
+                    label="Savings"
                     value={`− ${formatQuoteMoney(document.price.discount ?? 0, document.price.currency)}`}
                   />
                 )}
@@ -485,14 +509,19 @@ function SharedPlan() {
                     key={`${payment.label}-${payment.due}`}
                     className="print-row rounded-2xl border bg-white p-5 shadow-sm"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{payment.label}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{payment.due}</p>
+                    <div className="flex items-start gap-4">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100">
+                        <CalendarCheck className="size-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {payment.label}
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {formatQuoteMoney(payment.amount, document.price.currency)}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">Due: {payment.due}</p>
                       </div>
-                      <p className="font-semibold">
-                        {formatQuoteMoney(payment.amount, document.price.currency)}
-                      </p>
                     </div>
                   </div>
                 ))}
@@ -517,7 +546,12 @@ function SharedPlan() {
             <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {groupIncludedServices(document.included_services).map((group) => (
                 <div key={group.label} className="min-w-0">
-                  <h3 className="font-medium">{group.label}</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-10 place-items-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
+                      <ServiceGroupIcon label={group.label} />
+                    </span>
+                    <h3 className="font-medium">{group.label}</h3>
+                  </div>
                   <div className="mt-3 space-y-3">
                     {group.services.map((service) => (
                       <p key={service} className="flex gap-2 text-sm leading-5">
@@ -603,6 +637,10 @@ function SharedPlan() {
                       </Button>
                     )}
                   </div>
+                  <p className="mt-6 flex items-center justify-center gap-2 text-xs text-white/60">
+                    <HeartHandshake className="size-4" aria-hidden="true" />
+                    Your clinic is available to guide you through the next step.
+                  </p>
                 </>
               )}
             </CardContent>
@@ -725,18 +763,29 @@ function TreatmentRow({
 }) {
   const [open, setOpen] = useState(false);
   const selected = group.teeth as ToothNumber[];
+  const Icon = treatmentIcon(group.treatment);
   return (
     <>
-      <div className="print-row group flex flex-col gap-4 p-5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:p-6">
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold">{group.label}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {group.quantity} {group.quantity === 1 ? "unit" : "units"}
-            {group.teeth.length > 0 ? ` · ${group.teeth.length} teeth included` : ""}
-          </p>
+      <div className="print-row group flex flex-col gap-5 p-5 transition-all duration-200 hover:bg-slate-50/80 sm:flex-row sm:items-center sm:p-6">
+        <div className="flex min-w-0 flex-1 gap-4">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 transition-colors group-hover:bg-white group-hover:text-slate-950">
+            <Icon className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-lg font-semibold tracking-tight">{group.label}</p>
+            {explanation && (
+              <p className="mt-1 line-clamp-2 max-w-md text-sm leading-5 text-muted-foreground">
+                {explanation.what_it_is}
+              </p>
+            )}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {group.quantity} {group.quantity === 1 ? "unit" : "units"}
+              {group.teeth.length > 0 ? ` · ${group.teeth.length} teeth included` : ""}
+            </p>
+          </div>
         </div>
         <div className="sm:text-right">
-          <p className="font-medium">{formatQuoteMoney(group.total, currency)}</p>
+          <p className="text-lg font-semibold">{formatQuoteMoney(group.total, currency)}</p>
           {group.unit_price > 0 && (
             <p className="text-xs text-muted-foreground">
               {formatQuoteMoney(group.unit_price, currency)} per unit
@@ -754,22 +803,30 @@ function TreatmentRow({
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
-          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl overflow-hidden rounded-2xl p-5 sm:p-6">
-            <DialogHeader>
-              <DialogTitle>{group.label}</DialogTitle>
+          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl overflow-hidden rounded-2xl p-5 shadow-2xl sm:p-8">
+            <DialogHeader className="border-b pb-5 pr-8">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-slate-100">
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <Badge variant="secondary">
+                  {group.quantity} {group.quantity === 1 ? "unit" : "units"}
+                </Badge>
+              </div>
+              <DialogTitle className="text-2xl tracking-tight">{group.label}</DialogTitle>
               <DialogDescription>
                 {explanation?.what_it_is ??
                   `${group.quantity} ${group.quantity === 1 ? "unit" : "units"} included in this Treatment Plan.`}
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="max-h-[72vh] pr-3">
+            <ScrollArea className="max-h-[62vh] pr-3">
               <Tabs defaultValue="overview">
-                <TabsList className="w-full justify-start overflow-x-auto">
+                <TabsList className="mt-1 w-full justify-start overflow-x-auto rounded-xl p-1">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   {diagrams && <TabsTrigger value="dental-plan">Dental Plan</TabsTrigger>}
                   <TabsTrigger value="pricing">Pricing Details</TabsTrigger>
                 </TabsList>
-                <TabsContent value="overview" className="space-y-5 pt-4">
+                <TabsContent value="overview" className="space-y-7 pt-6">
                   {explanation && (
                     <div className="grid gap-5 md:grid-cols-2">
                       <div>
@@ -812,6 +869,17 @@ function TreatmentRow({
                 </TabsContent>
               </Tabs>
             </ScrollArea>
+            <DialogFooter className="border-t pt-5 sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Treatment subtotal:{" "}
+                <strong className="text-foreground">
+                  {formatQuoteMoney(group.total, currency)}
+                </strong>
+              </p>
+              <DialogClose asChild>
+                <Button variant="outline">Back to Treatment Plan</Button>
+              </DialogClose>
+            </DialogFooter>
           </DialogContent>
         )}
       </Dialog>
@@ -825,29 +893,33 @@ function DentalPlanPreview({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="dental-preview min-w-0 rounded-2xl bg-white p-4 ring-1 ring-slate-200/80 sm:p-6">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-base font-semibold">Your dental plan</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Your current condition and dentist-confirmed proposed treatment.
-          </p>
+    <div className="dental-preview min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+      <div className="border-b bg-slate-50/70 p-5 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-lg font-semibold tracking-tight">Your dental plan</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your current condition and dentist-confirmed proposed treatment.
+            </p>
+          </div>
+          <Button
+            className="no-print shrink-0"
+            size="sm"
+            variant="outline"
+            onClick={() => setOpen(true)}
+          >
+            View Dental Plan <ExternalLink className="size-4" aria-hidden="true" />
+          </Button>
         </div>
-        <Button
-          className="no-print shrink-0"
-          size="sm"
-          variant="outline"
-          onClick={() => setOpen(true)}
-        >
-          View Dental Plan <ExternalLink className="size-4" aria-hidden="true" />
-        </Button>
       </div>
-      <DentalDiagramTabs diagrams={diagrams} selected={[]} />
+      <div className="p-4 sm:p-6">
+        <DentalDiagramTabs diagrams={diagrams} selected={[]} />
+      </div>
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
-          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-5xl overflow-hidden rounded-2xl p-5 sm:p-6">
-            <DialogHeader>
-              <DialogTitle>Your Dental Plan</DialogTitle>
+          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-5xl overflow-hidden rounded-2xl p-5 shadow-2xl sm:p-8">
+            <DialogHeader className="border-b pb-5 pr-8">
+              <DialogTitle className="text-2xl tracking-tight">Your Dental Plan</DialogTitle>
               <DialogDescription>
                 Review your current condition and proposed treatment in a larger clinical view.
               </DialogDescription>
@@ -870,7 +942,7 @@ function DentalDiagramTabs({
 }) {
   return (
     <Tabs defaultValue="proposed">
-      <TabsList className="w-full grid grid-cols-2">
+      <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-slate-100 p-1">
         <TabsTrigger value="current">Current Condition</TabsTrigger>
         <TabsTrigger value="proposed">Proposed Treatment</TabsTrigger>
       </TabsList>
@@ -939,6 +1011,32 @@ function PriceRow({ label, value }: { label: string; value: string }) {
       <span>{value}</span>
     </div>
   );
+}
+const TREATMENT_ICONS: Partial<Record<ToothTreatment, LucideIcon>> = {
+  implant: CircleDot,
+  crown: Crown,
+  extraction: Activity,
+  bridge: Link2,
+  pontic: Link2,
+  veneer: Sparkles,
+  composite: Sparkles,
+  filling: CircleDot,
+  root_canal: Activity,
+  bone_graft: Bone,
+  sinus_lift: Bone,
+  whitening: Sparkles,
+  denture: Crown,
+};
+function treatmentIcon(treatment?: ToothTreatment): LucideIcon {
+  return (treatment && TREATMENT_ICONS[treatment]) || Stethoscope;
+}
+function TreatmentGuideIcon({ treatmentId }: { treatmentId: string }) {
+  const Icon = treatmentIcon(treatmentId as ToothTreatment);
+  return <Icon className="size-4" aria-hidden="true" />;
+}
+function ServiceGroupIcon({ label }: { label: string }) {
+  const Icon = label === "Clinical" ? Stethoscope : label === "Travel" ? Plane : HeartHandshake;
+  return <Icon className="size-5" aria-hidden="true" />;
 }
 function groupIncludedServices(services: string[]) {
   const groups = [
