@@ -67,7 +67,11 @@ function ProDashboard() {
   const approvedNotSent = plans.filter((item) => item.status === "approved");
   const viewedPlans = plans.filter((item) => item.status === "viewed");
   const upcomingAppointments = appointments
-    .filter((item) => new Date(item.starts_at) >= now)
+    .filter(
+      (item) =>
+        !["completed", "cancelled", "no_show"].includes(item.appointment_status ?? "scheduled") &&
+        new Date(item.starts_at) >= now,
+    )
     .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at));
   const actionablePlans = [...awaitingReview, ...approvedNotSent, ...viewedPlans]
     .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))

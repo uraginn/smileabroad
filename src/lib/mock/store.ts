@@ -25,6 +25,7 @@ import type {
   TreatmentPlanStatus,
   ClinicNotification,
   LeadFollowUp,
+  CommunicationTemplate,
 } from "@/types/models";
 import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
 import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
@@ -71,6 +72,7 @@ interface Store {
   activities: LeadActivity[];
   notifications: ClinicNotification[];
   followUps: LeadFollowUp[];
+  communicationTemplates: CommunicationTemplate[];
   clinicTreatmentDefinitions: ClinicTreatmentDefinition[];
   dentalPlanTemplates: DentalPlanTemplate[];
   clinicHotels: ClinicHotel[];
@@ -145,6 +147,22 @@ interface Store {
     createdBy?: string,
   ) => Task;
   toggleTask: (id: string, changedBy?: string) => void;
+  updateTask: (id: string, clinicId: string, patch: Partial<Task>, changedBy?: string) => void;
+  addAppointment: (
+    record: Omit<Appointment, "id" | "created_at" | "updated_at" | "created_by">,
+    createdBy?: string,
+  ) => Appointment;
+  updateAppointment: (
+    id: string,
+    clinicId: string,
+    patch: Partial<Appointment>,
+    changedBy?: string,
+  ) => void;
+  saveCommunicationTemplate: (
+    record: Omit<CommunicationTemplate, "created_at" | "updated_at" | "created_by">,
+    changedBy?: string,
+  ) => void;
+  deleteCommunicationTemplate: (id: string, clinicId: string) => void;
   syncNotifications: (clinicId: string, userId: string, records: ClinicNotification[]) => void;
   markNotificationRead: (id: string, clinicId: string, userId?: string) => void;
   markAllNotificationsRead: (clinicId: string, userId?: string) => void;
@@ -308,6 +326,7 @@ export const useMockStore = create<Store>()(
       activities: seedActivities,
       notifications: [],
       followUps: [],
+      communicationTemplates: [],
       clinicTreatmentDefinitions: [],
       dentalPlanTemplates: [],
       clinicHotels: [],
@@ -868,31 +887,36 @@ export const useMockStore = create<Store>()(
         const timestamp = now();
         const rec: Task = {
           ...task,
+          assigned_user_id: task.assigned_user_id ?? task.assigned_to,
+          assigned_to: task.assigned_to ?? task.assigned_user_id,
+          patient_id: task.patient_id ?? task.patient_user_id,
+          task_status: task.task_status ?? (task.done ? "completed" : "pending"),
+          completed_at: task.done ? timestamp : task.completed_at,
           id: makeId("task"),
           created_at: timestamp,
           updated_at: timestamp,
           created_by: createdBy,
         };
-        const activity: LeadActivity | undefined = task.lead_id
-          ? {
-              id: makeId("activity"),
-              clinic_id: task.clinic_id,
-              lead_id: task.lead_id,
-              kind: "task",
-              body:
-                task.category === "follow_up"
-                  ? `Follow-up scheduled: ${task.title}`
-                  : `Task created: ${task.title}`,
-              internal: true,
-              created_at: timestamp,
-              updated_at: timestamp,
-              created_by: createdBy,
-            }
-          : undefined;
+        const activity: LeadActivity = {
+          id: makeId("activity"),
+          clinic_id: task.clinic_id,
+          lead_id: task.lead_id,
+          patient_id: task.patient_id ?? task.patient_user_id,
+          treatment_plan_id: task.treatment_plan_id,
+          kind: "task",
+          body:
+            task.category === "follow_up"
+              ? `Follow-up scheduled: ${task.title}`
+              : `Task created: ${task.title}`,
+          internal: true,
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
+        };
         set((s) => ({
           tasks: [rec, ...s.tasks],
-          activities: activity ? [...s.activities, activity] : s.activities,
-          leads: activity
+          activities: [...s.activities, activity],
+          leads: task.lead_id
             ? s.leads.map((lead) =>
                 lead.id === task.lead_id
                   ? { ...lead, last_activity_at: timestamp, updated_at: timestamp }
@@ -922,7 +946,15 @@ export const useMockStore = create<Store>()(
           : undefined;
         set((s) => ({
           tasks: s.tasks.map((item) =>
-            item.id === id ? { ...item, done, updated_at: timestamp } : item,
+            item.id === id
+              ? {
+                  ...item,
+                  done,
+                  task_status: done ? "completed" : "pending",
+                  completed_at: done ? timestamp : undefined,
+                  updated_at: timestamp,
+                }
+              : item,
           ),
           activities: activity ? [...s.activities, activity] : s.activities,
           leads: activity
@@ -934,6 +966,144 @@ export const useMockStore = create<Store>()(
             : s.leads,
         }));
       },
+      updateTask: (id, clinicId, patch, changedBy = "system") => {
+        const task = get().tasks.find((item) => item.id === id && item.clinic_id === clinicId);
+        if (!task) return;
+        const timestamp = now();
+        const completing = patch.task_status === "completed" && task.task_status !== "completed";
+        set((state) => ({
+          tasks: state.tasks.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...patch,
+                  assigned_to: patch.assigned_user_id ?? patch.assigned_to ?? item.assigned_to,
+                  assigned_user_id:
+                    patch.assigned_user_id ?? patch.assigned_to ?? item.assigned_user_id,
+                  done: patch.task_status
+                    ? patch.task_status === "completed"
+                    : (patch.done ?? item.done),
+                  completed_at: completing ? timestamp : (patch.completed_at ?? item.completed_at),
+                  updated_at: timestamp,
+                }
+              : item,
+          ),
+          activities: completing
+            ? [
+                ...state.activities,
+                {
+                  id: makeId("activity"),
+                  clinic_id: clinicId,
+                  lead_id: task.lead_id,
+                  patient_id: task.patient_id ?? task.patient_user_id,
+                  kind: "task",
+                  body: `Task completed: ${task.title}`,
+                  internal: true,
+                  occurred_at: timestamp,
+                  created_at: timestamp,
+                  updated_at: timestamp,
+                  created_by: changedBy,
+                },
+              ]
+            : state.activities,
+        }));
+      },
+      addAppointment: (record, createdBy = "system") => {
+        const timestamp = now();
+        const rec: Appointment = {
+          ...record,
+          id: makeId("appointment"),
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
+        };
+        set((state) => ({
+          appointments: [rec, ...state.appointments],
+          activities: [
+            ...state.activities,
+            {
+              id: makeId("activity"),
+              clinic_id: rec.clinic_id,
+              lead_id: rec.lead_id,
+              patient_id: rec.patient_id ?? rec.patient_user_id,
+              treatment_plan_id: rec.treatment_plan_id,
+              kind: "note",
+              body: `Appointment booked: ${rec.title}`,
+              internal: true,
+              occurred_at: timestamp,
+              created_at: timestamp,
+              updated_at: timestamp,
+              created_by: createdBy,
+            },
+          ],
+        }));
+        return rec;
+      },
+      updateAppointment: (id, clinicId, patch, changedBy = "system") => {
+        const appointment = get().appointments.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!appointment) return;
+        const timestamp = now();
+        const statusChanged =
+          patch.appointment_status && patch.appointment_status !== appointment.appointment_status;
+        const rescheduled = Boolean(patch.starts_at && patch.starts_at !== appointment.starts_at);
+        set((state) => ({
+          appointments: state.appointments.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...patch,
+                  start_at: patch.starts_at ?? patch.start_at ?? item.start_at,
+                  updated_at: timestamp,
+                }
+              : item,
+          ),
+          activities:
+            statusChanged || rescheduled
+              ? [
+                  ...state.activities,
+                  {
+                    id: makeId("activity"),
+                    clinic_id: clinicId,
+                    lead_id: appointment.lead_id,
+                    patient_id: appointment.patient_id ?? appointment.patient_user_id,
+                    treatment_plan_id: appointment.treatment_plan_id,
+                    kind: "note",
+                    body: rescheduled
+                      ? `Appointment rescheduled: ${appointment.title}`
+                      : `Appointment ${patch.appointment_status}: ${appointment.title}`,
+                    internal: true,
+                    occurred_at: timestamp,
+                    created_at: timestamp,
+                    updated_at: timestamp,
+                    created_by: changedBy,
+                  },
+                ]
+              : state.activities,
+        }));
+      },
+      saveCommunicationTemplate: (record, changedBy = "system") =>
+        set((state) => {
+          const existing = state.communicationTemplates.find(
+            (item) => item.id === record.id && item.clinic_id === record.clinic_id,
+          );
+          const timestamp = now();
+          const next = existing
+            ? { ...existing, ...record, updated_at: timestamp }
+            : { ...record, created_at: timestamp, updated_at: timestamp, created_by: changedBy };
+          return {
+            communicationTemplates: existing
+              ? state.communicationTemplates.map((item) => (item.id === next.id ? next : item))
+              : [next, ...state.communicationTemplates],
+          };
+        }),
+      deleteCommunicationTemplate: (id, clinicId) =>
+        set((state) => ({
+          communicationTemplates: state.communicationTemplates.filter(
+            (item) => item.id !== id || item.clinic_id !== clinicId,
+          ),
+        })),
       syncNotifications: (clinicId, userId, records) =>
         set((state) => {
           const existing = new Map(state.notifications.map((item) => [item.id, item]));
@@ -1215,7 +1385,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 18,
+      version: 19,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1377,7 +1547,34 @@ export const useMockStore = create<Store>()(
                 created_by: task.created_by,
               }))
               .filter((item) => item.lead_id),
-          tasks: (state.tasks ?? []).filter((task) => task.category !== "follow_up"),
+          tasks: (state.tasks ?? [])
+            .filter((task) => task.category !== "follow_up")
+            .map((task) => ({
+              ...task,
+              patient_id: task.patient_id ?? task.patient_user_id,
+              assigned_user_id: task.assigned_user_id ?? task.assigned_to,
+              assigned_to: task.assigned_to ?? task.assigned_user_id,
+              type: task.type ?? "other",
+              priority: task.priority === "medium" ? "normal" : (task.priority ?? "normal"),
+              task_status: task.task_status ?? (task.done ? "completed" : "pending"),
+              completed_at: task.completed_at ?? (task.done ? task.updated_at : undefined),
+            })),
+          appointments: (state.appointments ?? []).map((appointment) => ({
+            ...appointment,
+            patient_id: appointment.patient_id ?? appointment.patient_user_id,
+            type: appointment.type ?? "clinic_consultation",
+            start_at: appointment.start_at ?? appointment.starts_at,
+            end_at:
+              appointment.end_at ??
+              new Date(
+                new Date(appointment.starts_at).getTime() +
+                  (appointment.duration_min ?? 30) * 60_000,
+              ).toISOString(),
+            duration_min: appointment.duration_min ?? 30,
+            appointment_status: appointment.appointment_status ?? "scheduled",
+            location_type: appointment.location_type ?? "clinic",
+          })),
+          communicationTemplates: state.communicationTemplates ?? [],
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
             ...(clinic.id === "clinic_istanbul"

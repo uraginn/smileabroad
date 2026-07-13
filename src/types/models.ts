@@ -261,6 +261,13 @@ export interface LeadActivity extends BaseRecord {
   body: string;
   internal: boolean;
   occurred_at?: string;
+  treatment_plan_id?: string;
+  staff_user_id?: string;
+  direction?: "inbound" | "outbound" | "internal";
+  communication_status?: "logged" | "planned";
+  outcome?: string;
+  subject?: string;
+  template_id?: string;
 }
 
 export type FollowUpStatus = "pending" | "completed" | "cancelled";
@@ -281,22 +288,78 @@ export interface Task extends BaseRecord {
   clinic_id: string;
   lead_id?: string;
   patient_user_id?: string;
+  patient_id?: string;
+  treatment_plan_id?: string;
+  appointment_id?: string;
   title: string;
+  description?: string;
+  type?: TaskType;
   due_at?: string;
   assigned_to?: string;
-  priority?: "low" | "medium" | "high";
+  assigned_user_id?: string;
+  priority?: "low" | "normal" | "medium" | "high" | "urgent";
   category?: "task" | "follow_up";
+  task_status?: "pending" | "in_progress" | "completed" | "cancelled";
+  completed_at?: string;
   done: boolean;
 }
+
+export type TaskType =
+  | "call_patient"
+  | "send_reminder"
+  | "request_photos"
+  | "request_xray"
+  | "review_medical"
+  | "doctor_review"
+  | "prepare_plan"
+  | "plan_follow_up"
+  | "confirm_appointment"
+  | "confirm_arrival"
+  | "book_hotel"
+  | "arrange_transfer"
+  | "other";
 
 export interface Appointment extends BaseRecord {
   clinic_id: string;
   patient_user_id: string;
+  patient_id?: string;
+  lead_id?: string;
+  treatment_plan_id?: string;
+  dentist_id?: string;
+  coordinator_id?: string;
+  type?: AppointmentType;
   title: string;
   starts_at: string;
+  start_at?: string;
+  end_at?: string;
   duration_min: number;
+  location_type?: "clinic" | "online" | "phone" | "other";
   location?: string;
   notes?: string;
+  appointment_status?: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
+}
+
+export type AppointmentType =
+  | "online_meeting"
+  | "phone_call"
+  | "video_assessment"
+  | "clinic_consultation"
+  | "doctor_review_meeting"
+  | "clinical_examination"
+  | "implant_surgery"
+  | "tooth_preparation"
+  | "final_restorations"
+  | "follow_up"
+  | "other_treatment";
+
+export interface CommunicationTemplate extends BaseRecord {
+  clinic_id: string;
+  name: string;
+  category: string;
+  channel: "whatsapp" | "email" | "generic";
+  subject?: string;
+  body: string;
+  active: boolean;
 }
 
 export type NotificationType =

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardPlus,
   Menu,
+  MessageSquare,
   Plus,
   Search,
   UserPlus,
@@ -180,6 +181,12 @@ export function CrmTopbar({
                 <Link to="/pro/appointments">
                   <CalendarPlus />
                   Book Appointment
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/pro/communication">
+                  <MessageSquare />
+                  Log Communication
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

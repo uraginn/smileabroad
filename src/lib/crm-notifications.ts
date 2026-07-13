@@ -142,6 +142,7 @@ export function deriveClinicNotifications({
     .filter(
       (item) =>
         item.clinic_id === clinicId &&
+        !["completed", "cancelled", "no_show"].includes(item.appointment_status ?? "scheduled") &&
         new Date(item.starts_at) >= now &&
         new Date(item.starts_at) <= upcomingLimit,
     )
