@@ -3,6 +3,7 @@ import type {
   ClinicApplication,
   ClinicNotification,
   Lead,
+  LeadFollowUp,
   Task,
   TreatmentPlan,
 } from "@/types/models";
@@ -14,6 +15,7 @@ export function deriveClinicNotifications({
   applications,
   leads,
   tasks,
+  followUps,
   plans,
   appointments,
   now = new Date(),
@@ -24,6 +26,7 @@ export function deriveClinicNotifications({
   applications: ClinicApplication[];
   leads: Lead[];
   tasks: Task[];
+  followUps: LeadFollowUp[];
   plans: TreatmentPlan[];
   appointments: Appointment[];
   now?: Date;
@@ -59,6 +62,7 @@ export function deriveClinicNotifications({
       (item) =>
         item.clinic_id === clinicId &&
         (canSeeAllTasks || !item.assigned_to || item.assigned_to === userId) &&
+        item.category !== "follow_up" &&
         !item.done &&
         item.due_at &&
         new Date(item.due_at) < now,
@@ -75,6 +79,28 @@ export function deriveClinicNotifications({
         created_at: item.due_at!,
       }),
     );
+
+  followUps
+    .filter(
+      (item) =>
+        item.clinic_id === clinicId &&
+        item.status === "pending" &&
+        (!item.assigned_user_id || item.assigned_user_id === userId || canSeeAllTasks) &&
+        new Date(item.due_at) <= now,
+    )
+    .forEach((item) => {
+      const dueToday = new Date(item.due_at).toDateString() === now.toDateString();
+      add({
+        id: `notification_follow_up_${item.id}_${dueToday ? "due_today" : "overdue"}`,
+        type: "follow_up_overdue",
+        title: dueToday ? "Follow-up due today" : "Follow-up overdue",
+        message: item.reason,
+        entity_type: "lead",
+        entity_id: item.lead_id,
+        action_url: `/pro/leads/${item.lead_id}`,
+        created_at: item.due_at,
+      });
+    });
 
   plans
     .filter(

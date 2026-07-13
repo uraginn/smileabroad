@@ -1,13 +1,20 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useMockStore, selectClinicLeads } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
-import { LEAD_STATUSES } from "@/lib/constants";
+import {
+  deriveLeadOperationalStage,
+  getFollowUpState,
+  getNextFollowUp,
+  LEAD_PIPELINE_STAGES,
+} from "@/lib/lead-workflow";
 import { EmptyState, PageHeader, StatCard } from "@/components/ui-bits";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LogContactDialog, ScheduleFollowUpDialog } from "@/components/lead-actions";
 import {
   Select,
   SelectContent,
@@ -35,10 +42,17 @@ import type {
   TreatmentPlan,
   UploadedFile,
   User,
+  LeadFollowUp,
+  Assessment,
 } from "@/types/models";
 import { useShallow } from "zustand/react/shallow";
 
-export const Route = createFileRoute("/pro/leads")({ component: LeadsKanban });
+export const Route = createFileRoute("/pro/leads")({
+  validateSearch: (search: Record<string, unknown>): { followUp?: string } => ({
+    followUp: typeof search.followUp === "string" ? search.followUp : undefined,
+  }),
+  component: LeadsKanban,
+});
 
 type SortOption = "newest" | "oldest" | "last_activity" | "priority";
 const priorityRank: Record<Lead["priority"], number> = { low: 1, medium: 2, high: 3, urgent: 4 };
@@ -56,16 +70,19 @@ const sourceLabel: Record<Lead["source"], string> = {
 };
 
 function LeadsKanban() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const routeSearch = Route.useSearch();
   const activeUser = useAuth((s) => s.user);
   const clinicId = activeUser?.clinic_id ?? "clinic_istanbul";
   const leads = useMockStore(useShallow(selectClinicLeads(clinicId)));
-  const { users, patients, files, plans, tasks, updateLeadStatus } = useMockStore(
+  const { users, patients, files, plans, followUps, assessments, updateLeadStatus } = useMockStore(
     useShallow((s) => ({
       users: s.users,
       patients: s.patients,
       files: s.files,
       plans: s.treatmentPlans,
-      tasks: s.tasks,
+      followUps: s.followUps,
+      assessments: s.assessments,
       updateLeadStatus: s.updateLeadStatus,
     })),
   );
@@ -73,8 +90,18 @@ function LeadsKanban() {
   const [status, setStatus] = useState("all");
   const [source, setSource] = useState("all");
   const [coordinator, setCoordinator] = useState("all");
+  const [dentist, setDentist] = useState("all");
   const [priority, setPriority] = useState("all");
+  const [followUpFilter, setFollowUpFilter] = useState("all");
+  const [country, setCountry] = useState("all");
+  const [destination, setDestination] = useState("all");
+  const [roadmapFilter, setRoadmapFilter] = useState("all");
+  const [uploadsFilter, setUploadsFilter] = useState("all");
+  const [view, setView] = useState<"pipeline" | "list">("pipeline");
   const [sort, setSort] = useState<SortOption>("last_activity");
+  useEffect(() => {
+    if (routeSearch.followUp) setFollowUpFilter(routeSearch.followUp);
+  }, [routeSearch.followUp]);
 
   const clinicPatients = useMemo(
     () => patients.filter((p) => p.clinic_id === clinicId),
@@ -97,19 +124,48 @@ function LeadsKanban() {
             item.user_id === lead.patient_user_id ||
             item.id === lead.patient_user_id,
         );
-        const searchable = [lead.patient_name, lead.patient_country, patient?.email, patient?.phone]
+        const searchable = [
+          lead.patient_name,
+          lead.patient_country,
+          patient?.email,
+          patient?.phone,
+          patient?.whatsapp,
+          lead.source,
+          lead.treatment,
+        ]
           .filter(Boolean)
           .join(" ")
           .toLocaleLowerCase();
+        const plan = plans.find(
+          (item) =>
+            item.clinic_id === clinicId &&
+            (item.lead_id === lead.id || item.clinic_patient_id === lead.clinic_patient_id),
+        );
+        const operationalStage = deriveLeadOperationalStage({ lead, treatmentPlan: plan });
+        const assessment = assessments.find((item) => item.id === lead.assessment_id);
+        const nextFollowUp = getNextFollowUp(followUps, lead.id);
+        const followUpState = nextFollowUp ? getFollowUpState(nextFollowUp) : "none";
+        const hasUploads = files.some(
+          (file) =>
+            file.patient_user_id === lead.patient_user_id ||
+            file.patient_user_id === patient?.user_id,
+        );
         return (
           (!normalizedQuery || searchable.includes(normalizedQuery)) &&
-          (status === "all" || lead.status === status) &&
+          (status === "all" || operationalStage === status) &&
           (source === "all" || lead.source === source) &&
           (coordinator === "all" ||
             (coordinator === "unassigned"
               ? !lead.assigned_to
               : lead.assigned_to === coordinator)) &&
-          (priority === "all" || lead.priority === priority)
+          (dentist === "all" || plan?.dentist_id === dentist) &&
+          (priority === "all" || lead.priority === priority) &&
+          (country === "all" || lead.patient_country === country) &&
+          (destination === "all" || assessment?.travel.destination_country === destination) &&
+          (followUpFilter === "all" || followUpState === followUpFilter) &&
+          (roadmapFilter === "all" ||
+            (roadmapFilter === "yes" ? !!lead.roadmap_id : !lead.roadmap_id)) &&
+          (uploadsFilter === "all" || (uploadsFilter === "yes" ? hasUploads : !hasUploads))
         );
       })
       .sort((a, b) => {
@@ -118,25 +174,92 @@ function LeadsKanban() {
         const direction = sort === "oldest" ? 1 : -1;
         return (new Date(a[field]).getTime() - new Date(b[field]).getTime()) * direction;
       });
-  }, [leads, clinicPatients, query, status, source, coordinator, priority, sort]);
+  }, [
+    leads,
+    clinicPatients,
+    query,
+    status,
+    source,
+    coordinator,
+    dentist,
+    priority,
+    sort,
+    plans,
+    clinicId,
+    followUps,
+    files,
+    country,
+    destination,
+    followUpFilter,
+    roadmapFilter,
+    uploadsFilter,
+    assessments,
+  ]);
 
   const byStatus = useMemo(
     () =>
-      LEAD_STATUSES.reduce<Record<string, Lead[]>>((acc, item) => {
-        acc[item.value] = filteredLeads.filter((lead) => lead.status === item.value);
+      LEAD_PIPELINE_STAGES.reduce<Record<string, Lead[]>>((acc, item) => {
+        acc[item.key] = filteredLeads.filter(
+          (lead) =>
+            deriveLeadOperationalStage({
+              lead,
+              treatmentPlan: plans.find(
+                (plan) =>
+                  plan.clinic_id === clinicId &&
+                  (plan.lead_id === lead.id || plan.clinic_patient_id === lead.clinic_patient_id),
+              ),
+            }) === item.key,
+        );
         return acc;
       }, {}),
-    [filteredLeads],
+    [filteredLeads, plans, clinicId],
   );
   const coordinators = users.filter((u) => leads.some((lead) => lead.assigned_to === u.id));
   const sources = Array.from(new Set(leads.map((lead) => lead.source)));
+  const countries = Array.from(new Set(leads.map((lead) => lead.patient_country))).sort();
+  const destinations = Array.from(
+    new Set(
+      assessments
+        .filter((item) => leads.some((lead) => lead.assessment_id === item.id))
+        .map((item) => item.travel.destination_country),
+    ),
+  ).sort();
+  const dentists = users.filter(
+    (user) => user.clinic_id === clinicId && user.role === "dentist" && user.active !== false,
+  );
   const metrics = {
     total: leads.length,
-    new: leads.filter((lead) => lead.status === "new_lead").length,
-    review: leads.filter((lead) => lead.status === "doctor_review").length,
-    quoted: leads.filter((lead) => lead.status === "quote_sent").length,
-    booked: leads.filter((lead) => lead.status === "booked").length,
+    new: leads.filter(
+      (lead) =>
+        deriveLeadOperationalStage({
+          lead,
+          treatmentPlan: plans.find((plan) => plan.lead_id === lead.id),
+        }) === "new_lead",
+    ).length,
+    review: leads.filter(
+      (lead) =>
+        deriveLeadOperationalStage({
+          lead,
+          treatmentPlan: plans.find((plan) => plan.lead_id === lead.id),
+        }) === "doctor_review",
+    ).length,
+    quoted: leads.filter(
+      (lead) =>
+        deriveLeadOperationalStage({
+          lead,
+          treatmentPlan: plans.find((plan) => plan.lead_id === lead.id),
+        }) === "quote_sent",
+    ).length,
+    booked: leads.filter(
+      (lead) =>
+        deriveLeadOperationalStage({
+          lead,
+          treatmentPlan: plans.find((plan) => plan.lead_id === lead.id),
+        }) === "booked",
+    ).length,
   };
+
+  if (pathname !== "/pro/leads") return <Outlet />;
 
   return (
     <div className="p-4 sm:p-6 space-y-5 min-w-0">
@@ -144,12 +267,18 @@ function LeadsKanban() {
         title="CRM pipeline"
         description="Manage every dental tourism lead from first contact through treatment completion."
       />
+      <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
+        <TabsList>
+          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="list">List</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={UsersRound} label="Total Leads" value={metrics.total} />
         <StatCard icon={FileText} label="New Leads" value={metrics.new} tone="accent" />
         <StatCard icon={Clock3} label="Awaiting Review" value={metrics.review} tone="warning" />
         <StatCard icon={Send} label="Plans Sent" value={metrics.quoted} />
-        <StatCard icon={CalendarCheck} label="Booked" value={metrics.booked} tone="success" />
+        <StatCard icon={CalendarCheck} label="Converted" value={metrics.booked} tone="success" />
       </div>
 
       <Card className="p-3 sm:p-4">
@@ -168,13 +297,54 @@ function LeadsKanban() {
             label="Status"
             value={status}
             onChange={setStatus}
-            options={LEAD_STATUSES.map((s) => ({ value: s.value, label: s.label }))}
+            options={LEAD_PIPELINE_STAGES.map((s) => ({ value: s.key, label: s.label }))}
           />
           <FilterSelect
             label="Source"
             value={source}
             onChange={setSource}
             options={sources.map((value) => ({ value, label: sourceLabel[value] }))}
+          />
+          <FilterSelect
+            label="Country"
+            value={country}
+            onChange={setCountry}
+            options={countries.map((value) => ({ value, label: value }))}
+          />
+          <FilterSelect
+            label="Destination"
+            value={destination}
+            onChange={setDestination}
+            options={destinations.map((value) => ({ value, label: value }))}
+          />
+          <FilterSelect
+            label="Follow-up"
+            value={followUpFilter}
+            onChange={setFollowUpFilter}
+            options={[
+              { value: "overdue", label: "Overdue" },
+              { value: "due_today", label: "Due today" },
+              { value: "upcoming", label: "Upcoming" },
+              { value: "none", label: "No follow-up" },
+            ]}
+          />
+          <FilterSelect
+            label="Roadmap"
+            value={roadmapFilter}
+            onChange={setRoadmapFilter}
+            options={[
+              { value: "yes", label: "Available" },
+              { value: "no", label: "Not available" },
+            ]}
+          />
+          <FilterSelect
+            label="Uploads"
+            value={uploadsFilter}
+            onChange={setUploadsFilter}
+            options={[
+              { value: "yes", label: "Available" },
+              { value: "no", label: "Not available" },
+            ]}
           />
           <FilterSelect
             label="Coordinator"
@@ -186,12 +356,18 @@ function LeadsKanban() {
             ]}
           />
           <FilterSelect
+            label="Dentist"
+            value={dentist}
+            onChange={setDentist}
+            options={dentists.map((user) => ({ value: user.id, label: user.name }))}
+          />
+          <FilterSelect
             label="Priority"
             value={priority}
             onChange={setPriority}
             options={["low", "medium", "high", "urgent"].map((value) => ({
               value,
-              label: value[0].toUpperCase() + value.slice(1),
+              label: value === "medium" ? "Normal" : value[0].toUpperCase() + value.slice(1),
             }))}
           />
           <FilterSelect
@@ -206,6 +382,24 @@ function LeadsKanban() {
               { value: "priority", label: "Priority" },
             ]}
           />
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setQuery("");
+              setStatus("all");
+              setSource("all");
+              setCoordinator("all");
+              setDentist("all");
+              setPriority("all");
+              setCountry("all");
+              setDestination("all");
+              setFollowUpFilter("all");
+              setRoadmapFilter("all");
+              setUploadsFilter("all");
+            }}
+          >
+            Clear filters
+          </Button>
         </div>
       </Card>
 
@@ -215,38 +409,79 @@ function LeadsKanban() {
           description="Patient applications will appear here when they enter your clinic pipeline."
         />
       ) : (
-        <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+        <div className="-mx-4 px-4 sm:-mx-6 sm:px-6">
           {filteredLeads.length === 0 && (
             <p className="mb-3 text-sm text-muted-foreground">
               No leads match the current search and filters.
             </p>
           )}
-          <div className="flex gap-4 min-w-max pb-4">
-            {LEAD_STATUSES.map((column) => (
-              <section key={column.value} className="w-[300px] shrink-0" aria-label={column.label}>
-                <div className="flex items-center justify-between mb-2 sticky top-0 bg-background z-10 py-1">
-                  <h2 className="text-sm font-semibold">{column.label}</h2>
-                  <Badge variant="secondary">{byStatus[column.value]?.length ?? 0}</Badge>
-                </div>
-                <div className="space-y-2">
-                  {(byStatus[column.value] ?? []).map((lead) => (
-                    <LeadCard
-                      key={lead.id}
-                      lead={lead}
-                      patient={patientFor(lead)}
-                      users={users}
-                      files={files}
-                      plans={plans}
-                      tasks={tasks}
-                      onStatusChange={(next) =>
-                        updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
-                      }
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+          {view === "list" && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredLeads.map((lead) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  patient={patientFor(lead)}
+                  users={users}
+                  files={files}
+                  plans={plans}
+                  followUps={followUps}
+                  assessment={assessments.find((item) => item.id === lead.assessment_id)}
+                  onStatusChange={(next) =>
+                    updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {view === "pipeline" && (
+            <div className="hidden gap-4 overflow-x-auto pb-4 md:flex">
+              {LEAD_PIPELINE_STAGES.map((column) => (
+                <section key={column.key} className="w-[300px] shrink-0" aria-label={column.label}>
+                  <div className="flex items-center justify-between mb-2 sticky top-0 bg-background z-10 py-1">
+                    <h2 className="text-sm font-semibold">{column.label}</h2>
+                    <Badge variant="secondary">{byStatus[column.key]?.length ?? 0}</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {(byStatus[column.key] ?? []).map((lead) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        patient={patientFor(lead)}
+                        users={users}
+                        files={files}
+                        plans={plans}
+                        followUps={followUps}
+                        assessment={assessments.find((item) => item.id === lead.assessment_id)}
+                        onStatusChange={(next) =>
+                          updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
+                        }
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+          {view === "pipeline" && (
+            <div className="grid gap-3 md:hidden">
+              {filteredLeads.map((lead) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  patient={patientFor(lead)}
+                  users={users}
+                  files={files}
+                  plans={plans}
+                  followUps={followUps}
+                  assessment={assessments.find((item) => item.id === lead.assessment_id)}
+                  onStatusChange={(next) =>
+                    updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
+                  }
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -289,7 +524,8 @@ function LeadCard({
   users,
   files,
   plans,
-  tasks,
+  followUps,
+  assessment,
   onStatusChange,
 }: {
   lead: Lead;
@@ -297,12 +533,15 @@ function LeadCard({
   users: User[];
   files: UploadedFile[];
   plans: TreatmentPlan[];
-  tasks: Task[];
+  followUps: LeadFollowUp[];
+  assessment?: Assessment;
   onStatusChange: (status: LeadStatus) => void;
 }) {
   const navigate = useNavigate();
   const activeUser = useAuth((state) => state.user);
   const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const coordinator = users.find((user) => user.id === lead.assigned_to)?.name ?? "Unassigned";
   const hasFiles = files.some(
     (file) =>
@@ -319,9 +558,8 @@ function LeadCard({
       plan.clinic_id === lead.clinic_id &&
       (plan.lead_id === lead.id || plan.clinic_patient_id === lead.clinic_patient_id),
   );
-  const nextFollowUp = tasks
-    .filter((task) => task.lead_id === lead.id && task.due_at && !task.done)
-    .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime())[0];
+  const operationalStage = deriveLeadOperationalStage({ lead, treatmentPlan: linkedPlan });
+  const nextFollowUp = getNextFollowUp(followUps, lead.id);
   const legacy = !lead.clinic_patient_id;
   const openTreatmentPlan = () => {
     if (linkedPlan) {
@@ -361,6 +599,11 @@ function LeadCard({
         </Badge>
       </div>
       <p className="text-xs mt-2 line-clamp-2">{lead.treatment}</p>
+      {assessment?.travel.destination_country && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Destination: {assessment.travel.destination_country}
+        </p>
+      )}
       <div className="flex flex-wrap gap-1 mt-2">
         <Badge variant="outline" className="text-[10px]">
           {sourceLabel[lead.source]}
@@ -373,6 +616,11 @@ function LeadCard({
         {lead.assessment_id && (
           <Badge variant="secondary" className="text-[10px]">
             Assessment Submitted
+          </Badge>
+        )}
+        {lead.roadmap_id && (
+          <Badge variant="secondary" className="text-[10px]">
+            Roadmap Available
           </Badge>
         )}
         {hasFiles && (
@@ -390,31 +638,56 @@ function LeadCard({
         <dt className="text-muted-foreground">Coordinator</dt>
         <dd className="truncate">{coordinator}</dd>
         <dt className="text-muted-foreground">Dentist</dt>
-        <dd>Not assigned</dd>
+        <dd>{users.find((user) => user.id === linkedPlan?.dentist_id)?.name ?? "Not assigned"}</dd>
         <dt className="text-muted-foreground">Last activity</dt>
         <dd>{format(new Date(lead.last_activity_at), "MMM d, yyyy")}</dd>
         <dt className="text-muted-foreground">Follow-up</dt>
         <dd>
           {nextFollowUp
-            ? format(new Date(nextFollowUp.due_at!), "MMM d, yyyy")
+            ? `${format(new Date(nextFollowUp.due_at), "MMM d, yyyy")} · ${getFollowUpState(nextFollowUp).replace(/_/g, " ")}`
             : "No follow-up scheduled"}
         </dd>
       </dl>
       <div className="mt-3">
-        <Select value={lead.status} onValueChange={(value) => onStatusChange(value as LeadStatus)}>
-          <SelectTrigger aria-label={`Status for ${lead.patient_name}`} className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LEAD_STATUSES.map((status) => (
-              <SelectItem key={status.value} value={status.value}>
-                {status.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {["booked", "lost"].includes(operationalStage) ? (
+          <Badge variant="outline">
+            {LEAD_PIPELINE_STAGES.find((item) => item.key === operationalStage)?.label}
+          </Badge>
+        ) : (
+          <Select
+            value={operationalStage}
+            onValueChange={(value) => onStatusChange(value as LeadStatus)}
+          >
+            <SelectTrigger aria-label={`Status for ${lead.patient_name}`} className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LEAD_PIPELINE_STAGES.filter((status) => !status.terminal).map((status) => (
+                <SelectItem key={status.key} value={status.key}>
+                  {status.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       <div className="mt-2 flex gap-1.5">
+        <Button asChild variant="ghost" size="sm" className="h-7 px-2">
+          <Link to="/pro/leads/$id" params={{ id: lead.id }}>
+            Open Lead <ArrowRight className="ml-1 size-3.5" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setContactOpen(true)}>
+          Log contact
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2"
+          onClick={() => setFollowUpOpen(true)}
+        >
+          Follow-up
+        </Button>
         {lead.clinic_patient_id ? (
           <Button asChild variant="ghost" size="sm" className="h-7 px-2">
             <Link to="/pro/patients/$id" params={{ id: lead.clinic_patient_id }}>
@@ -444,6 +717,14 @@ function LeadCard({
           View Assessment
         </Button>
       </div>
+      <LogContactDialog open={contactOpen} onOpenChange={setContactOpen} lead={lead} />
+      <ScheduleFollowUpDialog
+        open={followUpOpen}
+        onOpenChange={setFollowUpOpen}
+        lead={lead}
+        patient={patient}
+        users={users.filter((user) => user.clinic_id === lead.clinic_id && user.active !== false)}
+      />
     </Card>
   );
 }

@@ -244,10 +244,33 @@ export interface Lead extends BaseRecord {
 export interface LeadActivity extends BaseRecord {
   clinic_id: string;
   lead_id: string;
-  kind: "note" | "status_change" | "whatsapp" | "email" | "call" | "in_person" | "task" | "file";
+  kind:
+    | "note"
+    | "status_change"
+    | "whatsapp"
+    | "email"
+    | "call"
+    | "in_person"
+    | "task"
+    | "follow_up"
+    | "file";
   body: string;
   internal: boolean;
   occurred_at?: string;
+}
+
+export type FollowUpStatus = "pending" | "completed" | "cancelled";
+
+export interface LeadFollowUp extends BaseRecord {
+  clinic_id: string;
+  lead_id: string;
+  patient_id?: string;
+  assigned_user_id?: string;
+  due_at: string;
+  reason: string;
+  notes?: string;
+  status: FollowUpStatus;
+  completed_at?: string;
 }
 
 export interface Task extends BaseRecord {

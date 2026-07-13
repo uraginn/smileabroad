@@ -56,6 +56,7 @@ export function CrmTopbar({
   const tasks = useMockStore((state) => state.tasks);
   const appointments = useMockStore((state) => state.appointments);
   const applications = useMockStore((state) => state.applications);
+  const followUps = useMockStore((state) => state.followUps);
   const notifications = useMockStore((state) => state.notifications);
   const syncNotifications = useMockStore((state) => state.syncNotifications);
   const markRead = useMockStore((state) => state.markNotificationRead);
@@ -76,11 +77,12 @@ export function CrmTopbar({
             applications,
             leads,
             tasks,
+            followUps,
             plans,
             appointments,
           })
         : [],
-    [appointments, applications, clinicId, leads, plans, tasks, user?.id, user?.role],
+    [appointments, applications, clinicId, followUps, leads, plans, tasks, user?.id, user?.role],
   );
   useEffect(() => {
     if (clinicId && user?.id) syncNotifications(clinicId, user.id, derivedNotifications);

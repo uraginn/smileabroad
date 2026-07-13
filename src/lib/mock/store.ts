@@ -24,6 +24,7 @@ import type {
   TreatmentPlanPriceItem,
   TreatmentPlanStatus,
   ClinicNotification,
+  LeadFollowUp,
 } from "@/types/models";
 import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
 import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
@@ -69,6 +70,7 @@ interface Store {
   files: UploadedFile[];
   activities: LeadActivity[];
   notifications: ClinicNotification[];
+  followUps: LeadFollowUp[];
   clinicTreatmentDefinitions: ClinicTreatmentDefinition[];
   dentalPlanTemplates: DentalPlanTemplate[];
   clinicHotels: ClinicHotel[];
@@ -107,7 +109,8 @@ interface Store {
   addLeadActivity: (
     activity: Omit<LeadActivity, "id" | "created_at" | "updated_at">,
   ) => LeadActivity;
-  updateLeadStatus: (id: string, status: LeadStatus, changedBy?: string) => void;
+  updateLeadStatus: (id: string, status: LeadStatus, changedBy?: string, reason?: string) => void;
+  updateLead: (id: string, clinicId: string, patch: Partial<Lead>, changedBy?: string) => void;
   addTreatmentPlan: (
     tp: Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by">,
     createdBy?: string,
@@ -139,6 +142,11 @@ interface Store {
   syncNotifications: (clinicId: string, userId: string, records: ClinicNotification[]) => void;
   markNotificationRead: (id: string, clinicId: string, userId?: string) => void;
   markAllNotificationsRead: (clinicId: string, userId?: string) => void;
+  scheduleFollowUp: (
+    record: Omit<LeadFollowUp, "id" | "created_at" | "updated_at" | "created_by" | "status">,
+    createdBy?: string,
+  ) => LeadFollowUp;
+  completeFollowUp: (id: string, clinicId: string, changedBy?: string) => void;
   saveClinicTreatmentDefinition: (
     record: Omit<ClinicTreatmentDefinition, "created_at" | "updated_at" | "created_by">,
     changedBy?: string,
@@ -293,6 +301,7 @@ export const useMockStore = create<Store>()(
       files: seedFiles,
       activities: seedActivities,
       notifications: [],
+      followUps: [],
       clinicTreatmentDefinitions: [],
       dentalPlanTemplates: [],
       clinicHotels: [],
@@ -540,7 +549,7 @@ export const useMockStore = create<Store>()(
         }));
         return rec;
       },
-      updateLeadStatus: (id, status, changedBy = "system") => {
+      updateLeadStatus: (id, status, changedBy = "system", reason) => {
         const lead = get().leads.find((item) => item.id === id);
         if (!lead || lead.status === status) return;
         const timestamp = now();
@@ -549,7 +558,7 @@ export const useMockStore = create<Store>()(
           clinic_id: lead.clinic_id,
           lead_id: lead.id,
           kind: "status_change",
-          body: `Status changed from ${lead.status.replace(/_/g, " ")} to ${status.replace(/_/g, " ")}.`,
+          body: `Status changed from ${lead.status.replace(/_/g, " ")} to ${status.replace(/_/g, " ")}.${reason ? ` Reason: ${reason}` : ""}`,
           internal: true,
           created_at: timestamp,
           updated_at: timestamp,
@@ -562,6 +571,20 @@ export const useMockStore = create<Store>()(
               : item,
           ),
           activities: [...s.activities, activity],
+        }));
+      },
+      updateLead: (id, clinicId, patch, changedBy = "system") => {
+        const lead = get().leads.find((item) => item.id === id && item.clinic_id === clinicId);
+        if (!lead) return;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
+        const timestamp = now();
+        set((state) => ({
+          leads: state.leads.map((item) =>
+            item.id === id
+              ? { ...item, ...patch, id, clinic_id: clinicId, updated_at: timestamp }
+              : item,
+          ),
         }));
       },
       addTreatmentPlan: (tp, createdBy = "system") => {
@@ -895,6 +918,90 @@ export const useMockStore = create<Store>()(
           ),
         }));
       },
+      scheduleFollowUp: (record, createdBy = "system") => {
+        const lead = get().leads.find(
+          (item) => item.id === record.lead_id && item.clinic_id === record.clinic_id,
+        );
+        if (!lead) throw new Error("Lead is unavailable for this clinic.");
+        const actor = get().users.find((item) => item.id === createdBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== record.clinic_id)
+          throw new Error("Follow-up clinic ownership mismatch.");
+        const duplicate = get().followUps.find(
+          (item) =>
+            item.clinic_id === record.clinic_id &&
+            item.lead_id === record.lead_id &&
+            item.status === "pending" &&
+            item.due_at === record.due_at &&
+            item.reason === record.reason &&
+            item.assigned_user_id === record.assigned_user_id,
+        );
+        if (duplicate) return duplicate;
+        const timestamp = now();
+        const followUp: LeadFollowUp = {
+          ...record,
+          id: makeId("followup"),
+          status: "pending",
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
+        };
+        const activity: LeadActivity = {
+          id: makeId("activity"),
+          clinic_id: record.clinic_id,
+          lead_id: record.lead_id,
+          kind: "follow_up",
+          body: `Follow-up scheduled: ${record.reason} · ${record.due_at}`,
+          internal: true,
+          occurred_at: timestamp,
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
+        };
+        set((state) => ({
+          followUps: [...state.followUps, followUp],
+          activities: [...state.activities, activity],
+          leads: state.leads.map((item) =>
+            item.id === lead.id
+              ? { ...item, last_activity_at: timestamp, updated_at: timestamp }
+              : item,
+          ),
+        }));
+        return followUp;
+      },
+      completeFollowUp: (id, clinicId, changedBy = "system") => {
+        const followUp = get().followUps.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!followUp || followUp.status !== "pending") return;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
+        const timestamp = now();
+        const activity: LeadActivity = {
+          id: makeId("activity"),
+          clinic_id: clinicId,
+          lead_id: followUp.lead_id,
+          kind: "follow_up",
+          body: `Follow-up completed: ${followUp.reason}`,
+          internal: true,
+          occurred_at: timestamp,
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: changedBy,
+        };
+        set((state) => ({
+          followUps: state.followUps.map((item) =>
+            item.id === id
+              ? { ...item, status: "completed", completed_at: timestamp, updated_at: timestamp }
+              : item,
+          ),
+          activities: [...state.activities, activity],
+          leads: state.leads.map((item) =>
+            item.id === followUp.lead_id
+              ? { ...item, last_activity_at: timestamp, updated_at: timestamp }
+              : item,
+          ),
+        }));
+      },
       saveClinicTreatmentDefinition: (record, changedBy = "system") =>
         set((s) => {
           const existing = s.clinicTreatmentDefinitions.find(
@@ -1050,7 +1157,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 16,
+      version: 17,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1193,6 +1300,26 @@ export const useMockStore = create<Store>()(
         return {
           ...stateWithoutLegacyQuotes,
           notifications: state.notifications ?? [],
+          followUps:
+            state.followUps ??
+            (state.tasks ?? [])
+              .filter((task) => task.category === "follow_up" && task.due_at)
+              .map((task) => ({
+                id: `followup_migrated_${task.id}`,
+                clinic_id: task.clinic_id,
+                lead_id: task.lead_id ?? "",
+                patient_id: task.patient_user_id,
+                assigned_user_id: task.assigned_to,
+                due_at: task.due_at!,
+                reason: task.title,
+                status: task.done ? ("completed" as const) : ("pending" as const),
+                completed_at: task.done ? task.updated_at : undefined,
+                created_at: task.created_at,
+                updated_at: task.updated_at,
+                created_by: task.created_by,
+              }))
+              .filter((item) => item.lead_id),
+          tasks: (state.tasks ?? []).filter((task) => task.category !== "follow_up"),
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
             ...(clinic.id === "clinic_istanbul"

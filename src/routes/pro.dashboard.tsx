@@ -18,6 +18,7 @@ import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
 import { RecentActivityList, type ActivityItem } from "@/components/recent-activity-list";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { formatCrmDate } from "@/lib/format";
+import { getFollowUpState } from "@/lib/lead-workflow";
 import {
   selectClinicAppointments,
   selectClinicLeads,
@@ -43,16 +44,23 @@ function ProDashboard() {
   const activities = useMockStore(
     useShallow((state) => state.activities.filter((item) => item.clinic_id === clinicId)),
   );
+  const followUps = useMockStore((state) => state.followUps);
   const users = useMockStore((state) => state.users);
   const clinics = useMockStore((state) => state.clinics);
   const clinic = clinics.find((item) => item.id === clinicId);
   const now = new Date();
-  const overdueFollowUps = tasks.filter(
+  const overdueFollowUps = followUps.filter(
     (item) =>
-      item.category === "follow_up" && !item.done && item.due_at && new Date(item.due_at) < now,
+      item.clinic_id === clinicId &&
+      item.status === "pending" &&
+      getFollowUpState(item, now) === "overdue",
   );
   const tasksDueToday = tasks.filter(
-    (item) => !item.done && item.due_at && isSameDay(new Date(item.due_at), now),
+    (item) =>
+      item.category !== "follow_up" &&
+      !item.done &&
+      item.due_at &&
+      isSameDay(new Date(item.due_at), now),
   );
   const newApplications = applications.filter((item) => item.status === "submitted");
   const awaitingReview = plans.filter((item) => item.status === "doctor_review");
@@ -80,7 +88,7 @@ function ProDashboard() {
       status: item.kind.replace(/_/g, " "),
       timestamp: item.created_at,
       description: item.body,
-      to: "/pro/leads",
+      to: "/pro/leads?followUp=overdue",
     }));
 
   const attention = [
@@ -88,7 +96,7 @@ function ProDashboard() {
       label: "Follow-ups overdue",
       count: overdueFollowUps.length,
       icon: AlertCircle,
-      to: "/pro/tasks",
+      to: "/pro/leads",
       tone: "text-destructive",
     },
     {
@@ -206,24 +214,24 @@ function ProDashboard() {
 
         <WorkCard
           title="Follow-ups requiring attention"
-          action={<Link to="/pro/tasks">Open Tasks</Link>}
+          action={<a href="/pro/leads?followUp=overdue">Open Leads</a>}
         >
           {overdueFollowUps.length ? (
-            overdueFollowUps.slice(0, 5).map((task) => {
-              const lead = leads.find((item) => item.id === task.lead_id);
-              const assigned = users.find((item) => item.id === task.assigned_to);
+            overdueFollowUps.slice(0, 5).map((followUp) => {
+              const lead = leads.find((item) => item.id === followUp.lead_id);
+              const assigned = users.find((item) => item.id === followUp.assigned_user_id);
               const overdueDays = Math.max(
                 1,
-                Math.floor((now.getTime() - new Date(task.due_at!).getTime()) / 86400000),
+                Math.floor((now.getTime() - new Date(followUp.due_at).getTime()) / 86400000),
               );
               return (
                 <WorkRow
-                  key={task.id}
-                  title={lead?.patient_name ?? task.title}
-                  subtitle={task.title}
+                  key={followUp.id}
+                  title={lead?.patient_name ?? followUp.reason}
+                  subtitle={followUp.reason}
                   meta={`${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue${assigned ? ` · ${assigned.name}` : ""}`}
                   status="overdue"
-                  href="/pro/tasks"
+                  href={lead ? `/pro/leads/${lead.id}` : "/pro/leads"}
                 />
               );
             })
