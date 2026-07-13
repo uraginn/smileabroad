@@ -199,7 +199,7 @@ export function buildPatientTreatmentExplanations(
   return groups.map((group) => {
     const content = (group.treatment ? EXPLANATIONS[group.treatment] : undefined) ?? {
       what: `${group.label} is part of the dentist-confirmed Treatment Plan.`,
-      context: `Your plan includes ${group.quantity} ${group.quantity === 1 ? "unit" : "units"} of ${group.label.toLowerCase()}.`,
+      context: "Your dentist included this treatment as part of your confirmed clinical plan.",
     };
     return {
       id: group.id,
@@ -317,7 +317,9 @@ function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
   const stages = (plan.treatment_stages ?? []).map((stage) => ({
     id: `stage_${stage.stage_number}`,
     title: stage.title,
-    description: stage.description ?? stage.procedures.join(", "),
+    description:
+      stage.description ??
+      "During this stage, your clinic completes the planned care and checks your progress before the next step.",
     stay: stage.duration_or_stay,
     healing: stage.healing_period_after,
     instructions: stage.patient_instructions,
@@ -326,7 +328,9 @@ function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
   const visits = (plan.visit_plan ?? []).map((visit) => ({
     id: `visit_${visit.visit_number}`,
     title: visit.title || `${ordinal(visit.visit_number)} Visit`,
-    description: visit.description ?? visit.procedures.join(", "),
+    description:
+      visit.description ??
+      "During this visit, your clinic completes the planned stage and prepares you for what comes next.",
     stay: visit.expected_stay,
     healing: visit.healing_period_after,
     instructions: visit.patient_instructions,
@@ -412,24 +416,26 @@ const EXPLANATIONS: Partial<Record<ToothTreatment, { what: string; context: stri
   implant: {
     what: "A dental implant replaces the root of a missing tooth and supports a fixed restoration.",
     context:
-      "Your plan includes {quantity} dental implant unit(s), normally followed by a healing period before final restoration.",
+      "This treatment is included to replace missing tooth support and create a stable foundation for the planned restoration.",
   },
   crown: {
     what: "A crown is a strong tooth-coloured restoration placed over a prepared tooth.",
-    context: "Your plan includes {quantity} crown unit(s) to restore the selected teeth.",
+    context:
+      "This treatment is included to protect and restore the selected teeth as part of your final result.",
   },
   root_canal: {
     what: "Root canal treatment removes infected or damaged tissue from inside a tooth.",
     context:
-      "Your plan includes {quantity} root canal treatment(s) to help preserve affected teeth before restoration.",
+      "This treatment is included to help preserve an affected tooth before its planned restoration.",
   },
   extraction: {
     what: "An extraction removes a tooth that cannot be predictably retained.",
     context:
-      "Your plan includes {quantity} planned extraction(s) as part of the confirmed treatment sequence.",
+      "This treatment is included where a tooth cannot be predictably retained within the confirmed plan.",
   },
   veneer: {
     what: "A veneer is a thin tooth-coloured restoration fitted to the front surface of a tooth.",
-    context: "Your plan includes {quantity} veneer unit(s) for the planned smile result.",
+    context:
+      "This treatment is included to support the shape and appearance planned for your smile.",
   },
 };

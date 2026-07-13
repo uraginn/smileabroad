@@ -140,6 +140,10 @@ function SharedPlan() {
         : undefined,
     [plan, clinic, patient, branding, coordinator],
   );
+  const faqs = useMemo(
+    () => (document ? buildTreatmentFaq(document.treatment_groups) : []),
+    [document],
+  );
   const nav = useMemo(
     () =>
       document
@@ -155,10 +159,11 @@ function SharedPlan() {
             ...(document.patient_notes.length
               ? [{ id: "important-information", label: "Important Information" }]
               : []),
+            ...(faqs.length ? [{ id: "faq", label: "FAQ" }] : []),
             { id: "next-steps", label: "Next Steps" },
           ]
         : [],
-    [document],
+    [document, faqs.length],
   );
   if (!hydrated || (preview && !authHydrated)) return null;
   if (!plan || !document) return <SafeNotFound />;
@@ -255,20 +260,6 @@ function SharedPlan() {
               </p>
             )}
           </div>
-          {document.price.items?.length ? (
-            <div className="mt-12">
-              <SectionHeading
-                eyebrow="Treatment table"
-                title="Your Treatment at a Glance"
-                description="A clear commercial summary using the confirmed pricing in your Treatment Plan."
-                compact
-              />
-              <TreatmentPricingTable
-                items={document.price.items}
-                currency={document.price.currency}
-              />
-            </div>
-          ) : null}
           {document.diagrams && (
             <div className="mt-12">
               <DentalPlanPreview diagrams={document.diagrams} />
@@ -305,15 +296,18 @@ function SharedPlan() {
                         </span>
                       </AccordionTrigger>
                       <AccordionContent className="space-y-5 pb-6 pl-12 text-sm leading-6">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            What this treatment is
+                          </p>
+                          <p className="mt-1 text-muted-foreground">{item.what_it_is}</p>
+                        </div>
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            In your treatment plan
+                            Why it is in your plan
                           </p>
                           <p className="mt-1 text-muted-foreground">{item.plan_context}</p>
                         </div>
-                        {item.journey_note && (
-                          <Badge variant="outline">Planned during {item.journey_note}</Badge>
-                        )}
                       </AccordionContent>
                     </AccordionItem>
                   ))}
@@ -552,6 +546,20 @@ function SharedPlan() {
               </div>
             </aside>
           </div>
+          {document.price.items?.length ? (
+            <div className="mt-12 border-t border-slate-200/80 pt-10">
+              <SectionHeading
+                eyebrow="Treatment breakdown"
+                title="Your Treatment at a Glance"
+                description="A clear commercial summary using the confirmed pricing in your Treatment Plan."
+                compact
+              />
+              <TreatmentPricingTable
+                items={document.price.items}
+                currency={document.price.currency}
+              />
+            </div>
+          ) : null}
           {document.included_services.length > 0 && (
             <IncludedServicesPanel services={document.included_services} accent={accent} />
           )}
@@ -565,30 +573,36 @@ function SharedPlan() {
                 Payments are organized around your confirmed clinic visits.
               </p>
               <div className="relative mt-6 grid gap-4 before:absolute before:bottom-5 before:left-5 before:top-5 before:w-px before:bg-slate-200 sm:grid-cols-2 sm:before:hidden">
-                {document.price.payment_schedule.map((payment, index) => (
-                  <div
-                    key={`${payment.label}-${payment.due}`}
-                    className="print-row relative rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-                  >
-                    <div className="flex items-start gap-4">
-                      <span className="z-10 grid size-10 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {payment.label}
-                        </p>
-                        <p className="mt-1 text-xl font-semibold">
-                          {formatQuoteMoney(payment.amount, document.price.currency)}
-                        </p>
-                        <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                          <CalendarCheck className="size-4" aria-hidden="true" />
-                          {payment.due}
-                        </p>
+                {document.price.payment_schedule.map((payment, index) => {
+                  const journeyStep = document.journey[index];
+                  return (
+                    <div
+                      key={`${payment.label}-${payment.due}`}
+                      className="print-row relative rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                    >
+                      <div className="flex items-start gap-4">
+                        <span className="z-10 grid size-10 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {payment.label}
+                          </p>
+                          <p className="mt-1 font-medium text-slate-700">
+                            {journeyStep?.title ?? "Planned treatment stage"}
+                          </p>
+                          <p className="mt-3 text-xl font-semibold">
+                            {formatQuoteMoney(payment.amount, document.price.currency)}
+                          </p>
+                          <p className="mt-3 flex items-start gap-2 text-sm leading-5 text-muted-foreground">
+                            <CalendarCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                            This payment is scheduled {payment.due.toLowerCase()}.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : document.price.payment_schedule_valid === false ? (
@@ -612,6 +626,36 @@ function SharedPlan() {
             </Alert>
           </section>
         )}
+        {faqs.length > 0 && (
+          <section
+            id="faq"
+            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+          >
+            <div className="mx-auto max-w-4xl">
+              <SectionHeading
+                eyebrow="Your questions"
+                title="Frequently Asked Questions"
+                description="Answers selected for the confirmed treatments in your plan."
+              />
+              <Accordion
+                type="single"
+                collapsible
+                className="mt-7 rounded-3xl bg-white px-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/70 sm:px-7"
+              >
+                {faqs.map((faq) => (
+                  <AccordionItem key={faq.question} value={faq.id}>
+                    <AccordionTrigger className="text-left text-base hover:no-underline">
+                      {faq.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="max-w-3xl pb-5 text-sm leading-6 text-muted-foreground">
+                      {faq.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          </section>
+        )}
         <section id="next-steps" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <Card className="print-card print-cta overflow-hidden rounded-3xl border-0 bg-slate-900 text-white shadow-[0_30px_70px_-36px_rgba(15,23,42,0.8)]">
             <CardContent className="relative p-7 text-center sm:p-14">
@@ -632,8 +676,9 @@ function SharedPlan() {
                     Ready to move forward with confidence?
                   </h2>
                   <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/70 sm:text-base">
-                    Your clinic is ready to answer your questions and help coordinate the next stage
-                    of your treatment journey.
+                    Accepting confirms that you would like the clinic to continue. Your coordinator
+                    will then contact you to confirm dates, final checks and the next practical
+                    steps.
                   </p>
                   <div className="no-print mx-auto mt-7 flex max-w-2xl flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
                     {!preview && plan.status === "viewed" && (
@@ -642,7 +687,7 @@ function SharedPlan() {
                         style={{ background: accent }}
                         onClick={() => markAccepted(plan.id, plan.clinic_id)}
                       >
-                        Accept Treatment Plan
+                        Accept & Continue
                       </Button>
                     )}
                     {document.clinic?.phone && (
@@ -677,7 +722,7 @@ function SharedPlan() {
                   </div>
                   <p className="mt-6 flex items-center justify-center gap-2 text-xs text-white/60">
                     <HeartHandshake className="size-4" aria-hidden="true" />
-                    Your clinic is available to guide you through the next step.
+                    Your decision is recorded here; no payment is taken on this page.
                   </p>
                 </>
               )}
@@ -942,9 +987,9 @@ function DentalPlanPreview({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
               Clinical illustration
             </p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">View on Diagram</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight">View Your Dental Plan</p>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              View your complete dental treatment visually.
+              See your complete treatment visually on the dental diagram.
             </p>
           </div>
         </div>
@@ -1116,9 +1161,9 @@ function IncludedServicesPanel({ services, accent }: { services: string[]; accen
             <div className="mt-4 space-y-3">
               {group.services.map((service) => (
                 <p key={service} className="flex gap-2.5 text-sm leading-6 text-slate-700">
-                  <Check
-                    className="mt-1 size-4 shrink-0"
-                    style={{ color: accent }}
+                  <span
+                    className="mt-2.5 size-1.5 shrink-0 rounded-full"
+                    style={{ background: accent }}
                     aria-hidden="true"
                   />
                   {service}
@@ -1130,6 +1175,137 @@ function IncludedServicesPanel({ services, accent }: { services: string[]; accen
       </div>
     </div>
   );
+}
+
+type TreatmentFaq = { id: string; question: string; answer: string };
+const FAQ_BY_TREATMENT: Partial<Record<ToothTreatment, Array<Omit<TreatmentFaq, "id">>>> = {
+  implant: [
+    {
+      question: "How painful is implant treatment?",
+      answer:
+        "Implant placement is normally performed with local anaesthetic. Some temporary tenderness or swelling can occur afterwards, and your clinic will provide medication and aftercare guidance appropriate to your case.",
+    },
+    {
+      question: "How long does implant healing take?",
+      answer:
+        "Healing time varies with bone quality, general health and the procedure performed. Follow the healing period shown in your Treatment Journey; your dentist will confirm readiness before the final restoration.",
+    },
+    {
+      question: "Will I have temporary teeth while implants heal?",
+      answer:
+        "Temporary teeth depend on your clinical situation and the treatment sequence. Your clinic will confirm the temporary solution included in your plan before treatment begins.",
+    },
+  ],
+  crown: [
+    {
+      question: "Will my teeth need to be prepared for crowns?",
+      answer:
+        "A crown usually requires controlled preparation so it can fit securely and protect the tooth. The amount varies by tooth condition, material and clinical objective.",
+    },
+    {
+      question: "How long can dental crowns last?",
+      answer:
+        "Longevity varies with oral hygiene, bite forces, habits and regular dental care. Your clinic will explain how to protect the restorations planned for you.",
+    },
+  ],
+  veneer: [
+    {
+      question: "Will veneers stain?",
+      answer:
+        "Ceramic veneers are generally resistant to staining, although natural teeth and the surrounding margins can still be affected by diet, smoking and oral hygiene.",
+    },
+    {
+      question: "How should I care for veneers?",
+      answer:
+        "Use normal brushing, interdental cleaning and regular dental reviews. Avoid using your teeth to open objects and follow any bite-protection advice from your dentist.",
+    },
+  ],
+  extraction: [
+    {
+      question: "What should I expect after an extraction?",
+      answer:
+        "Temporary soreness and swelling are common. Your clinic will explain how to protect the area, what to eat and which symptoms require contact during healing.",
+    },
+  ],
+  root_canal: [
+    {
+      question: "Is root canal treatment painful?",
+      answer:
+        "Treatment is normally carried out with local anaesthetic. The tooth may feel tender afterwards, but the aim is to remove the source of infection or inflammation and preserve the tooth.",
+    },
+  ],
+  bridge: [
+    {
+      question: "How do I clean around a dental bridge?",
+      answer:
+        "A bridge needs daily cleaning around and underneath the replacement tooth. Your clinic can demonstrate suitable floss or interdental aids for the bridge planned for you.",
+    },
+  ],
+  pontic: [
+    {
+      question: "How do I clean underneath a replacement tooth?",
+      answer:
+        "The space underneath a fixed replacement tooth needs daily cleaning. Your clinic can demonstrate suitable floss or interdental aids for your restoration.",
+    },
+  ],
+  composite: [
+    {
+      question: "How should I care for composite restorations?",
+      answer:
+        "Brush and clean between the teeth normally, and avoid biting very hard objects. Composite can wear or stain over time, so regular dental reviews remain important.",
+    },
+  ],
+  filling: [
+    {
+      question: "How long can a filling last?",
+      answer:
+        "Longevity varies with the size and position of the filling, bite forces, oral hygiene and diet. Your dentist will explain how to protect the restored tooth.",
+    },
+  ],
+  bone_graft: [
+    {
+      question: "Why might a bone graft be needed?",
+      answer:
+        "A graft may be used when additional bone support is needed for predictable implant placement. Your dentist will confirm the graft area and expected healing period.",
+    },
+  ],
+  sinus_lift: [
+    {
+      question: "What is the purpose of a sinus lift?",
+      answer:
+        "A sinus lift creates additional bone support in the upper back jaw when the existing height is not sufficient for the planned implant treatment.",
+    },
+  ],
+  whitening: [
+    {
+      question: "Can whitening cause sensitivity?",
+      answer:
+        "Temporary sensitivity can occur. Use the products exactly as directed and tell your clinic if sensitivity is strong or continues longer than expected.",
+    },
+  ],
+  denture: [
+    {
+      question: "Will a new denture need an adjustment period?",
+      answer:
+        "Most patients need time to adapt to speaking and eating with a new denture. Small adjustments may be required as your mouth settles.",
+    },
+  ],
+};
+
+function buildTreatmentFaq(groups: PatientTreatmentGroup[]): TreatmentFaq[] {
+  const result: TreatmentFaq[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    if (!group.treatment) continue;
+    const entries = FAQ_BY_TREATMENT[group.treatment] ?? [];
+    for (const [index, entry] of entries.entries()) {
+      if (seen.has(entry.question)) continue;
+      seen.add(entry.question);
+      result.push({ id: `${group.treatment}-${index}`, ...entry });
+      if (result.length === 5) return result;
+    }
+  }
+  return result;
 }
 const TREATMENT_ICONS: Partial<Record<ToothTreatment, LucideIcon>> = {
   implant: CircleDot,
@@ -1175,27 +1351,14 @@ function groupIncludedServices(services: string[]) {
   return groups.filter((group) => group.services.length > 0);
 }
 function Footer({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
-  const clinic = document.clinic!;
   return (
     <footer className="border-t border-slate-200/80 bg-white">
-      <div className="mx-auto max-w-6xl px-4 py-10 text-xs text-muted-foreground sm:px-6 sm:py-14">
-        <div className="flex flex-col justify-between gap-7 sm:flex-row sm:items-end">
-          <div className="max-w-md">
-            <p className="text-sm font-semibold text-slate-900">{clinic.name}</p>
-            <p className="mt-1">
-              {clinic.city}, {clinic.country}
-            </p>
-            <p>{[clinic.phone, clinic.email].filter(Boolean).join(" · ")}</p>
-          </div>
-          <div className="leading-5 sm:text-right">
-            <p>Prepared {new Date(document.prepared_at).toLocaleDateString()}</p>
-            <p>Plan reference {document.reference}</p>
-          </div>
-        </div>
-        <p className="mt-7 flex max-w-3xl gap-2 border-t border-slate-100 pt-5 leading-5">
+      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-xs text-muted-foreground sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-10">
+        <p className="flex max-w-3xl gap-2 leading-5">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-slate-500" />
           {document.disclaimer}
         </p>
+        <p className="shrink-0 sm:text-right">Plan reference {document.reference}</p>
       </div>
     </footer>
   );
