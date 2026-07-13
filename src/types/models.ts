@@ -561,6 +561,10 @@ export type PlanCurrency = "GBP" | "EUR" | "USD" | "TRY";
 export interface ClinicBranding extends BaseRecord {
   clinic_id: string;
   logo_url?: string;
+  shared_view_logo_url?: string;
+  shared_view_banner_url?: string;
+  shared_view_tagline?: string;
+  shared_view_accent_color?: string;
   primary_color: string;
   secondary_color: string;
   phone: string;

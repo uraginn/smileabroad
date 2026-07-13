@@ -3,39 +3,43 @@ import type {
   Clinic,
   ClinicBranding,
   Patient,
+  PlanCurrency,
   Roadmap,
   TreatmentPlan,
   TreatmentPlanPayment,
-  TreatmentStage,
-  TreatmentVisit,
   ToothTreatment,
 } from "@/types/models";
+import type { DentalPlanData } from "@/features/dentalplan";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
+import { treatmentLabel } from "@/lib/dental";
 
 export interface CarePlanPricePresentation {
-  currency: string;
+  currency: PlanCurrency;
   minimum?: number;
   maximum?: number;
   subtotal?: number;
   total?: number;
   hotel_total?: number;
   transfer_total?: number;
+  optional_service_total?: number;
   discount?: number;
   items?: { label: string; quantity: number; unit_price: number; total: number }[];
   payment_schedule?: TreatmentPlanPayment[];
+  payment_schedule_valid?: boolean;
   valid_until?: string;
 }
-
 export interface CarePlanClinicPresentation {
   name: string;
   city?: string;
   country?: string;
   logo_url?: string;
+  banner_url?: string;
+  tagline?: string;
+  accent_color?: string;
   phone?: string;
   email?: string;
   website?: string;
 }
-
 export interface CarePlanPresentation {
   kind: "preliminary_roadmap" | "clinic_treatment_plan";
   title: string;
@@ -50,45 +54,48 @@ export interface CarePlanPresentation {
   clinic?: CarePlanClinicPresentation;
   disclaimer: string;
 }
-
-export interface PublicClinicPlanDetails {
-  clinical_summary?: string;
-  clinical_findings: string[];
-  treatment_objectives: string[];
-  patient_facing_notes?: string;
-  alternatives: string[];
-  risks: string[];
-  exclusions: string[];
-  materials: string[];
-  implant_systems: string[];
-  temporary_solution?: string;
-  estimated_stay?: string;
-  treatment_timeline?: string;
-  treatment_stages: TreatmentStage[];
-  visit_plan: TreatmentVisit[];
-  procedures: {
-    id: string;
-    tooth: number;
-    treatment: ToothTreatment;
-    material?: string;
-    patient_facing_note?: string;
-  }[];
+export interface PatientTreatmentGroup {
+  id: string;
+  treatment?: ToothTreatment;
+  label: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  teeth: number[];
+  patient_notes: string[];
 }
-
-export interface PublicClinicServiceDetails {
-  included_services: string[];
-  excluded_services: string[];
-  patient_message?: string;
-  hotel_information?: string;
-  transfer_information?: string;
-  guarantees: string[];
-  terms?: string;
+export interface PatientTreatmentExplanation {
+  id: string;
+  title: string;
+  what_it_is: string;
+  plan_context: string;
+  journey_note?: string;
 }
-
-export interface ClinicCarePlanPresentation extends CarePlanPresentation {
+export interface PatientJourneyStep {
+  id: string;
+  title: string;
+  description?: string;
+  stay?: string;
+  healing?: string;
+  instructions?: string;
+}
+export interface PatientTravelSummary {
+  hotel?: { name: string; room_type?: string; board_type?: string; website?: string };
+  nights?: number;
+  services: string[];
+}
+export interface PatientTreatmentDocument extends CarePlanPresentation {
   kind: "clinic_treatment_plan";
-  plan: PublicClinicPlanDetails;
-  services: PublicClinicServiceDetails;
+  reference: string;
+  prepared_at: string;
+  status_label: string;
+  treatment_groups: PatientTreatmentGroup[];
+  treatment_explanations: PatientTreatmentExplanation[];
+  journey: PatientJourneyStep[];
+  travel?: PatientTravelSummary;
+  included_services: string[];
+  patient_notes: string[];
+  diagrams?: Pick<DentalPlanData, "currentConditions" | "proposedTreatments">;
 }
 
 export function mapPreliminaryRoadmap(input: {
@@ -109,7 +116,7 @@ export function mapPreliminaryRoadmap(input: {
     visit_information: `${roadmap.estimated_visits} estimated visit${roadmap.estimated_visits === 1 ? "" : "s"}`,
     healing_information: `${roadmap.healing_weeks} estimated healing week${roadmap.healing_weeks === 1 ? "" : "s"}`,
     price: {
-      currency: roadmap.currency,
+      currency: roadmap.currency as PlanCurrency,
       minimum: roadmap.price_min,
       maximum: roadmap.price_max,
     },
@@ -118,85 +125,299 @@ export function mapPreliminaryRoadmap(input: {
   };
 }
 
+export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientTreatmentGroup[] {
+  const prices = plan.price_items ?? [];
+  const byTreatment = new Map<ToothTreatment, PatientTreatmentGroup>();
+  for (const item of plan.items ?? []) {
+    const current = byTreatment.get(item.treatment);
+    const label = treatmentLabel(item.treatment);
+    if (current) {
+      current.quantity += 1;
+      if (!current.teeth.includes(item.tooth)) current.teeth.push(item.tooth);
+      if (item.patient_facing_note && !current.patient_notes.includes(item.patient_facing_note))
+        current.patient_notes.push(item.patient_facing_note);
+    } else
+      byTreatment.set(item.treatment, {
+        id: item.treatment,
+        treatment: item.treatment,
+        label,
+        quantity: 1,
+        unit_price: 0,
+        total: 0,
+        teeth: [item.tooth],
+        patient_notes: item.patient_facing_note ? [item.patient_facing_note] : [],
+      });
+  }
+  const groups = [...byTreatment.values()];
+  for (const group of groups) {
+    const matches = prices.filter(
+      (price) =>
+        normalize(price.label).includes(normalize(group.label)) ||
+        normalize(group.label).includes(normalize(price.label)),
+    );
+    if (matches.length) {
+      group.quantity = matches.reduce((sum, x) => sum + x.quantity, 0);
+      group.total = matches.reduce((sum, x) => sum + x.quantity * x.unit_price, 0);
+      group.unit_price = group.quantity ? group.total / group.quantity : 0;
+    } else {
+      const itemPrices = (plan.items ?? []).filter((x) => x.treatment === group.treatment);
+      group.total = itemPrices.reduce((sum, x) => sum + x.unit_price, 0);
+      group.unit_price = group.quantity ? group.total / group.quantity : 0;
+    }
+  }
+  for (const price of prices) {
+    if (
+      groups.some(
+        (group) =>
+          normalize(price.label).includes(normalize(group.label)) ||
+          normalize(group.label).includes(normalize(price.label)),
+      )
+    )
+      continue;
+    groups.push({
+      id: `price_${price.id}`,
+      label: price.label,
+      quantity: price.quantity,
+      unit_price: price.unit_price,
+      total: price.quantity * price.unit_price,
+      teeth: [],
+      patient_notes: [],
+    });
+  }
+  return groups.filter((group) => group.quantity > 0);
+}
+
+export function buildPatientTreatmentExplanations(
+  groups: PatientTreatmentGroup[],
+  journey: PatientJourneyStep[],
+): PatientTreatmentExplanation[] {
+  return groups.map((group) => {
+    const content = (group.treatment ? EXPLANATIONS[group.treatment] : undefined) ?? {
+      what: `${group.label} is part of the dentist-confirmed Treatment Plan.`,
+      context: `Your plan includes ${group.quantity} ${group.quantity === 1 ? "unit" : "units"} of ${group.label.toLowerCase()}.`,
+    };
+    return {
+      id: group.id,
+      title: group.label,
+      what_it_is: content.what,
+      plan_context: content.context.replace("{quantity}", String(group.quantity)),
+      journey_note: journey.find((step) =>
+        step.description?.toLowerCase().includes(group.label.toLowerCase()),
+      )?.title,
+    };
+  });
+}
+
 export function mapTreatmentPlanToPatientDocument(
   plan: TreatmentPlan,
-  clinic?: Clinic,
+  clinic: Clinic,
   patient?: Patient,
   branding?: ClinicBranding,
-): ClinicCarePlanPresentation {
+): PatientTreatmentDocument {
   const totals = calculateTreatmentPlanTotals(plan);
+  const treatment_groups = groupTreatmentPlanItemsForPatient(plan);
+  const journey = buildJourney(plan);
+  const embedded = isDentalPlanData(plan.dental_plan_data) ? plan.dental_plan_data : undefined;
+  const travel = buildTravel(plan, branding);
+  const statusLabel: { [key: string]: string } = {
+    draft: "Clinic preview",
+    doctor_review: "Under clinical review",
+    approved: "Approved",
+    sent: "Sent to patient",
+    viewed: "Reviewed by patient",
+    accepted: "Accepted",
+    declined: "Declined",
+    expired: "Expired",
+  };
   return {
     kind: "clinic_treatment_plan",
     title: plan.title,
-    summary: plan.clinical_summary || plan.summary,
+    summary: plan.summary,
     patient_name: patient ? `${patient.first_name} ${patient.last_name}`.trim() : undefined,
     treatment_overview: plan.summary,
-    visit_information: `${plan.visits} planned visit${plan.visits === 1 ? "" : "s"}`,
-    healing_information: `${plan.healing_weeks} planned healing week${plan.healing_weeks === 1 ? "" : "s"}`,
+    visit_information: plan.visits
+      ? `${plan.visits} planned visit${plan.visits === 1 ? "" : "s"}`
+      : undefined,
+    healing_information: plan.healing_weeks
+      ? `${plan.healing_weeks} planned healing week${plan.healing_weeks === 1 ? "" : "s"}`
+      : undefined,
+    reference: plan.id,
+    prepared_at: plan.prepared_at ?? plan.created_at,
+    status_label: statusLabel[plan.status ?? "draft"] ?? "Treatment Plan",
+    clinic: {
+      name: clinic.name,
+      city: clinic.city,
+      country: clinic.country,
+      logo_url: branding?.shared_view_logo_url ?? branding?.logo_url,
+      banner_url: branding?.shared_view_banner_url ?? clinic.cover_image,
+      tagline: branding?.shared_view_tagline,
+      accent_color: branding?.shared_view_accent_color ?? branding?.primary_color,
+      phone: branding?.phone,
+      email: branding?.email,
+      website: branding?.website ?? clinic.website,
+    },
     price: {
       currency: plan.currency ?? "EUR",
       subtotal: totals.subtotal,
       total: totals.total,
       hotel_total: plan.hotel_total ?? 0,
       transfer_total: plan.transfer_total ?? 0,
+      optional_service_total: plan.optional_service_total ?? 0,
       discount: totals.discount,
-      items: (plan.price_items ?? []).map((item) => ({
-        label: item.label,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total: item.quantity * item.unit_price,
+      items: treatment_groups.map(({ label, quantity, unit_price, total }) => ({
+        label,
+        quantity,
+        unit_price,
+        total,
       })),
-      payment_schedule: plan.payment_schedule,
+      payment_schedule: totals.paymentScheduleMatches
+        ? normalizeSchedule(plan.payment_schedule ?? [], plan.visits)
+        : undefined,
+      payment_schedule_valid: totals.paymentScheduleMatches,
       valid_until: plan.valid_until,
     },
-    clinic: clinic
+    treatment_groups,
+    treatment_explanations: buildPatientTreatmentExplanations(treatment_groups, journey),
+    journey,
+    travel,
+    included_services: [...new Set(plan.included_services ?? [])],
+    patient_notes: [
+      ...new Set(
+        [
+          plan.patient_facing_notes,
+          plan.patient_message,
+          ...treatment_groups.flatMap((group) => group.patient_notes),
+        ].filter((value): value is string => Boolean(value?.trim())),
+      ),
+    ],
+    diagrams: embedded
       ? {
-          name: clinic.name,
-          city: clinic.city,
-          country: clinic.country,
-          logo_url: branding?.logo_url,
-          phone: branding?.phone,
-          email: branding?.email,
-          website: branding?.website,
+          currentConditions: embedded.currentConditions,
+          proposedTreatments: embedded.proposedTreatments,
         }
       : undefined,
-    plan: selectPatientFacingPlan(plan),
-    services: {
-      included_services: plan.included_services ?? [],
-      excluded_services: plan.excluded_services ?? [],
-      patient_message: plan.patient_message,
-      hotel_information: branding?.hotel_info,
-      transfer_information: branding?.transfer_info,
-      guarantees: branding?.guarantees ?? [],
-      terms: branding?.terms,
-    },
     disclaimer:
-      "This clinic treatment plan and quotation are prepared by the selected clinic and remain subject to clinical confirmation and the clinic's terms.",
+      "This Treatment Plan and cost estimate were prepared by the clinic and remain subject to clinical confirmation and the clinic's patient terms.",
   };
 }
 
-export function selectPatientFacingPlan(plan: TreatmentPlan): PublicClinicPlanDetails {
+function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
+  const stages = (plan.treatment_stages ?? []).map((stage) => ({
+    id: `stage_${stage.stage_number}`,
+    title: stage.title,
+    description: stage.description ?? stage.procedures.join(", "),
+    stay: stage.duration_or_stay,
+    healing: stage.healing_period_after,
+    instructions: stage.patient_instructions,
+  }));
+  if (stages.length) return stages;
+  const visits = (plan.visit_plan ?? []).map((visit) => ({
+    id: `visit_${visit.visit_number}`,
+    title: visit.title || `${ordinal(visit.visit_number)} Visit`,
+    description: visit.description ?? visit.procedures.join(", "),
+    stay: visit.expected_stay,
+    healing: visit.healing_period_after,
+    instructions: visit.patient_instructions,
+  }));
+  if (visits.length) return visits;
+  const result: PatientJourneyStep[] = [
+    {
+      id: "checks",
+      title: "Clinical examination and final checks",
+      description: "The clinic confirms the Treatment Plan before treatment begins.",
+    },
+    {
+      id: "visit_1",
+      title: "1st Visit",
+      description: "The first planned stage of your treatment is completed.",
+    },
+  ];
+  if (plan.healing_weeks > 0)
+    result.push({
+      id: "healing",
+      title: "Healing period",
+      description: `Allow approximately ${plan.healing_weeks} week${plan.healing_weeks === 1 ? "" : "s"} for healing.`,
+    });
+  if (plan.visits > 1)
+    result.push({
+      id: "visit_2",
+      title: "2nd Visit",
+      description: "Final treatment and restorations are completed.",
+    });
+  result.push({
+    id: "aftercare",
+    title: "Aftercare",
+    description: "The clinic provides the relevant aftercare guidance.",
+  });
+  return result;
+}
+function buildTravel(
+  plan: TreatmentPlan,
+  branding?: ClinicBranding,
+): PatientTravelSummary | undefined {
+  const services = [
+    plan.transfers_included ? "Airport and clinic transfers" : undefined,
+    plan.flight_included ? "Flight included" : undefined,
+  ].filter((x): x is string => Boolean(x));
+  if (!plan.hotel_snapshot && !plan.hotel_nights && !services.length) return undefined;
   return {
-    clinical_summary: plan.clinical_summary || plan.summary,
-    clinical_findings: plan.clinical_findings ?? [],
-    treatment_objectives: plan.treatment_objectives ?? [],
-    patient_facing_notes: plan.patient_facing_notes,
-    alternatives: plan.alternatives ?? [],
-    risks: plan.risks ?? [],
-    exclusions: plan.exclusions ?? [],
-    materials: plan.materials ?? [],
-    implant_systems: plan.implant_systems ?? [],
-    temporary_solution: plan.temporary_solution,
-    estimated_stay: plan.estimated_stay,
-    treatment_timeline: plan.treatment_timeline,
-    treatment_stages: plan.treatment_stages ?? [],
-    visit_plan: plan.visit_plan ?? [],
-    procedures: plan.items.map((item) => ({
-      id: item.id,
-      tooth: item.tooth,
-      treatment: item.treatment,
-      material: item.material,
-      patient_facing_note: item.patient_facing_note,
-    })),
+    hotel: plan.hotel_snapshot
+      ? {
+          name: plan.hotel_snapshot.name,
+          room_type: plan.hotel_snapshot.room_type,
+          board_type: plan.hotel_snapshot.board_type,
+        }
+      : undefined,
+    nights: plan.hotel_nights || undefined,
+    services,
   };
 }
+function normalizeSchedule(rows: TreatmentPlanPayment[], visits: number) {
+  return rows.slice(0, Math.max(1, visits)).map((row, index) => ({
+    ...row,
+    label: index === 0 ? "1st Visit" : index === 1 ? "2nd Visit" : `${ordinal(index + 1)} Visit`,
+  }));
+}
+function ordinal(value: number) {
+  if (value === 1) return "1st";
+  if (value === 2) return "2nd";
+  if (value === 3) return "3rd";
+  return `${value}th`;
+}
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function isDentalPlanData(value: unknown): value is DentalPlanData {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    Array.isArray((value as DentalPlanData).proposedTreatments) &&
+    (value as DentalPlanData).currentConditions &&
+    typeof (value as DentalPlanData).currentConditions === "object",
+  );
+}
+const EXPLANATIONS: Partial<Record<ToothTreatment, { what: string; context: string }>> = {
+  implant: {
+    what: "A dental implant replaces the root of a missing tooth and supports a fixed restoration.",
+    context:
+      "Your plan includes {quantity} dental implant unit(s), normally followed by a healing period before final restoration.",
+  },
+  crown: {
+    what: "A crown is a strong tooth-coloured restoration placed over a prepared tooth.",
+    context: "Your plan includes {quantity} crown unit(s) to restore the selected teeth.",
+  },
+  root_canal: {
+    what: "Root canal treatment removes infected or damaged tissue from inside a tooth.",
+    context:
+      "Your plan includes {quantity} root canal treatment(s) to help preserve affected teeth before restoration.",
+  },
+  extraction: {
+    what: "An extraction removes a tooth that cannot be predictably retained.",
+    context:
+      "Your plan includes {quantity} planned extraction(s) as part of the confirmed treatment sequence.",
+  },
+  veneer: {
+    what: "A veneer is a thin tooth-coloured restoration fitted to the front surface of a tooth.",
+    context: "Your plan includes {quantity} veneer unit(s) for the planned smile result.",
+  },
+};

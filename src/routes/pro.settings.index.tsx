@@ -296,6 +296,14 @@ function Profile({
   const [description, setDescription] = useState(clinic.short_description);
   const [phone, setPhone] = useState(brand?.phone ?? "");
   const [email, setEmail] = useState(brand?.email ?? "");
+  const [sharedLogo, setSharedLogo] = useState(
+    brand?.shared_view_logo_url ?? brand?.logo_url ?? "",
+  );
+  const [sharedBanner, setSharedBanner] = useState(brand?.shared_view_banner_url ?? "");
+  const [sharedTagline, setSharedTagline] = useState(brand?.shared_view_tagline ?? "");
+  const [sharedAccent, setSharedAccent] = useState(
+    brand?.shared_view_accent_color ?? brand?.primary_color ?? "#0f766e",
+  );
   return (
     <Card>
       <CardHeader>
@@ -325,12 +333,50 @@ function Profile({
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
         </div>
+        <div className="sm:col-span-2 border-t pt-4">
+          <h3 className="font-medium">Shared Patient View branding</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Public logo and banner URLs are shown only on clinic Treatment Plans.
+          </p>
+        </div>
+        <Field label="Shared-view logo URL">
+          <Input value={sharedLogo} onChange={(e) => setSharedLogo(e.target.value)} />
+        </Field>
+        <Field label="Shared-view banner URL">
+          <Input value={sharedBanner} onChange={(e) => setSharedBanner(e.target.value)} />
+        </Field>
+        <Field label="Shared-view tagline">
+          <Input value={sharedTagline} onChange={(e) => setSharedTagline(e.target.value)} />
+        </Field>
+        <Field label="Accent color">
+          <Input
+            type="color"
+            className="h-10"
+            value={sharedAccent}
+            onChange={(e) => setSharedAccent(e.target.value)}
+          />
+        </Field>
+        {sharedBanner && (
+          <img
+            src={sharedBanner}
+            alt="Shared Treatment Plan banner preview"
+            className="sm:col-span-2 h-32 w-full rounded-lg object-cover"
+          />
+        )}
         <Button
           className="sm:col-span-2 sm:w-fit"
           onClick={() =>
             save(
               { name, website, country, city, short_description: description },
-              { website, phone, email },
+              {
+                website,
+                phone,
+                email,
+                shared_view_logo_url: sharedLogo || undefined,
+                shared_view_banner_url: sharedBanner || undefined,
+                shared_view_tagline: sharedTagline || undefined,
+                shared_view_accent_color: sharedAccent,
+              },
             )
           }
         >
