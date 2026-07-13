@@ -14,7 +14,7 @@ type Props = {
   selected: ToothNumber[];
   readOnly?: boolean;
   allowReadOnlySelection?: boolean;
-  onSelect: (tooth: ToothNumber, additive: boolean) => void;
+  onSelect: (tooth: ToothNumber, additive: boolean, anchor?: HTMLButtonElement) => void;
   onSelectAllUpper?: () => void;
   onSelectAllLower?: () => void;
   onClearSelection?: () => void;
@@ -115,7 +115,7 @@ function Arch(props: {
   selected: ToothNumber[];
   readOnly?: boolean;
   allowReadOnlySelection?: boolean;
-  onSelect: (tooth: ToothNumber, additive: boolean) => void;
+  onSelect: (tooth: ToothNumber, additive: boolean, anchor?: HTMLButtonElement) => void;
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
   onDragEnd?: () => void;

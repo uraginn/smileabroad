@@ -80,6 +80,10 @@ export interface PatientTreatmentGroup {
 export interface PatientTreatmentExplanation {
   id: string;
   title: string;
+  short_summary: string;
+  purpose: string;
+  visits: string;
+  healing: string;
   what_it_is: string;
   plan_context: string;
   how_performed: string;
@@ -383,6 +387,7 @@ export function buildPatientTreatmentExplanations(
   journey: PatientJourneyStep[],
 ): PatientTreatmentExplanation[] {
   return groups.map((group) => {
+    const timing = treatmentTimingDetails(group, journey);
     const content = (group.treatment ? EXPLANATIONS[group.treatment] : undefined) ?? {
       what:
         group.patient_description ??
@@ -392,13 +397,17 @@ export function buildPatientTreatmentExplanations(
     return {
       id: group.id,
       title: group.label,
+      short_summary: treatmentShortSummary(group),
+      purpose: treatmentPurpose(group),
+      visits: timing.visits,
+      healing: timing.healing,
       what_it_is: content.what,
       plan_context: content.context.replace("{quantity}", String(group.quantity)),
       how_performed:
         journey.find((step) => step.description?.toLowerCase().includes(group.label.toLowerCase()))
           ?.description ??
         `Your clinic will complete the planned ${group.label.toLowerCase()} within your confirmed treatment sequence and review your progress before the next stage.`,
-      healing_and_visits: treatmentTimingSummary(group, journey),
+      healing_and_visits: timing.description,
       important_to_know:
         group.patient_notes.join(" ") ||
         "Your dentist will confirm the final clinical details with you before this part of your treatment begins.",
@@ -406,22 +415,72 @@ export function buildPatientTreatmentExplanations(
   });
 }
 
-function treatmentTimingSummary(group: PatientTreatmentGroup, journey: PatientJourneyStep[]) {
+function treatmentTimingDetails(group: PatientTreatmentGroup, journey: PatientJourneyStep[]) {
   const related = journey.find(
     (step) =>
       step.title.toLowerCase().includes(group.label.toLowerCase()) ||
       step.description?.toLowerCase().includes(group.label.toLowerCase()),
   );
   if (related) {
-    return [
-      related.description,
-      related.stay ? `Planned stay: ${related.stay}.` : undefined,
-      related.healing ? `Expected healing: ${related.healing}.` : undefined,
-    ]
-      .filter(Boolean)
-      .join(" ");
+    return {
+      visits: related.title,
+      healing: related.healing ?? "Clinic to confirm",
+      description: [
+        related.description,
+        related.stay ? `Planned stay: ${related.stay}.` : undefined,
+        related.healing ? `Expected healing: ${related.healing}.` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
   }
-  return `Your clinic will confirm whether ${group.label.toLowerCase()} needs a dedicated healing period or follow-up visit within your treatment schedule.`;
+  return {
+    visits: "As scheduled",
+    healing: "Clinic to confirm",
+    description: `Your clinic will confirm whether ${group.label.toLowerCase()} needs a dedicated healing period or follow-up visit within your treatment schedule.`,
+  };
+}
+
+function treatmentShortSummary(group: PatientTreatmentGroup) {
+  const summaries: Partial<Record<ToothTreatment, string>> = {
+    implant: "Replaces missing tooth support with a stable implant foundation.",
+    crown: "Protects and restores the planned teeth with a fixed restoration.",
+    extraction: "Removes a tooth that cannot be predictably retained.",
+    bridge: "Replaces a missing tooth space with a fixed dental restoration.",
+    pontic: "Forms the replacement tooth within your planned bridge.",
+    veneer: "Refines the visible shape and appearance of the planned teeth.",
+    composite: "Reshapes selected teeth using tooth-coloured composite material.",
+    filling: "Repairs the selected area using a tooth-coloured restoration.",
+    root_canal: "Treats the inside of an affected tooth to help preserve it.",
+    bone_graft: "Builds support where additional bone preparation is planned.",
+    sinus_lift: "Creates additional support for implant treatment in the upper jaw.",
+    whitening: "Brightens the planned smile using a clinic-guided whitening treatment.",
+    denture: "Replaces missing teeth with a removable planned restoration.",
+  };
+  return (
+    (group.treatment && summaries[group.treatment]) ??
+    group.patient_description?.split(/(?<=[.!?])\s/)[0] ??
+    `${group.label} is included in your personalized Treatment Plan.`
+  );
+}
+
+function treatmentPurpose(group: PatientTreatmentGroup) {
+  const purposes: Partial<Record<ToothTreatment, string>> = {
+    implant: "Replace missing tooth support",
+    crown: "Protect and restore planned teeth",
+    extraction: "Remove a tooth that cannot be retained",
+    bridge: "Restore a missing tooth space",
+    pontic: "Complete the planned bridge",
+    veneer: "Refine smile shape and appearance",
+    composite: "Reshape and restore selected teeth",
+    filling: "Repair the affected tooth area",
+    root_canal: "Preserve an affected tooth",
+    bone_graft: "Prepare additional implant support",
+    sinus_lift: "Prepare upper-jaw implant support",
+    whitening: "Brighten the planned smile",
+    denture: "Replace missing teeth",
+  };
+  return (group.treatment && purposes[group.treatment]) ?? "Support your planned treatment result";
 }
 
 export function mapTreatmentPlanToPatientDocument(

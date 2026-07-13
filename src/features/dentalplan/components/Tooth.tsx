@@ -17,7 +17,7 @@ type Props = {
   selected: boolean;
   readOnly?: boolean;
   allowReadOnlySelection?: boolean;
-  onSelect: (tooth: ToothNumber, additive: boolean) => void;
+  onSelect: (tooth: ToothNumber, additive: boolean, anchor?: HTMLButtonElement) => void;
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
   onDragEnd?: () => void;
@@ -51,7 +51,7 @@ export function Tooth({
       onClick={(event) =>
         (!readOnly || allowReadOnlySelection) &&
         (allowReadOnlySelection || event.detail === 0) &&
-        onSelect(toothNumber, event.shiftKey || event.metaKey || event.ctrlKey)
+        onSelect(toothNumber, event.shiftKey || event.metaKey || event.ctrlKey, event.currentTarget)
       }
       onPointerDown={(event) => {
         if (readOnly) return;

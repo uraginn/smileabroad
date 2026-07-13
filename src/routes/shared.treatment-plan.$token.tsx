@@ -41,7 +41,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Carousel,
   CarouselContent,
@@ -49,17 +48,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import {
-  Dialog,
-  DialogContent,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -68,7 +58,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/shared/treatment-plan/$token")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -165,6 +154,7 @@ function SharedPlan() {
       document
         ? [
             { id: "treatment-plan", label: "Treatment Plan" },
+            ...(document.diagrams ? [{ id: "treatment-diagram", label: "Treatment Diagram" }] : []),
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
             { id: "investment", label: "Investment" },
@@ -785,31 +775,39 @@ function TreatmentExperience({
 }: {
   document: ReturnType<typeof mapTreatmentPlanToPatientDocument>;
 }) {
-  const [open, setOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState(document.treatment_groups[0]?.id);
   const [activeTooth, setActiveTooth] = useState<ToothNumber>();
   const [toothChoices, setToothChoices] = useState<PatientTreatmentGroup[]>([]);
   const [toothSelectorOpen, setToothSelectorOpen] = useState(false);
-  const lastTrigger = useRef<HTMLElement | null>(null);
+  const viewerRef = useRef<HTMLElement | null>(null);
+  const toothAnchorRef = useRef<HTMLButtonElement | null>(null);
   const activeGroup =
     document.treatment_groups.find((group) => group.id === activeGroupId) ??
     document.treatment_groups[0];
   const explanation = document.treatment_explanations.find((item) => item.id === activeGroup?.id);
-  const openTreatment = (group: PatientTreatmentGroup, trigger?: HTMLElement) => {
-    lastTrigger.current = trigger ?? null;
+  const focusViewer = () =>
+    requestAnimationFrame(() => {
+      viewerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      viewerRef.current?.focus({ preventScroll: true });
+    });
+  const selectTreatment = (group: PatientTreatmentGroup, moveToViewer = false) => {
     setActiveGroupId(group.id);
     setActiveTooth(undefined);
     setToothChoices([]);
     setToothSelectorOpen(false);
-    setOpen(true);
+    toothAnchorRef.current = null;
+    if (moveToViewer) focusViewer();
   };
-  const selectTooth = (tooth: ToothNumber) => {
+  const selectTooth = (tooth: ToothNumber, anchor?: HTMLButtonElement) => {
     setActiveTooth(tooth);
+    toothAnchorRef.current = anchor ?? null;
     const matches = document.treatment_groups.filter((group) => group.teeth.includes(tooth));
     if (matches.length === 1) {
+      const changedTreatment = matches[0].id !== activeGroup?.id;
       setActiveGroupId(matches[0].id);
       setToothChoices([]);
       setToothSelectorOpen(false);
+      if (changedTreatment) focusViewer();
     } else if (matches.length > 1) {
       setToothChoices(matches);
       setToothSelectorOpen(true);
@@ -822,7 +820,8 @@ function TreatmentExperience({
           <PatientTreatmentTable
             groups={document.treatment_groups}
             currency={document.price.currency}
-            onOpen={openTreatment}
+            activeGroupId={activeGroup?.id}
+            onSelect={(group) => selectTreatment(group, true)}
           />
         ) : (
           <p className="p-6 text-sm text-muted-foreground">
@@ -830,144 +829,77 @@ function TreatmentExperience({
           </p>
         )}
       </div>
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) requestAnimationFrame(() => lastTrigger.current?.focus());
-        }}
-      >
-        {open && activeGroup && (
-          <DialogContent className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-y-auto overflow-x-hidden rounded-3xl border-slate-200/80 p-4 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
-            <DialogHeader className="border-b border-slate-200/80 pb-6 pr-8">
-              <div className="mb-4 text-slate-700">
-                <span
-                  className="grid size-14 place-items-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/70"
-                  style={{ color: "var(--shared-accent)" }}
+      {activeGroup && explanation && (
+        <section
+          id="treatment-viewer"
+          ref={viewerRef}
+          tabIndex={-1}
+          aria-labelledby="active-treatment-title"
+          className="mt-8 scroll-mt-24 outline-none"
+        >
+          <TreatmentEncyclopedia group={activeGroup} explanation={explanation} />
+        </section>
+      )}
+      {document.diagrams && activeGroup && (
+        <section id="treatment-diagram" className="shared-section scroll-mt-24 py-10 sm:py-12">
+          <SectionHeading
+            eyebrow="Explore your plan"
+            title="Treatment Diagram"
+            description="Select a treated tooth to explore the treatment planned for that area."
+          />
+          <div className="mt-8 space-y-6">
+            <PatientDentalDiagram
+              title="Current Condition"
+              mode="current"
+              diagrams={document.diagrams}
+              selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
+              onSelect={selectTooth}
+            />
+            <PatientDentalDiagram
+              title="Proposed Treatment"
+              mode="proposed"
+              diagrams={document.diagrams}
+              selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
+              onSelect={selectTooth}
+            />
+          </div>
+          {toothChoices.length > 1 && (
+            <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
+              <PopoverAnchor virtualRef={toothAnchorRef as React.RefObject<HTMLButtonElement>} />
+              <PopoverContent
+                side="top"
+                align="center"
+                sideOffset={8}
+                className="w-auto max-w-[calc(100vw-2rem)] rounded-full p-1.5"
+              >
+                <div
+                  className="flex max-w-full flex-wrap items-center justify-center gap-1"
+                  role="group"
+                  aria-label={`Treatments for tooth ${activeTooth ?? "selected"}`}
                 >
-                  {(() => {
-                    const Icon = treatmentIcon(activeGroup.treatment);
-                    return <Icon className="size-6" aria-hidden="true" />;
-                  })()}
-                </span>
-              </div>
-              <DialogTitle aria-live="polite" className="text-2xl tracking-[-0.03em] sm:text-3xl">
-                {activeGroup.label}
-              </DialogTitle>
-              <DialogDescription className="max-w-2xl leading-6">
-                Your plan includes {activeGroup.quantity} {activeGroup.label.toLowerCase()}
-                {activeGroup.quantity === 1 ? " treatment" : " treatments"}
-                {activeGroup.teeth.length
-                  ? ` across ${activeGroup.teeth.length} treated ${activeGroup.teeth.length === 1 ? "area" : "areas"}`
-                  : ""}
-                . Use the diagram to explore where this treatment applies.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-8 py-6">
-              {explanation && (
-                <DialogSection label="Learn about this treatment">
-                  <Accordion
-                    type="single"
-                    collapsible
-                    defaultValue="what"
-                    className="rounded-2xl border border-slate-200/80 bg-white px-5"
-                  >
-                    <TreatmentInfoItem value="what" title="What is it?">
-                      {explanation.what_it_is}
-                    </TreatmentInfoItem>
-                    <TreatmentInfoItem value="why" title="Why is it included?">
-                      {explanation.plan_context}
-                    </TreatmentInfoItem>
-                    <TreatmentInfoItem value="how" title="How will it be done?">
-                      <p>{explanation.how_performed}</p>
-                      <p className="mt-3 border-t pt-3">{explanation.important_to_know}</p>
-                    </TreatmentInfoItem>
-                    <TreatmentInfoItem value="timing" title="Healing & Visits">
-                      {explanation.healing_and_visits}
-                    </TreatmentInfoItem>
-                  </Accordion>
-                </DialogSection>
-              )}
-              {document.diagrams && (
-                <div className="min-w-0 border-t border-slate-200/80 pt-8">
-                  <DialogSection label="Where this treatment applies">
-                    <p className="mb-4 text-sm text-muted-foreground">
-                      Select a treated tooth to view the care planned for that area.
-                    </p>
-                    <DentalDiagramTabs
-                      diagrams={document.diagrams}
-                      selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
-                      onSelect={selectTooth}
-                    />
-                    {toothChoices.length > 1 && (
-                      <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="mt-4 min-h-11">
-                            Treatments on this tooth
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="start" className="w-72 p-0">
-                          <Command>
-                            <CommandList>
-                              <CommandGroup
-                                heading={
-                                  activeTooth
-                                    ? `Treatments on tooth ${activeTooth}`
-                                    : "Choose treatment"
-                                }
-                              >
-                                {toothChoices.map((group) => (
-                                  <CommandItem
-                                    key={group.id}
-                                    value={group.label}
-                                    onSelect={() => {
-                                      setActiveGroupId(group.id);
-                                      setToothChoices([]);
-                                      setToothSelectorOpen(false);
-                                    }}
-                                  >
-                                    <span className="flex-1">{group.label}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {group.quantity} units
-                                    </span>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  </DialogSection>
+                  {toothChoices.map((group) => (
+                    <Button
+                      key={group.id}
+                      type="button"
+                      size="sm"
+                      variant={group.id === activeGroup.id ? "secondary" : "ghost"}
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => {
+                        setActiveGroupId(group.id);
+                        setToothChoices([]);
+                        setToothSelectorOpen(false);
+                        focusViewer();
+                      }}
+                    >
+                      {group.label}
+                    </Button>
+                  ))}
                 </div>
-              )}
-              <div className="border-t border-slate-200/80 pt-8">
-                <DialogSection label="Price at a glance">
-                  <div className="grid gap-4 rounded-2xl bg-slate-50 p-5 text-sm sm:grid-cols-3">
-                    <PriceFact label="Units" value={String(activeGroup.quantity)} />
-                    <PriceFact
-                      label="Unit price"
-                      value={formatQuoteMoney(activeGroup.unit_price, document.price.currency)}
-                    />
-                    <PriceFact
-                      label="Group total"
-                      value={formatQuoteMoney(activeGroup.total, document.price.currency)}
-                      strong
-                    />
-                  </div>
-                </DialogSection>
-              </div>
-            </div>
-            <DialogFooter className="border-t border-slate-200/80 pt-5">
-              <DialogClose asChild>
-                <Button variant="outline" className="min-w-44">
-                  Back to Treatment Plan
-                </Button>
-              </DialogClose>
-            </DialogFooter>
-          </DialogContent>
-        )}
-      </Dialog>
+              </PopoverContent>
+            </Popover>
+          )}
+        </section>
+      )}
     </>
   );
 }
@@ -975,11 +907,13 @@ function TreatmentExperience({
 function PatientTreatmentTable({
   groups,
   currency,
-  onOpen,
+  activeGroupId,
+  onSelect,
 }: {
   groups: PatientTreatmentGroup[];
   currency: ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["currency"];
-  onOpen: (group: PatientTreatmentGroup, trigger?: HTMLElement) => void;
+  activeGroupId?: string;
+  onSelect: (group: PatientTreatmentGroup) => void;
 }) {
   const categories = useMemo(() => {
     const grouped = new Map<string, PatientTreatmentGroup[]>();
@@ -1008,7 +942,8 @@ function PatientTreatmentTable({
                 category={category}
                 groups={categoryGroups}
                 currency={currency}
-                onOpen={onOpen}
+                activeGroupId={activeGroupId}
+                onSelect={onSelect}
               />
             ))}
           </TableBody>
@@ -1026,7 +961,11 @@ function PatientTreatmentTable({
             </h3>
             <div className="divide-y">
               {categoryGroups.map((group) => (
-                <div key={group.id} className="print-row p-5">
+                <div
+                  key={group.id}
+                  className={`print-row p-5 ${group.id === activeGroupId ? "bg-slate-50" : ""}`}
+                  aria-current={group.id === activeGroupId ? "true" : undefined}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-semibold">{group.label}</p>
                     <Badge variant="secondary">{group.quantity} units</Badge>
@@ -1046,7 +985,7 @@ function PatientTreatmentTable({
                     className="no-print mt-4 min-h-11 w-full justify-between"
                     variant="outline"
                     aria-label={`View details for ${group.label}`}
-                    onClick={(event) => onOpen(group, event.currentTarget)}
+                    onClick={() => onSelect(group)}
                   >
                     View details <ChevronRight className="size-4" aria-hidden="true" />
                   </Button>
@@ -1064,12 +1003,14 @@ function TreatmentCategoryRows({
   category,
   groups,
   currency,
-  onOpen,
+  activeGroupId,
+  onSelect,
 }: {
   category: string;
   groups: PatientTreatmentGroup[];
   currency: ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["currency"];
-  onOpen: (group: PatientTreatmentGroup, trigger?: HTMLElement) => void;
+  activeGroupId?: string;
+  onSelect: (group: PatientTreatmentGroup) => void;
 }) {
   return (
     <>
@@ -1085,7 +1026,11 @@ function TreatmentCategoryRows({
         </TableCell>
       </TableRow>
       {groups.map((group) => (
-        <TableRow key={group.id} className="print-row hover:bg-slate-50/60">
+        <TableRow
+          key={group.id}
+          className={`print-row hover:bg-slate-50/60 ${group.id === activeGroupId ? "bg-slate-50" : ""}`}
+          aria-current={group.id === activeGroupId ? "true" : undefined}
+        >
           <TableCell className="px-6 py-4 font-medium">{group.label}</TableCell>
           <TableCell className="py-4 text-center">{group.quantity}</TableCell>
           <TableCell className="py-4 text-right text-slate-600">
@@ -1100,7 +1045,7 @@ function TreatmentCategoryRows({
               variant="ghost"
               size="sm"
               aria-label={`View details for ${group.label}`}
-              onClick={(event) => onOpen(group, event.currentTarget)}
+              onClick={() => onSelect(group)}
             >
               View details <ChevronRight className="size-4" aria-hidden="true" />
             </Button>
@@ -1115,14 +1060,88 @@ function normalizeDomId(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
-function DialogSection({ label, children }: { label: string; children: React.ReactNode }) {
+function TreatmentEncyclopedia({
+  group,
+  explanation,
+}: {
+  group: PatientTreatmentGroup;
+  explanation: ReturnType<
+    typeof mapTreatmentPlanToPatientDocument
+  >["treatment_explanations"][number];
+}) {
+  const Icon = treatmentIcon(group.treatment);
   return (
-    <section>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </p>
-      {children}
-    </section>
+    <div className="grid overflow-hidden rounded-[2rem] bg-white shadow-[0_24px_70px_-42px_rgba(15,23,42,0.55)] ring-1 ring-slate-200/80 lg:min-h-[320px] lg:grid-cols-[0.85fr_1.35fr]">
+      <div className="relative flex overflow-hidden bg-slate-950 px-6 py-7 text-white sm:px-8 lg:flex-col lg:justify-center">
+        <div
+          className="absolute -right-16 -top-20 size-56 rounded-full opacity-20 blur-3xl"
+          style={{ background: "var(--shared-accent)" }}
+          aria-hidden="true"
+        />
+        <div className="relative flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center lg:flex-col lg:items-start">
+          <span
+            className="grid size-20 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur"
+            aria-hidden="true"
+          >
+            <Icon className="size-10" strokeWidth={1.5} />
+          </span>
+          <div className="min-w-0 max-w-md">
+            <h2
+              id="active-treatment-title"
+              aria-live="polite"
+              className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl"
+            >
+              {group.label}
+            </h2>
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300 sm:text-base">
+              {explanation.short_summary}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="p-5 sm:p-6">
+        <dl className="grid grid-cols-2 gap-x-6 border-b border-slate-200 pb-3">
+          <TreatmentFact label="Category" value={group.category} />
+          <TreatmentFact label="Visits" value={explanation.visits} />
+          <TreatmentFact label="Healing" value={explanation.healing} />
+          <TreatmentFact
+            label="Included"
+            value={`${group.quantity} planned ${group.quantity === 1 ? "unit" : "units"}`}
+          />
+        </dl>
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Learn about this treatment
+          </p>
+          <Accordion type="single" collapsible className="mt-1">
+            <TreatmentInfoItem value="what" title="What is it?">
+              {explanation.what_it_is}
+            </TreatmentInfoItem>
+            <TreatmentInfoItem value="why" title="Why is it included?">
+              {explanation.plan_context}
+            </TreatmentInfoItem>
+            <TreatmentInfoItem value="how" title="How is it performed?">
+              {explanation.how_performed}
+            </TreatmentInfoItem>
+            <TreatmentInfoItem value="healing" title="Healing & Aftercare">
+              <p>{explanation.healing_and_visits}</p>
+              <p className="mt-3">{explanation.important_to_know}</p>
+            </TreatmentInfoItem>
+          </Accordion>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TreatmentFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 py-2">
+      <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-semibold leading-5 text-slate-900" title={value}>
+        {value}
+      </dd>
+    </div>
   );
 }
 
@@ -1137,10 +1156,10 @@ function TreatmentInfoItem({
 }) {
   return (
     <AccordionItem value={value}>
-      <AccordionTrigger className="min-h-12 text-left font-medium hover:no-underline">
+      <AccordionTrigger className="min-h-10 py-2 text-left text-sm font-medium hover:no-underline">
         {title}
       </AccordionTrigger>
-      <AccordionContent className="pb-5 text-sm leading-6 text-muted-foreground">
+      <AccordionContent className="pb-4 text-sm leading-6 text-muted-foreground">
         {children}
       </AccordionContent>
     </AccordionItem>
@@ -1163,52 +1182,32 @@ function PriceFact({
     </div>
   );
 }
-function DentalDiagramTabs({
+function PatientDentalDiagram({
+  title,
+  mode,
   diagrams,
   selected,
   onSelect,
 }: {
+  title: string;
+  mode: "current" | "proposed";
   diagrams: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"]>;
   selected: ToothNumber[];
-  onSelect: (tooth: ToothNumber) => void;
+  onSelect: (tooth: ToothNumber, anchor?: HTMLButtonElement) => void;
 }) {
   return (
-    <Tabs defaultValue="proposed">
-      <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200/60">
-        <TabsTrigger value="current">Current</TabsTrigger>
-        <TabsTrigger value="proposed">Proposed</TabsTrigger>
-      </TabsList>
-      <TabsContent
-        value="current"
-        className="mt-5 rounded-2xl bg-white p-2 ring-1 ring-slate-200/70 sm:p-4"
-      >
-        <DentalChart
-          title="Current dental condition"
-          mode="current"
-          currentConditions={diagrams.currentConditions}
-          proposedTreatments={diagrams.proposedTreatments}
-          selected={selected}
-          readOnly
-          allowReadOnlySelection
-          onSelect={(tooth) => onSelect(tooth)}
-        />
-      </TabsContent>
-      <TabsContent
-        value="proposed"
-        className="mt-5 rounded-2xl bg-white p-2 ring-1 ring-slate-200/70 sm:p-4"
-      >
-        <DentalChart
-          title="Proposed Treatment"
-          mode="proposed"
-          currentConditions={diagrams.currentConditions}
-          proposedTreatments={diagrams.proposedTreatments}
-          selected={selected}
-          readOnly
-          allowReadOnlySelection
-          onSelect={(tooth) => onSelect(tooth)}
-        />
-      </TabsContent>
-    </Tabs>
+    <div className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)]">
+      <DentalChart
+        title={title}
+        mode={mode}
+        currentConditions={diagrams.currentConditions}
+        proposedTreatments={diagrams.proposedTreatments}
+        selected={selected}
+        readOnly
+        allowReadOnlySelection
+        onSelect={(tooth, _additive, anchor) => onSelect(tooth, anchor)}
+      />
+    </div>
   );
 }
 function SectionHeading({
