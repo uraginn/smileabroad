@@ -1,6 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ExternalLink, Mail, Phone, Printer, ShieldCheck } from "lucide-react";
+import {
+  BedDouble,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  ExternalLink,
+  Mail,
+  MapPin,
+  Phone,
+  Plane,
+  Printer,
+  ShieldCheck,
+  WalletCards,
+} from "lucide-react";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
@@ -116,127 +129,142 @@ function SharedPlan() {
       className="shared-plan min-h-screen bg-slate-50 text-slate-900"
       style={{ "--shared-accent": accent } as React.CSSProperties}
     >
-      <style>{`@media print{.no-print{display:none!important}.shared-plan{background:#fff!important}.print-card,.print-row{break-inside:avoid;box-shadow:none!important}.shared-section{scroll-margin-top:0!important}}`}</style>
+      <style>{`@media print{.no-print{display:none!important}.shared-plan{background:#fff!important}.print-card,.print-row,.payment-summary{break-inside:avoid;box-shadow:none!important}.shared-section{scroll-margin-top:0!important;margin-block:1.5rem!important}.shared-hero{min-height:11rem!important}.shared-hero img{max-height:11rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}}`}</style>
       <Header document={document} />
       <SectionNavigation items={nav} />
-      <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-6xl space-y-12 px-4 py-8 sm:px-6 sm:py-12 lg:space-y-16">
         <section id="treatment-plan" className="shared-section scroll-mt-24">
-          <Card className="print-card overflow-hidden">
-            <div className="h-1.5" style={{ background: accent }} />
-            <CardContent className="p-5 sm:p-7">
-              <div className="flex flex-col justify-between gap-5 sm:flex-row">
-                <div>
-                  <p className="text-sm text-muted-foreground">Prepared for</p>
-                  <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">
-                    {document.patient_name ?? "Patient"}
-                  </h2>
-                  <h3 className="mt-4 text-lg font-medium">{document.title}</h3>
-                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{document.summary}</p>
-                </div>
-                <div className="sm:text-right">
-                  <Badge style={{ background: accent }}>{document.status_label}</Badge>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Prepared {new Date(document.prepared_at).toLocaleDateString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Plan reference {document.reference}
-                  </p>
-                  {document.price.valid_until && (
-                    <p className="text-xs text-muted-foreground">
-                      Valid until {new Date(document.price.valid_until).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid gap-6 border-b pb-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="max-w-3xl">
+              <p className="text-sm font-medium" style={{ color: accent }}>
+                Your personalized treatment plan
+              </p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+                A clear guide to your proposed treatment
+              </h2>
+              <p className="mt-4 text-base leading-7 text-muted-foreground">{document.summary}</p>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground md:max-w-xs md:justify-end">
+              <span className="flex items-center gap-2">
+                <MapPin className="size-4" aria-hidden="true" />
+                {document.clinic?.city}, {document.clinic?.country}
+              </span>
+              {document.price.valid_until && (
+                <span>Valid until {new Date(document.price.valid_until).toLocaleDateString()}</span>
+              )}
+            </div>
+          </div>
         </section>
         <section id="treatment-details" className="shared-section scroll-mt-24">
-          <Section
+          <SectionHeading
+            eyebrow="Your plan"
             title="Your Treatment Plan"
-            description="Dentist-confirmed treatments are grouped to make the plan easier to review."
+            description="Your dentist-confirmed treatments, grouped into a simple overview."
+          />
+          <div
+            className={`mt-7 grid gap-8 ${document.diagrams ? "lg:grid-cols-[minmax(0,0.9fr)_minmax(34rem,1.1fr)]" : ""}`}
           >
-            {document.treatment_groups.length ? (
-              <div className="divide-y rounded-xl border">
-                {document.treatment_groups.map((group) => (
-                  <TreatmentRow
-                    key={group.id}
-                    group={group}
-                    currency={document.price.currency}
-                    diagrams={document.diagrams}
-                  />
+            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+              {document.treatment_groups.length ? (
+                <div className="divide-y">
+                  {document.treatment_groups.map((group) => (
+                    <TreatmentRow
+                      key={group.id}
+                      group={group}
+                      currency={document.price.currency}
+                      diagrams={document.diagrams}
+                      explanation={document.treatment_explanations.find(
+                        (item) => item.id === group.id,
+                      )}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="p-6 text-sm text-muted-foreground">
+                  The clinic has not added confirmed treatment items yet.
+                </p>
+              )}
+            </div>
+            {document.diagrams && <DentalPlanPreview diagrams={document.diagrams} />}
+          </div>
+          {document.treatment_explanations.length > 0 && (
+            <div className="print-expand mt-10 max-w-4xl">
+              <SectionHeading
+                eyebrow="Treatment guide"
+                title="Understanding Your Treatments"
+                description="Concise guidance personalized to the treatments included in your plan."
+                compact
+              />
+              <Accordion type="single" collapsible className="mt-5 border-y">
+                {document.treatment_explanations.map((item) => (
+                  <AccordionItem key={item.id} value={item.id}>
+                    <AccordionTrigger className="text-left text-base">
+                      {item.title}
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4 pb-5 text-sm leading-6">
+                      <div>
+                        <p className="font-medium">What it is</p>
+                        <p className="mt-1 text-muted-foreground">{item.what_it_is}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">What this means for your plan</p>
+                        <p className="mt-1 text-muted-foreground">{item.plan_context}</p>
+                      </div>
+                      {item.journey_note && (
+                        <Badge variant="outline">Planned during {item.journey_note}</Badge>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
                 ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                The clinic has not added confirmed treatment items yet.
-              </p>
-            )}
-          </Section>
-          <Section title="Understanding Your Treatments" className="mt-6">
-            <Accordion type="single" collapsible>
-              {document.treatment_explanations.map((item) => (
-                <AccordionItem key={item.id} value={item.id}>
-                  <AccordionTrigger>{item.title}</AccordionTrigger>
-                  <AccordionContent className="space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">
-                        What it is
-                      </p>
-                      <p className="mt-1 text-sm">{item.what_it_is}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">
-                        What this means for your plan
-                      </p>
-                      <p className="mt-1 text-sm">{item.plan_context}</p>
-                    </div>
-                    {item.journey_note && (
-                      <Badge variant="outline">Planned during {item.journey_note}</Badge>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </Section>
+              </Accordion>
+            </div>
+          )}
         </section>
         <section id="journey" className="shared-section scroll-mt-24">
-          <Section
+          <SectionHeading
+            eyebrow="How it works"
             title="Treatment Journey"
             description="The expected sequence of your confirmed clinic Treatment Plan."
-          >
-            <div className="relative space-y-4 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-border">
-              {document.journey.map((step, index) => (
-                <div key={step.id} className="print-row relative pl-11">
-                  <span
-                    className="absolute left-0 top-0 grid size-8 place-items-center rounded-full text-xs font-semibold text-white"
-                    style={{ background: accent }}
-                  >
-                    {index + 1}
-                  </span>
-                  <div className="rounded-lg border bg-white p-4">
-                    <h3 className="font-semibold">{step.title}</h3>
-                    {step.description && (
-                      <p className="mt-1 text-sm text-muted-foreground">{step.description}</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {step.stay && <Badge variant="outline">Stay: {step.stay}</Badge>}
-                      {step.healing && <Badge variant="outline">Healing: {step.healing}</Badge>}
-                    </div>
-                    {step.instructions && <p className="mt-2 text-sm">{step.instructions}</p>}
+          />
+          <div className="relative mt-7 grid gap-4 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-border md:grid-cols-2 md:before:hidden xl:grid-cols-3">
+            {document.journey.map((step, index) => (
+              <div key={step.id} className="print-row relative pl-11 md:pl-0">
+                <span
+                  className="absolute left-0 top-0 grid size-8 place-items-center rounded-full text-xs font-semibold text-white md:left-5 md:top-5"
+                  style={{ background: accent }}
+                >
+                  {index + 1}
+                </span>
+                <div className="h-full rounded-2xl border bg-white p-5 shadow-sm md:pt-16">
+                  <h3 className="font-semibold">{step.title}</h3>
+                  {step.description && (
+                    <p className="mt-1 text-sm text-muted-foreground">{step.description}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {step.stay && <Badge variant="outline">Stay: {step.stay}</Badge>}
+                    {step.healing && <Badge variant="outline">Healing: {step.healing}</Badge>}
                   </div>
+                  {step.instructions && <p className="mt-2 text-sm">{step.instructions}</p>}
                 </div>
-              ))}
-            </div>
-          </Section>
+              </div>
+            ))}
+          </div>
         </section>
         {document.travel && (
           <section id="travel" className="shared-section scroll-mt-24">
-            <Section title="Travel & Accommodation">
-              {document.travel.hotel && (
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-semibold">{document.travel.hotel.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
+            <SectionHeading
+              eyebrow="Your stay"
+              title="Travel & Accommodation"
+              description="The practical arrangements currently included with your Treatment Plan."
+            />
+            <div className="mt-7 overflow-hidden rounded-2xl border bg-white shadow-sm md:grid md:grid-cols-[1.2fr_0.8fr]">
+              {document.travel.hotel ? (
+                <div className="p-6 sm:p-8">
+                  <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100">
+                    <BedDouble className="size-5" aria-hidden="true" />
+                  </div>
+                  <h3 className="mt-5 text-xl font-semibold">{document.travel.hotel.name}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
                     {[
                       document.travel.hotel.room_type,
                       document.travel.hotel.board_type,
@@ -253,143 +281,168 @@ function SharedPlan() {
                     </Button>
                   )}
                 </div>
+              ) : (
+                <div className="hidden md:block" />
               )}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {document.travel.services.map((service) => (
-                  <Badge key={service} variant="secondary">
-                    <Check className="mr-1 size-3" />
-                    {service}
-                  </Badge>
-                ))}
-              </div>
-            </Section>
-          </section>
-        )}
-        <section id="payment" className="shared-section scroll-mt-24">
-          <Section
-            title="Payment"
-            description="Treatment, travel services and the validated payment schedule in one place."
-          >
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Treatment</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Unit price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {document.price.items?.map((item) => (
-                    <TableRow key={item.label}>
-                      <TableCell>{item.label}</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">
-                        {formatQuoteMoney(item.unit_price, document.price.currency)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatQuoteMoney(item.total, document.price.currency)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {((document.price.hotel_total ?? 0) > 0 ||
-              (document.price.transfer_total ?? 0) > 0 ||
-              (document.price.optional_service_total ?? 0) > 0) && (
-              <div className="mt-5 space-y-2 border-t pt-4">
-                <h3 className="font-medium">Travel and additional costs</h3>
-                {(document.price.hotel_total ?? 0) > 0 && (
-                  <PriceRow
-                    label="Hotel"
-                    value={formatQuoteMoney(
-                      document.price.hotel_total ?? 0,
-                      document.price.currency,
-                    )}
-                  />
-                )}{" "}
-                {(document.price.transfer_total ?? 0) > 0 && (
-                  <PriceRow
-                    label="Transfers"
-                    value={formatQuoteMoney(
-                      document.price.transfer_total ?? 0,
-                      document.price.currency,
-                    )}
-                  />
-                )}{" "}
-                {(document.price.optional_service_total ?? 0) > 0 && (
-                  <PriceRow
-                    label="Additional services"
-                    value={formatQuoteMoney(
-                      document.price.optional_service_total ?? 0,
-                      document.price.currency,
-                    )}
-                  />
-                )}
-              </div>
-            )}
-            {document.included_services.length > 0 && (
-              <div className="mt-5 border-t pt-4">
-                <h3 className="font-medium">Included in your plan</h3>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {document.included_services.map((service) => (
-                    <p key={service} className="flex gap-2 text-sm">
-                      <Check className="mt-0.5 size-4 shrink-0" style={{ color: accent }} />
-                      {service}
+              <div className="border-t bg-slate-50 p-6 sm:p-8 md:border-l md:border-t-0">
+                <p className="text-sm font-medium">Travel services</p>
+                <div className="mt-4 space-y-3">
+                  {document.travel.services.map((service) => (
+                    <p key={service} className="flex items-center gap-3 text-sm">
+                      {service.toLowerCase().includes("flight") ? (
+                        <Plane className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Check className="size-4" style={{ color: accent }} aria-hidden="true" />
+                      )}
+                      <span>{service}</span>
                     </p>
                   ))}
                 </div>
               </div>
-            )}
-            <div className="mt-5 rounded-xl bg-slate-100 p-4 sm:ml-auto sm:max-w-md">
-              <PriceRow
-                label="Subtotal"
-                value={formatQuoteMoney(document.price.subtotal ?? 0, document.price.currency)}
-              />
-              {(document.price.discount ?? 0) > 0 && (
-                <PriceRow
-                  label="Discount"
-                  value={`− ${formatQuoteMoney(document.price.discount ?? 0, document.price.currency)}`}
-                />
+            </div>
+          </section>
+        )}
+        <section id="payment" className="shared-section scroll-mt-24">
+          <SectionHeading
+            eyebrow="Clear pricing"
+            title="Your Treatment Cost"
+            description="A transparent breakdown of treatment, services and payment stages."
+          />
+          <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <div className="min-w-0 space-y-8">
+              <div className="overflow-x-auto rounded-2xl border bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Treatment</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Unit price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {document.price.items?.map((item) => (
+                      <TableRow key={item.label}>
+                        <TableCell>{item.label}</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right">
+                          {formatQuoteMoney(item.unit_price, document.price.currency)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatQuoteMoney(item.total, document.price.currency)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {((document.price.hotel_total ?? 0) > 0 ||
+                (document.price.transfer_total ?? 0) > 0 ||
+                (document.price.optional_service_total ?? 0) > 0) && (
+                <div className="mt-5 space-y-2 border-t pt-4">
+                  <h3 className="font-medium">Travel and additional costs</h3>
+                  {(document.price.hotel_total ?? 0) > 0 && (
+                    <PriceRow
+                      label="Hotel"
+                      value={formatQuoteMoney(
+                        document.price.hotel_total ?? 0,
+                        document.price.currency,
+                      )}
+                    />
+                  )}{" "}
+                  {(document.price.transfer_total ?? 0) > 0 && (
+                    <PriceRow
+                      label="Transfers"
+                      value={formatQuoteMoney(
+                        document.price.transfer_total ?? 0,
+                        document.price.currency,
+                      )}
+                    />
+                  )}{" "}
+                  {(document.price.optional_service_total ?? 0) > 0 && (
+                    <PriceRow
+                      label="Additional services"
+                      value={formatQuoteMoney(
+                        document.price.optional_service_total ?? 0,
+                        document.price.currency,
+                      )}
+                    />
+                  )}
+                </div>
               )}
-              <Separator className="my-3" />
-              <div className="text-lg font-semibold">
+              {document.included_services.length > 0 && (
+                <div className="mt-5 border-t pt-4">
+                  <h3 className="font-medium">Included in your plan</h3>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {document.included_services.map((service) => (
+                      <p key={service} className="flex gap-2 text-sm">
+                        <Check className="mt-0.5 size-4 shrink-0" style={{ color: accent }} />
+                        {service}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <aside className="payment-summary rounded-2xl border bg-white p-6 shadow-sm lg:sticky lg:top-20">
+              <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100">
+                <WalletCards className="size-5" aria-hidden="true" />
+              </div>
+              <h3 className="mt-5 text-sm font-medium text-muted-foreground">Plan total</h3>
+              <p className="mt-1 text-3xl font-semibold tracking-tight">
+                {formatQuoteMoney(document.price.total ?? 0, document.price.currency)}
+              </p>
+              <div className="mt-5 border-t pt-4">
                 <PriceRow
-                  label="Final total"
-                  value={formatQuoteMoney(document.price.total ?? 0, document.price.currency)}
+                  label="Subtotal"
+                  value={formatQuoteMoney(document.price.subtotal ?? 0, document.price.currency)}
                 />
+                {(document.price.discount ?? 0) > 0 && (
+                  <PriceRow
+                    label="Discount"
+                    value={`− ${formatQuoteMoney(document.price.discount ?? 0, document.price.currency)}`}
+                  />
+                )}
+                <Separator className="my-3" />
+                {document.price.valid_until && (
+                  <PriceRow
+                    label="Valid until"
+                    value={new Date(document.price.valid_until).toLocaleDateString()}
+                  />
+                )}
+              </div>
+            </aside>
+          </div>
+          {document.price.payment_schedule?.length ? (
+            <div className="mt-10 border-t pt-8">
+              <h3 className="text-xl font-semibold">Payment milestones</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Payments are organized around your confirmed clinic visits.
+              </p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {document.price.payment_schedule.map((payment) => (
+                  <div
+                    key={`${payment.label}-${payment.due}`}
+                    className="print-row rounded-2xl border bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{payment.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{payment.due}</p>
+                      </div>
+                      <p className="font-semibold">
+                        {formatQuoteMoney(payment.amount, document.price.currency)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            {document.price.payment_schedule?.length ? (
-              <div className="mt-6 border-t pt-5">
-                <h3 className="font-semibold">Payment schedule</h3>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {document.price.payment_schedule.map((payment) => (
-                    <div
-                      key={`${payment.label}-${payment.due}`}
-                      className="print-row rounded-lg border p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{payment.label}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{payment.due}</p>
-                        </div>
-                        <p className="font-semibold">
-                          {formatQuoteMoney(payment.amount, document.price.currency)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : document.price.payment_schedule_valid === false ? (
-              <p className="mt-5 rounded-lg bg-slate-100 p-3 text-sm text-muted-foreground">
-                The clinic will confirm the visit payment schedule before treatment begins.
-              </p>
-            ) : null}
-          </Section>
+          ) : document.price.payment_schedule_valid === false ? (
+            <p className="mt-5 rounded-lg bg-slate-100 p-3 text-sm text-muted-foreground">
+              The clinic will confirm the visit payment schedule before treatment begins.
+            </p>
+          ) : null}
         </section>
         {document.patient_notes.length > 0 && (
           <section id="important-information" className="shared-section scroll-mt-24">
@@ -406,54 +459,57 @@ function SharedPlan() {
           </section>
         )}
         <section id="next-steps" className="shared-section scroll-mt-24">
-          <Card className="print-card">
-            <CardContent className="p-6 text-center sm:p-8">
+          <Card className="print-card overflow-hidden border-0 bg-slate-900 text-white shadow-xl">
+            <CardContent className="p-7 text-center sm:p-12">
               {plan.status === "accepted" ? (
                 <>
                   <CheckCircle2 className="mx-auto size-10" style={{ color: accent }} />
                   <h2 className="mt-3 text-xl font-semibold">Treatment Plan accepted</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <p className="mt-2 text-sm text-white/70">
                     The clinic can now help arrange your appointments, travel and treatment dates.
                   </p>
                 </>
               ) : (
                 <>
-                  <h2 className="text-xl font-semibold">Next Steps</h2>
-                  <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+                  <p className="text-sm font-medium text-white/60">Next steps</p>
+                  <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Ready to continue?</h2>
+                  <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/70">
                     Review your Treatment Plan, contact the clinic with any questions, and confirm
                     whether you would like to proceed.
                   </p>
                   <div className="no-print mt-5 flex flex-wrap justify-center gap-2">
+                    {!preview && plan.status === "viewed" && (
+                      <Button
+                        style={{ background: accent }}
+                        onClick={() => markAccepted(plan.id, plan.clinic_id)}
+                      >
+                        Accept Treatment Plan
+                      </Button>
+                    )}
                     {document.clinic?.phone && (
-                      <Button asChild style={{ background: accent }}>
+                      <Button asChild variant="secondary">
                         <a href={`tel:${document.clinic.phone.replace(/\s/g, "")}`}>
-                          <Phone />
-                          Contact Clinic
+                          <Phone /> Contact Clinic
                         </a>
                       </Button>
                     )}
                     {document.clinic?.email && (
-                      <Button asChild variant="outline">
+                      <Button asChild variant="ghost" className="text-white hover:text-white">
                         <a
                           href={`mailto:${document.clinic.email}?subject=Question about my Treatment Plan`}
                         >
-                          <Mail />
-                          Ask a Question
+                          <Mail /> Ask a Question
                         </a>
                       </Button>
                     )}
                     {!preview && plan.status === "viewed" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => markDeclined(plan.id, plan.clinic_id)}
-                        >
-                          Decline
-                        </Button>
-                        <Button onClick={() => markAccepted(plan.id, plan.clinic_id)}>
-                          Accept Treatment Plan
-                        </Button>
-                      </>
+                      <Button
+                        variant="ghost"
+                        className="text-white/70 hover:text-white"
+                        onClick={() => markDeclined(plan.id, plan.clinic_id)}
+                      >
+                        Decline
+                      </Button>
                     )}
                   </div>
                 </>
@@ -470,27 +526,34 @@ function SharedPlan() {
 function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
   const clinic = document.clinic!;
   return (
-    <header className="relative overflow-hidden text-white">
+    <header className="shared-hero relative overflow-hidden text-white">
       <div className="absolute inset-0">
         {clinic.banner_url && (
           <img src={clinic.banner_url} alt="" className="size-full object-cover" />
         )}
-        <div className="absolute inset-0 bg-slate-950/70" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/45" />
       </div>
-      <div className="relative mx-auto flex min-h-52 max-w-5xl flex-col justify-end gap-5 px-4 py-7 sm:flex-row sm:items-end sm:px-6">
+      <div className="relative mx-auto flex min-h-64 max-w-6xl flex-col justify-end gap-6 px-4 py-8 sm:min-h-72 sm:flex-row sm:items-end sm:px-6 sm:py-10">
         <img
           src={clinic.logo_url ?? clinic.banner_url}
           alt={`${clinic.name} logo`}
-          className="size-16 rounded-xl border border-white/30 bg-white object-cover"
+          className="size-16 rounded-2xl border border-white/40 bg-white object-contain p-1 shadow-lg sm:size-20"
         />
         <div className="flex-1">
           <p className="text-xs uppercase tracking-[0.2em] text-white/70">
             Treatment Plan & Cost Estimate
           </p>
-          <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">{clinic.name}</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{clinic.name}</h1>
           <p className="mt-1 text-sm text-white/80">
             {clinic.tagline ?? `${clinic.city}, ${clinic.country}`}
           </p>
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
+            <span>Prepared for {document.patient_name ?? "Patient"}</span>
+            <span aria-hidden="true">•</span>
+            <span>{new Date(document.prepared_at).toLocaleDateString()}</span>
+            <span aria-hidden="true">•</span>
+            <span>Ref. {document.reference}</span>
+          </div>
         </div>
         <div className="no-print flex gap-2">
           <Button variant="secondary" onClick={() => window.print()}>
@@ -533,12 +596,17 @@ function SectionNavigation({ items }: { items: { id: string; label: string }[] }
       aria-label="Treatment Plan sections"
       className="no-print sticky top-0 z-30 border-b bg-white/95 backdrop-blur"
     >
-      <div className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 py-2 sm:px-6">
+      <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2 sm:justify-center sm:px-6">
         {items.map((item) => (
           <Button
             key={item.id}
             size="sm"
-            variant={active === item.id ? "default" : "ghost"}
+            variant="ghost"
+            className={
+              active === item.id
+                ? "bg-slate-900 text-white hover:bg-slate-800 hover:text-white"
+                : ""
+            }
             aria-current={active === item.id ? "location" : undefined}
             onClick={() =>
               document
@@ -557,20 +625,25 @@ function TreatmentRow({
   group,
   currency,
   diagrams,
+  explanation,
 }: {
   group: PatientTreatmentGroup;
   currency: PlanCurrency;
   diagrams?: ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"];
+  explanation?: ReturnType<
+    typeof mapTreatmentPlanToPatientDocument
+  >["treatment_explanations"][number];
 }) {
   const [open, setOpen] = useState(false);
   const selected = group.teeth as ToothNumber[];
   return (
     <>
-      <div className="print-row flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+      <div className="print-row group flex flex-col gap-4 p-5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:p-6">
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{group.label}</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base font-semibold">{group.label}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             {group.quantity} {group.quantity === 1 ? "unit" : "units"}
+            {group.teeth.length > 0 ? ` · ${group.teeth.length} teeth included` : ""}
           </p>
         </div>
         <div className="sm:text-right">
@@ -581,71 +654,159 @@ function TreatmentRow({
             </p>
           )}
         </div>
-        <Button className="no-print" variant="outline" size="sm" onClick={() => setOpen(true)}>
-          View detail
+        <Button
+          className="no-print shrink-0"
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
+          View details <ChevronRight className="size-4" aria-hidden="true" />
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>{group.label}</DialogTitle>
-            <DialogDescription>
-              {group.quantity} {group.quantity === 1 ? "unit" : "units"} included in this Treatment
-              Plan.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[70vh] pr-3">
-            <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Fact label="Quantity" value={String(group.quantity)} />
-                <Fact label="Unit price" value={formatQuoteMoney(group.unit_price, currency)} />
-                <Fact label="Group total" value={formatQuoteMoney(group.total, currency)} />
-              </div>
-              {group.teeth.length > 0 && (
-                <p className="text-sm">
-                  <strong>Teeth included:</strong> {group.teeth.sort((a, b) => a - b).join(", ")}
-                </p>
-              )}
-              {diagrams && (
-                <Tabs defaultValue="proposed">
-                  <TabsList>
-                    <TabsTrigger value="current">Current Condition</TabsTrigger>
-                    <TabsTrigger value="proposed">Proposed Treatment</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="current">
-                    <DentalChart
-                      title="Current dental condition"
-                      mode="current"
-                      currentConditions={diagrams.currentConditions}
-                      proposedTreatments={diagrams.proposedTreatments}
-                      selected={selected}
-                      readOnly
-                      onSelect={() => undefined}
-                    />
+        {open && (
+          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl overflow-hidden rounded-2xl p-5 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>{group.label}</DialogTitle>
+              <DialogDescription>
+                {group.quantity} {group.quantity === 1 ? "unit" : "units"} included in this
+                Treatment Plan.
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[72vh] pr-3">
+              <Tabs defaultValue="overview">
+                <TabsList className="w-full justify-start overflow-x-auto">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  {diagrams && <TabsTrigger value="dental-plan">Dental Plan</TabsTrigger>}
+                  <TabsTrigger value="pricing">Pricing Details</TabsTrigger>
+                </TabsList>
+                <TabsContent value="overview" className="space-y-5 pt-4">
+                  {explanation && (
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div>
+                        <p className="font-medium">What it is</p>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {explanation.what_it_is}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Why it is included</p>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {explanation.plan_context}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {group.teeth.length > 0 && (
+                    <p className="text-sm">
+                      <strong>Teeth included:</strong>{" "}
+                      {[...group.teeth].sort((a, b) => a - b).join(", ")}
+                    </p>
+                  )}
+                  {group.patient_notes.map((note) => (
+                    <Alert key={note}>
+                      <AlertDescription>{note}</AlertDescription>
+                    </Alert>
+                  ))}
+                </TabsContent>
+                {diagrams && (
+                  <TabsContent value="dental-plan" className="pt-4">
+                    <DentalDiagramTabs diagrams={diagrams} selected={selected} />
                   </TabsContent>
-                  <TabsContent value="proposed">
-                    <DentalChart
-                      title="Proposed Treatment"
-                      mode="proposed"
-                      currentConditions={diagrams.currentConditions}
-                      proposedTreatments={diagrams.proposedTreatments}
-                      selected={selected}
-                      readOnly
-                      onSelect={() => undefined}
-                    />
-                  </TabsContent>
-                </Tabs>
-              )}
-              {group.patient_notes.map((note) => (
-                <p key={note} className="rounded-lg bg-slate-100 p-3 text-sm">
-                  {note}
-                </p>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
+                )}
+                <TabsContent value="pricing" className="pt-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Fact label="Quantity" value={String(group.quantity)} />
+                    <Fact label="Unit price" value={formatQuoteMoney(group.unit_price, currency)} />
+                    <Fact label="Group total" value={formatQuoteMoney(group.total, currency)} />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </ScrollArea>
+          </DialogContent>
+        )}
       </Dialog>
     </>
+  );
+}
+function DentalPlanPreview({
+  diagrams,
+}: {
+  diagrams: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"]>;
+}) {
+  return (
+    <div className="dental-preview min-w-0 rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+      <div className="mb-4">
+        <p className="text-sm font-medium">Your dental plan</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Switch between your current condition and proposed result.
+        </p>
+      </div>
+      <DentalDiagramTabs diagrams={diagrams} selected={[]} />
+    </div>
+  );
+}
+function DentalDiagramTabs({
+  diagrams,
+  selected,
+}: {
+  diagrams: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"]>;
+  selected: ToothNumber[];
+}) {
+  return (
+    <Tabs defaultValue="proposed">
+      <TabsList className="w-full grid grid-cols-2">
+        <TabsTrigger value="current">Current Condition</TabsTrigger>
+        <TabsTrigger value="proposed">Proposed Treatment</TabsTrigger>
+      </TabsList>
+      <TabsContent value="current">
+        <DentalChart
+          title="Current dental condition"
+          mode="current"
+          currentConditions={diagrams.currentConditions}
+          proposedTreatments={diagrams.proposedTreatments}
+          selected={selected}
+          readOnly
+          onSelect={() => undefined}
+        />
+      </TabsContent>
+      <TabsContent value="proposed">
+        <DentalChart
+          title="Proposed Treatment"
+          mode="proposed"
+          currentConditions={diagrams.currentConditions}
+          proposedTreatments={diagrams.proposedTreatments}
+          selected={selected}
+          readOnly
+          onSelect={() => undefined}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  compact = false,
+}: {
+  eyebrow: string;
+  title: string;
+  description?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "max-w-2xl" : "max-w-3xl"}>
+      <p className="text-sm font-medium text-slate-500">{eyebrow}</p>
+      <h2
+        className={`mt-2 font-semibold tracking-tight ${compact ? "text-2xl" : "text-2xl sm:text-3xl"}`}
+      >
+        {title}
+      </h2>
+      {description && (
+        <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">{description}</p>
+      )}
+    </div>
   );
 }
 function Section({
