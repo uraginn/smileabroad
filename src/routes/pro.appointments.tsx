@@ -4,6 +4,7 @@ import { addMinutes, format, isSameDay } from "date-fns";
 import { CalendarPlus, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { canUser } from "@/lib/auth/permissions";
 import { useMockStore } from "@/lib/mock/store";
 import type { Appointment, AppointmentType, Patient, TreatmentPlan, User } from "@/types/models";
 import { PageHeader, EmptyState } from "@/components/ui-bits";
@@ -57,6 +58,7 @@ function Appointments() {
   const updateAppointment = useMockStore((s) => s.updateAppointment);
   const [view, setView] = useState("list");
   const [open, setOpen] = useState(false);
+  const canManage = canUser(actor, "appointments.manage");
   const clinicAppointments = useMemo(
     () =>
       appointments
@@ -82,10 +84,12 @@ function Appointments() {
         title="Appointments"
         description="Schedule pre-treatment and clinical appointments with the responsible team."
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <CalendarPlus />
-            Book appointment
-          </Button>
+          canManage ? (
+            <Button onClick={() => setOpen(true)}>
+              <CalendarPlus />
+              Book appointment
+            </Button>
+          ) : undefined
         }
       />
       <Tabs value={view} onValueChange={setView}>
@@ -98,7 +102,9 @@ function Appointments() {
         <EmptyState
           title="No appointments scheduled"
           description="Book the first patient appointment to add it to the clinic schedule."
-          action={<Button onClick={() => setOpen(true)}>Book appointment</Button>}
+          action={
+            canManage ? <Button onClick={() => setOpen(true)}>Book appointment</Button> : undefined
+          }
         />
       ) : view === "calendar" ? (
         <MonthView records={clinicAppointments} />
@@ -169,6 +175,7 @@ function Appointments() {
                             </Button>
                           )}
                           <Select
+                            disabled={!canManage}
                             value={a.appointment_status ?? "scheduled"}
                             onValueChange={(status) => {
                               updateAppointment(

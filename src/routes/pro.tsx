@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
 import { SidebarShell } from "@/components/sidebar-shell";
 import {
   LayoutDashboard,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { PageLoading } from "@/components/ui-bits";
+import { canUser, permissionForProPath } from "@/lib/auth/permissions";
 
 export const Route = createFileRoute("/pro")({ component: ProLayout });
 
@@ -46,11 +47,12 @@ const items = [
 function ProLayout() {
   const hydrated = useAuthHydrated();
   const user = useAuth((state) => state.user);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   if (!hydrated) return <PageLoading label="Loading clinic workspace" />;
   if (!user || user.role === "platform_admin") return <Navigate to="/login" replace />;
-  const visibleItems = ["clinic_owner", "clinic_admin"].includes(user.role)
-    ? items
-    : items.filter((item) => item.to !== "/pro/settings");
+  if (!canUser(user, permissionForProPath(pathname)))
+    return <Navigate to="/pro/dashboard" replace />;
+  const visibleItems = items.filter((item) => canUser(user, permissionForProPath(item.to)));
   return (
     <SidebarShell items={visibleItems} section="Clinic CRM">
       <Outlet />

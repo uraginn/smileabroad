@@ -179,6 +179,15 @@ export const seedUsers: User[] = [
     name: "Platform Admin",
     role: "platform_admin",
   },
+  {
+    id: "u_viewer",
+    ...base(),
+    email: "viewer@dtkurt.com",
+    name: "Clinic Viewer",
+    role: "viewer",
+    clinic_id: "clinic_istanbul",
+    active: true,
+  },
 ];
 
 // --- Patients (per clinic CRM)

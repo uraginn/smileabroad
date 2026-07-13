@@ -4,6 +4,7 @@ import { format, isToday } from "date-fns";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { canUser } from "@/lib/auth/permissions";
 import { useMockStore } from "@/lib/mock/store";
 import type { Task, TaskType } from "@/types/models";
 import { PageHeader, EmptyState } from "@/components/ui-bits";
@@ -64,6 +65,7 @@ function Tasks() {
   const [priority, setPriority] = useState("all");
   const [type, setType] = useState("all");
   const [open, setOpen] = useState(false);
+  const canManage = canUser(user, "tasks.manage");
   const clinicTasks = useMemo(
     () => tasks.filter((item) => item.clinic_id === clinicId),
     [tasks, clinicId],
@@ -114,10 +116,12 @@ function Tasks() {
         title="Tasks"
         description="Plan and complete clinic work without mixing it with patient follow-ups."
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus />
-            Create task
-          </Button>
+          canManage ? (
+            <Button onClick={() => setOpen(true)}>
+              <Plus />
+              Create task
+            </Button>
+          ) : undefined
         }
       />
       <Tabs value={view} onValueChange={setView}>
@@ -157,7 +161,9 @@ function Tasks() {
         <EmptyState
           title="No tasks in this view"
           description="Adjust the filters or create the next operational task."
-          action={<Button onClick={() => setOpen(true)}>Create task</Button>}
+          action={
+            canManage ? <Button onClick={() => setOpen(true)}>Create task</Button> : undefined
+          }
         />
       ) : (
         <div className="space-y-2">
@@ -173,6 +179,7 @@ function Tasks() {
               <Card key={task.id}>
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
                   <Checkbox
+                    disabled={!canManage}
                     aria-label={`Complete ${task.title}`}
                     checked={task.task_status === "completed" || task.done}
                     onCheckedChange={() =>

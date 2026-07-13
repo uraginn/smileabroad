@@ -1,8 +1,12 @@
 import { useAuth, demoUsers } from "@/lib/auth/mock-auth";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "@tanstack/react-router";
 import type { Role } from "@/types/models";
@@ -13,6 +17,7 @@ const roleLabels: Record<Role, string> = {
   clinic_admin: "Clinic Admin",
   coordinator: "Coordinator",
   dentist: "Dentist",
+  viewer: "Viewer",
   sales: "Sales",
   platform_admin: "Platform Admin",
 };
@@ -22,6 +27,7 @@ const roleRoutes: Record<Role, string> = {
   clinic_admin: "/pro/dashboard",
   coordinator: "/pro/dashboard",
   dentist: "/pro/dashboard",
+  viewer: "/pro/dashboard",
   sales: "/pro/dashboard",
   platform_admin: "/admin/dashboard",
 };
@@ -41,13 +47,26 @@ export function RoleSwitcher() {
         <DropdownMenuLabel>Sign in as demo user</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {(Object.keys(demoUsers) as Role[]).map((r) => (
-          <DropdownMenuItem key={r} onClick={() => { loginAs(r); navigate({ to: roleRoutes[r] }); }}>
+          <DropdownMenuItem
+            key={r}
+            onClick={() => {
+              loginAs(r);
+              navigate({ to: roleRoutes[r] });
+            }}
+          >
             {roleLabels[r]}
             <span className="ml-auto text-xs text-muted-foreground">{demoUsers[r].name}</span>
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => { logout(); navigate({ to: "/" }); }}>Sign out</DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            logout();
+            navigate({ to: "/" });
+          }}
+        >
+          Sign out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

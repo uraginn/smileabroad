@@ -75,6 +75,7 @@ function LeadsKanban() {
   const activeUser = useAuth((s) => s.user);
   const clinicId = activeUser?.clinic_id ?? "clinic_istanbul";
   const leads = useMockStore(useShallow(selectClinicLeads(clinicId)));
+  const crmSettings = useMockStore((s) => s.crmSettings);
   const { users, patients, files, plans, followUps, assessments, updateLeadStatus } = useMockStore(
     useShallow((s) => ({
       users: s.users,
@@ -99,6 +100,13 @@ function LeadsKanban() {
   const [uploadsFilter, setUploadsFilter] = useState("all");
   const [view, setView] = useState<"pipeline" | "list">("pipeline");
   const [sort, setSort] = useState<SortOption>("last_activity");
+  const clinicConfig = crmSettings.find((item) => item.clinic_id === clinicId);
+  const pipelineStages =
+    clinicConfig?.pipeline.filter((item) => item.active || item.terminal !== "none") ??
+    LEAD_PIPELINE_STAGES;
+  const configuredSourceLabels = Object.fromEntries(
+    (clinicConfig?.sources ?? []).map((item) => [item.key, item.label]),
+  );
   useEffect(() => {
     if (routeSearch.followUp) setFollowUpFilter(routeSearch.followUp);
   }, [routeSearch.followUp]);
@@ -198,7 +206,7 @@ function LeadsKanban() {
 
   const byStatus = useMemo(
     () =>
-      LEAD_PIPELINE_STAGES.reduce<Record<string, Lead[]>>((acc, item) => {
+      pipelineStages.reduce<Record<string, Lead[]>>((acc, item) => {
         acc[item.key] = filteredLeads.filter(
           (lead) =>
             deriveLeadOperationalStage({
@@ -212,7 +220,7 @@ function LeadsKanban() {
         );
         return acc;
       }, {}),
-    [filteredLeads, plans, clinicId],
+    [filteredLeads, plans, clinicId, pipelineStages],
   );
   const coordinators = users.filter((u) => leads.some((lead) => lead.assigned_to === u.id));
   const sources = Array.from(new Set(leads.map((lead) => lead.source)));
@@ -297,13 +305,16 @@ function LeadsKanban() {
             label="Status"
             value={status}
             onChange={setStatus}
-            options={LEAD_PIPELINE_STAGES.map((s) => ({ value: s.key, label: s.label }))}
+            options={pipelineStages.map((s) => ({ value: s.key, label: s.label }))}
           />
           <FilterSelect
             label="Source"
             value={source}
             onChange={setSource}
-            options={sources.map((value) => ({ value, label: sourceLabel[value] }))}
+            options={sources.map((value) => ({
+              value,
+              label: configuredSourceLabels[value] ?? sourceLabel[value],
+            }))}
           />
           <FilterSelect
             label="Country"
@@ -430,13 +441,15 @@ function LeadsKanban() {
                   onStatusChange={(next) =>
                     updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
                   }
+                  pipelineStages={pipelineStages}
+                  sourceLabels={configuredSourceLabels}
                 />
               ))}
             </div>
           )}
           {view === "pipeline" && (
             <div className="hidden gap-4 overflow-x-auto pb-4 md:flex">
-              {LEAD_PIPELINE_STAGES.map((column) => (
+              {pipelineStages.map((column) => (
                 <section key={column.key} className="w-[300px] shrink-0" aria-label={column.label}>
                   <div className="flex items-center justify-between mb-2 sticky top-0 bg-background z-10 py-1">
                     <h2 className="text-sm font-semibold">{column.label}</h2>
@@ -456,6 +469,8 @@ function LeadsKanban() {
                         onStatusChange={(next) =>
                           updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
                         }
+                        pipelineStages={pipelineStages}
+                        sourceLabels={configuredSourceLabels}
                       />
                     ))}
                   </div>
@@ -478,6 +493,8 @@ function LeadsKanban() {
                   onStatusChange={(next) =>
                     updateLeadStatus(lead.id, next, activeUser?.id ?? "system")
                   }
+                  pipelineStages={pipelineStages}
+                  sourceLabels={configuredSourceLabels}
                 />
               ))}
             </div>
@@ -527,6 +544,8 @@ function LeadCard({
   followUps,
   assessment,
   onStatusChange,
+  pipelineStages,
+  sourceLabels,
 }: {
   lead: Lead;
   patient?: Patient;
@@ -536,6 +555,8 @@ function LeadCard({
   followUps: LeadFollowUp[];
   assessment?: Assessment;
   onStatusChange: (status: LeadStatus) => void;
+  pipelineStages: Array<{ key: LeadStatus; label: string; terminal?: boolean | string }>;
+  sourceLabels: Record<string, string>;
 }) {
   const navigate = useNavigate();
   const activeUser = useAuth((state) => state.user);
@@ -606,7 +627,7 @@ function LeadCard({
       )}
       <div className="flex flex-wrap gap-1 mt-2">
         <Badge variant="outline" className="text-[10px]">
-          {sourceLabel[lead.source]}
+          {sourceLabels[lead.source] ?? sourceLabel[lead.source]}
         </Badge>
         {legacy && (
           <Badge variant="secondary" className="text-[10px]">
@@ -651,7 +672,7 @@ function LeadCard({
       <div className="mt-3">
         {["booked", "lost"].includes(operationalStage) ? (
           <Badge variant="outline">
-            {LEAD_PIPELINE_STAGES.find((item) => item.key === operationalStage)?.label}
+            {pipelineStages.find((item) => item.key === operationalStage)?.label}
           </Badge>
         ) : (
           <Select
@@ -662,11 +683,13 @@ function LeadCard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {LEAD_PIPELINE_STAGES.filter((status) => !status.terminal).map((status) => (
-                <SelectItem key={status.key} value={status.key}>
-                  {status.label}
-                </SelectItem>
-              ))}
+              {pipelineStages
+                .filter((status) => !status.terminal || status.terminal === "none")
+                .map((status) => (
+                  <SelectItem key={status.key} value={status.key}>
+                    {status.label}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         )}

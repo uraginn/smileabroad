@@ -26,6 +26,7 @@ import type {
   ClinicNotification,
   LeadFollowUp,
   CommunicationTemplate,
+  ClinicCrmSettings,
 } from "@/types/models";
 import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
 import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
@@ -73,6 +74,7 @@ interface Store {
   notifications: ClinicNotification[];
   followUps: LeadFollowUp[];
   communicationTemplates: CommunicationTemplate[];
+  crmSettings: ClinicCrmSettings[];
   clinicTreatmentDefinitions: ClinicTreatmentDefinition[];
   dentalPlanTemplates: DentalPlanTemplate[];
   clinicHotels: ClinicHotel[];
@@ -163,6 +165,16 @@ interface Store {
     changedBy?: string,
   ) => void;
   deleteCommunicationTemplate: (id: string, clinicId: string) => void;
+  updateClinic: (id: string, patch: Partial<Clinic>, changedBy?: string) => void;
+  saveClinicUser: (
+    record: Omit<User, "created_at" | "updated_at" | "created_by">,
+    changedBy?: string,
+  ) => void;
+  saveCrmSettings: (
+    clinicId: string,
+    patch: Partial<ClinicCrmSettings>,
+    changedBy?: string,
+  ) => void;
   syncNotifications: (clinicId: string, userId: string, records: ClinicNotification[]) => void;
   markNotificationRead: (id: string, clinicId: string, userId?: string) => void;
   markAllNotificationsRead: (clinicId: string, userId?: string) => void;
@@ -327,6 +339,7 @@ export const useMockStore = create<Store>()(
       notifications: [],
       followUps: [],
       communicationTemplates: [],
+      crmSettings: [],
       clinicTreatmentDefinitions: [],
       dentalPlanTemplates: [],
       clinicHotels: [],
@@ -609,6 +622,8 @@ export const useMockStore = create<Store>()(
         return application;
       },
       addLeadActivity: (activity) => {
+        const actor = get().users.find((item) => item.id === activity.created_by);
+        if (actor?.role === "viewer") throw new Error("Communication logging is not permitted.");
         const timestamp = now();
         const rec: LeadActivity = {
           ...activity,
@@ -627,6 +642,14 @@ export const useMockStore = create<Store>()(
         return rec;
       },
       updateLeadStatus: (id, status, changedBy = "system", reason) => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
         const lead = get().leads.find((item) => item.id === id);
         if (!lead || lead.status === status) return;
         const timestamp = now();
@@ -654,6 +677,13 @@ export const useMockStore = create<Store>()(
         const lead = get().leads.find((item) => item.id === id && item.clinic_id === clinicId);
         if (!lead) return;
         const actor = get().users.find((item) => item.id === changedBy);
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
         const timestamp = now();
         set((state) => ({
@@ -666,6 +696,13 @@ export const useMockStore = create<Store>()(
       },
       addTreatmentPlan: (tp, createdBy = "system") => {
         const actor = get().users.find((user) => user.id === createdBy);
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "dentist", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          throw new Error("Treatment Plan creation is not permitted.");
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== tp.clinic_id) {
           throw new Error("Treatment plan clinic ownership mismatch.");
         }
@@ -769,6 +806,13 @@ export const useMockStore = create<Store>()(
         const plan = get().treatmentPlans.find((item) => item.id === id);
         if (!plan) return;
         const actor = get().users.find((user) => user.id === changedBy);
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "dentist", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== plan.clinic_id) return;
         const timestamp = now();
         const statusChanged = patch.status && patch.status !== (plan.status ?? "draft");
@@ -884,6 +928,8 @@ export const useMockStore = create<Store>()(
           ),
         })),
       addTask: (task, createdBy = "system") => {
+        const actor = get().users.find((item) => item.id === createdBy);
+        if (actor?.role === "viewer") throw new Error("Task creation is not permitted.");
         const timestamp = now();
         const rec: Task = {
           ...task,
@@ -967,6 +1013,8 @@ export const useMockStore = create<Store>()(
         }));
       },
       updateTask: (id, clinicId, patch, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor?.role === "viewer") return;
         const task = get().tasks.find((item) => item.id === id && item.clinic_id === clinicId);
         if (!task) return;
         const timestamp = now();
@@ -1009,6 +1057,8 @@ export const useMockStore = create<Store>()(
         }));
       },
       addAppointment: (record, createdBy = "system") => {
+        const actor = get().users.find((item) => item.id === createdBy);
+        if (actor?.role === "viewer") throw new Error("Appointment creation is not permitted.");
         const timestamp = now();
         const rec: Appointment = {
           ...record,
@@ -1040,6 +1090,8 @@ export const useMockStore = create<Store>()(
         return rec;
       },
       updateAppointment: (id, clinicId, patch, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor?.role === "viewer") return;
         const appointment = get().appointments.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
@@ -1104,6 +1156,70 @@ export const useMockStore = create<Store>()(
             (item) => item.id !== id || item.clinic_id !== clinicId,
           ),
         })),
+      updateClinic: (id, patch, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor && !["clinic_owner", "clinic_admin", "platform_admin"].includes(actor.role))
+          return;
+        set((state) => ({
+          clinics: state.clinics.map((item) =>
+            item.id === id ? { ...item, ...patch, updated_at: now() } : item,
+          ),
+        }));
+      },
+      saveClinicUser: (record, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (
+          actor &&
+          actor.role !== "platform_admin" &&
+          (!actor.clinic_id ||
+            actor.clinic_id !== record.clinic_id ||
+            !["clinic_owner", "clinic_admin"].includes(actor.role))
+        )
+          return;
+        const timestamp = now();
+        set((state) => ({
+          users: state.users.some((item) => item.id === record.id)
+            ? state.users.map((item) =>
+                item.id === record.id && item.clinic_id === record.clinic_id
+                  ? { ...item, ...record, updated_at: timestamp }
+                  : item,
+              )
+            : [
+                { ...record, created_at: timestamp, updated_at: timestamp, created_by: changedBy },
+                ...state.users,
+              ],
+        }));
+      },
+      saveCrmSettings: (clinicId, patch, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (
+          actor &&
+          actor.role !== "platform_admin" &&
+          (actor.clinic_id !== clinicId || !["clinic_owner", "clinic_admin"].includes(actor.role))
+        )
+          return;
+        const timestamp = now();
+        set((state) => {
+          const existing = state.crmSettings.find((item) => item.clinic_id === clinicId);
+          const next: ClinicCrmSettings = existing
+            ? { ...existing, ...patch, updated_at: timestamp }
+            : {
+                id: `crm_settings_${clinicId}`,
+                clinic_id: clinicId,
+                pipeline: [],
+                sources: [],
+                ...patch,
+                created_at: timestamp,
+                updated_at: timestamp,
+                created_by: changedBy,
+              };
+          return {
+            crmSettings: existing
+              ? state.crmSettings.map((item) => (item.clinic_id === clinicId ? next : item))
+              : [...state.crmSettings, next],
+          };
+        });
+      },
       syncNotifications: (clinicId, userId, records) =>
         set((state) => {
           const existing = new Map(state.notifications.map((item) => [item.id, item]));
@@ -1385,7 +1501,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 19,
+      version: 20,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1575,6 +1691,7 @@ export const useMockStore = create<Store>()(
             location_type: appointment.location_type ?? "clinic",
           })),
           communicationTemplates: state.communicationTemplates ?? [],
+          crmSettings: state.crmSettings ?? [],
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
             ...(clinic.id === "clinic_istanbul"
@@ -1597,14 +1714,16 @@ export const useMockStore = create<Store>()(
               seedClinics.find((item) => item.id === clinic.id)?.last_reviewed_at,
           })),
           users: [
-            ...(state.users ?? seedUsers).map((member) =>
-              member.id === "u_owner"
-                ? { ...member, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
-                : member,
-            ),
+            ...(state.users ?? seedUsers).map((member) => {
+              const normalized =
+                member.role === "sales" ? { ...member, role: "coordinator" as const } : member;
+              return normalized.id === "u_owner"
+                ? { ...normalized, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
+                : normalized;
+            }),
             ...seedUsers.filter(
               (seedUser) =>
-                seedUser.role === "dentist" &&
+                ["dentist", "viewer"].includes(seedUser.role) &&
                 !(state.users ?? []).some((member) => member.id === seedUser.id),
             ),
           ],

@@ -1,5 +1,11 @@
 export type Role =
-  "clinic_owner" | "clinic_admin" | "coordinator" | "dentist" | "sales" | "platform_admin";
+  | "clinic_owner"
+  | "clinic_admin"
+  | "coordinator"
+  | "dentist"
+  | "viewer"
+  | "sales"
+  | "platform_admin";
 
 export interface BaseRecord {
   id: string;
@@ -360,6 +366,26 @@ export interface CommunicationTemplate extends BaseRecord {
   subject?: string;
   body: string;
   active: boolean;
+}
+
+export interface CrmPipelineStage {
+  key: LeadStatus;
+  label: string;
+  active: boolean;
+  terminal: "none" | "converted" | "lost";
+}
+
+export interface CrmSourceDefinition {
+  key: string;
+  label: string;
+  active: boolean;
+  category?: string;
+}
+
+export interface ClinicCrmSettings extends BaseRecord {
+  clinic_id: string;
+  pipeline: CrmPipelineStage[];
+  sources: CrmSourceDefinition[];
 }
 
 export type NotificationType =

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { Mail, MessageSquare, Phone, Plus, StickyNote } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { canUser } from "@/lib/auth/permissions";
 import { useMockStore } from "@/lib/mock/store";
 import { makeId } from "@/lib/mock/seed";
 import type { CommunicationTemplate, Lead, LeadActivity, Patient } from "@/types/models";
@@ -49,6 +50,7 @@ function CommunicationPage() {
   const [kind, setKind] = useState("all");
   const [logOpen, setLogOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const canManage = canUser(actor, "communication.manage");
   const records = useMemo(
     () =>
       activities
@@ -83,12 +85,14 @@ function CommunicationPage() {
         title="Communication"
         description="A clinic-wide log of calls, WhatsApp, email and internal notes. Logging does not send a message."
         actions={
-          <Button
-            onClick={() => (section === "templates" ? setTemplateOpen(true) : setLogOpen(true))}
-          >
-            <Plus />
-            {section === "templates" ? "New template" : "Log communication"}
-          </Button>
+          canManage ? (
+            <Button
+              onClick={() => (section === "templates" ? setTemplateOpen(true) : setLogOpen(true))}
+            >
+              <Plus />
+              {section === "templates" ? "New template" : "Log communication"}
+            </Button>
+          ) : undefined
         }
       />
       <Tabs value={section} onValueChange={setSection}>
@@ -110,7 +114,11 @@ function CommunicationPage() {
             <EmptyState
               title="No communication recorded"
               description="Log a real interaction or internal note. No message will be sent."
-              action={<Button onClick={() => setLogOpen(true)}>Log communication</Button>}
+              action={
+                canManage ? (
+                  <Button onClick={() => setLogOpen(true)}>Log communication</Button>
+                ) : undefined
+              }
             />
           ) : (
             <div className="space-y-2">

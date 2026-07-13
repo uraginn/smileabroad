@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { canUser } from "@/lib/auth/permissions";
 import { deriveClinicNotifications } from "@/lib/crm-notifications";
 import { buildCrmSearchIndex } from "@/lib/crm-search";
 import { formatCrmDate } from "@/lib/format";
@@ -106,12 +107,8 @@ export function CrmTopbar({
         +new Date(b.created_at) - +new Date(a.created_at),
     );
   const unread = visibleNotifications.filter((item) => !item.read_at).length;
-  const canCreatePlan = ["clinic_owner", "clinic_admin", "coordinator", "dentist"].includes(
-    user?.role ?? "",
-  );
-  const canManageIntake = ["clinic_owner", "clinic_admin", "coordinator", "sales"].includes(
-    user?.role ?? "",
-  );
+  const canCreatePlan = canUser(user, "treatment_plans.create");
+  const canManageIntake = canUser(user, "leads.manage");
 
   return (
     <>
@@ -171,24 +168,30 @@ export function CrmTopbar({
                   </Link>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem asChild>
-                <Link to="/pro/tasks">
-                  <CheckSquare />
-                  Create Task
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/pro/appointments">
-                  <CalendarPlus />
-                  Book Appointment
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/pro/communication">
-                  <MessageSquare />
-                  Log Communication
-                </Link>
-              </DropdownMenuItem>
+              {canUser(user, "tasks.manage") && (
+                <DropdownMenuItem asChild>
+                  <Link to="/pro/tasks">
+                    <CheckSquare />
+                    Create Task
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {canUser(user, "appointments.manage") && (
+                <DropdownMenuItem asChild>
+                  <Link to="/pro/appointments">
+                    <CalendarPlus />
+                    Book Appointment
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {canUser(user, "communication.manage") && (
+                <DropdownMenuItem asChild>
+                  <Link to="/pro/communication">
+                    <MessageSquare />
+                    Log Communication
+                  </Link>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <Popover>

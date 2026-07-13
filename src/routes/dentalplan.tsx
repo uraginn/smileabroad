@@ -585,6 +585,7 @@ function DentalPlanRoute() {
   };
   return (
     <DentalPlanStudio
+      readOnly={user?.role === "viewer"}
       context={{
         mode: templateMode ? "template" : crmMode ? "crm" : "standalone",
         clinicId: user?.clinic_id,

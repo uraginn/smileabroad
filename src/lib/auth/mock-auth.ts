@@ -40,6 +40,13 @@ const DEMO_USERS: Record<Role, DemoUser> = {
     role: "dentist",
     clinic_id: "clinic_istanbul",
   },
+  viewer: {
+    id: "u_viewer",
+    name: "Clinic Viewer",
+    email: "viewer@dtkurt.com",
+    role: "viewer",
+    clinic_id: "clinic_istanbul",
+  },
   sales: {
     id: "u_coord",
     name: "Sales Rep",
