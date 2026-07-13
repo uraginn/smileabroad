@@ -82,6 +82,9 @@ export interface Patient extends BaseRecord {
   roadmap_id?: string;
   treatment_interest?: string;
   avatar_url?: string;
+  preferred_contact_method?: string;
+  coordinator_id?: string;
+  dentist_id?: string;
 }
 
 export interface AssessmentDental {
@@ -243,7 +246,8 @@ export interface Lead extends BaseRecord {
 
 export interface LeadActivity extends BaseRecord {
   clinic_id: string;
-  lead_id: string;
+  lead_id?: string;
+  patient_id?: string;
   kind:
     | "note"
     | "status_change"

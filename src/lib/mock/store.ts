@@ -82,6 +82,12 @@ interface Store {
     createdBy?: string,
   ) => Patient;
   updatePatient: (id: string, patch: Partial<Patient>) => void;
+  updatePatientAssignment: (
+    id: string,
+    clinicId: string,
+    patch: Pick<Patient, "coordinator_id" | "dentist_id">,
+    changedBy?: string,
+  ) => void;
   addAssessment: (
     a: Omit<Assessment, "id" | "created_at" | "updated_at" | "created_by">,
   ) => Assessment;
@@ -309,6 +315,19 @@ export const useMockStore = create<Store>()(
       roadmapTreatmentContent: DEFAULT_ROADMAP_TREATMENT_CONTENT,
 
       addPatient: (patient, createdBy = "system") => {
+        const normalizedEmail = patient.email.trim().toLowerCase();
+        const normalizedPhone = (patient.phone ?? patient.whatsapp ?? "").replace(/\D/g, "");
+        const existing = get().patients.find(
+          (item) =>
+            item.clinic_id === patient.clinic_id &&
+            ((normalizedEmail && item.email.trim().toLowerCase() === normalizedEmail) ||
+              (normalizedPhone &&
+                (item.phone ?? item.whatsapp ?? "").replace(/\D/g, "") === normalizedPhone)),
+        );
+        if (existing) return existing;
+        const actor = get().users.find((item) => item.id === createdBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== patient.clinic_id)
+          throw new Error("Patient clinic ownership mismatch.");
         const timestamp = now();
         const rec: Patient = {
           ...patient,
@@ -328,6 +347,41 @@ export const useMockStore = create<Store>()(
               : patient,
           ),
         })),
+      updatePatientAssignment: (id, clinicId, patch, changedBy = "system") => {
+        const patient = get().patients.find(
+          (item) => item.id === id && item.clinic_id === clinicId,
+        );
+        if (!patient) return;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
+        const changes = [
+          patient.coordinator_id !== patch.coordinator_id ? "coordinator" : undefined,
+          patient.dentist_id !== patch.dentist_id ? "dentist" : undefined,
+        ].filter(Boolean);
+        if (!changes.length) return;
+        const timestamp = now();
+        const lead = get().leads.find(
+          (item) => item.clinic_id === clinicId && item.clinic_patient_id === patient.id,
+        );
+        const activity: LeadActivity = {
+          id: makeId("activity"),
+          clinic_id: clinicId,
+          lead_id: lead?.id,
+          patient_id: patient.id,
+          kind: "status_change",
+          body: `Patient ${changes.join(" and ")} assignment updated.`,
+          internal: true,
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: changedBy,
+        };
+        set((state) => ({
+          patients: state.patients.map((item) =>
+            item.id === id ? { ...item, ...patch, updated_at: timestamp } : item,
+          ),
+          activities: [...state.activities, activity],
+        }));
+      },
       addAssessment: (a) => {
         const rec: Assessment = {
           ...a,
@@ -400,6 +454,9 @@ export const useMockStore = create<Store>()(
               last_name: completedAssessment?.personal.last_name || existingPatient.last_name,
               email: completedAssessment?.personal.email || existingPatient.email,
               whatsapp: completedAssessment?.personal.whatsapp || existingPatient.whatsapp,
+              preferred_contact_method:
+                completedAssessment?.personal.preferred_contact_method ||
+                existingPatient.preferred_contact_method,
               assessment_id,
               roadmap_id,
               updated_at: createdAt,
@@ -413,6 +470,7 @@ export const useMockStore = create<Store>()(
               email: completedAssessment?.personal.email ?? "",
               phone: assessment?.personal.phone,
               whatsapp: completedAssessment?.personal.whatsapp,
+              preferred_contact_method: completedAssessment?.personal.preferred_contact_method,
               country:
                 assessment?.personal.country || assessment?.travel.travel_from || patient_country,
               city: assessment?.personal.city,
@@ -1157,7 +1215,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 17,
+      version: 18,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;

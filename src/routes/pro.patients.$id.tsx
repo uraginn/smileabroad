@@ -1,241 +1,166 @@
-import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
-import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
-import { EmptyState, PageHeader } from "@/components/ui-bits";
-import { Card, CardContent } from "@/components/ui/card";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+import { format, isToday, isYesterday } from "date-fns";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Check, Lock, MoreHorizontal, Plus } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useMemo, useState, type ReactNode } from "react";
-import {
-  CalendarCheck2,
-  CheckSquare,
-  ClipboardList,
-  FileText,
-  Lock,
-  Mail,
-  MessageSquare,
-  Phone,
-  Plus,
-  Stethoscope,
-} from "lucide-react";
-import { format } from "date-fns";
-import { toast } from "sonner";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState, PageLoading, StatusBadge } from "@/components/ui-bits";
+import { LogContactDialog, ScheduleFollowUpDialog } from "@/components/lead-actions";
+import { PatientFormDialog } from "@/components/patient-form-dialog";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { formatCrmDate } from "@/lib/format";
+import { getFollowUpState } from "@/lib/lead-workflow";
+import {
+  derivePatientOperationalStatus,
+  getActivePatientPlan,
+  getPatientActivity,
+  getPatientNextFollowUp,
+} from "@/lib/patient-workspace";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 import { formatQuoteMoney } from "@/lib/quote";
-import type { AssessmentUploads } from "@/types/models";
+import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 
-export const Route = createFileRoute("/pro/patients/$id")({ component: PatientDetail });
+export const Route = createFileRoute("/pro/patients/$id")({ component: PatientWorkspace });
 
-function PatientDetail() {
+function PatientWorkspace() {
   const { id } = Route.useParams();
-  const activeUser = useAuth((s) => s.user);
-  const hydrated = useMockStoreHydrated();
   const navigate = useNavigate();
-  const patient = useMockStore((s) =>
-    s.patients.find((p) => p.id === id && p.clinic_id === activeUser?.clinic_id),
-  );
-  const users = useMockStore((s) => s.users);
-  const clinic = useMockStore((s) => s.clinics.find((c) => c.id === patient?.clinic_id));
-  const application = useMockStore((s) =>
-    s.applications.find(
-      (a) =>
-        a.clinic_id === patient?.clinic_id &&
-        (a.clinic_patient_id === patient?.id || a.patient_user_id === patient?.user_id),
-    ),
-  );
-  const assessment = useMockStore((s) =>
-    s.assessments.find((a) => a.id === (patient?.assessment_id ?? application?.assessment_id)),
-  );
-  const roadmap = useMockStore((s) =>
-    s.roadmaps.find((r) => r.id === (patient?.roadmap_id ?? application?.roadmap_id)),
-  );
-  const lead = useMockStore((s) =>
-    s.leads.find(
-      (l) =>
-        l.clinic_id === patient?.clinic_id &&
-        (l.clinic_patient_id === patient?.id ||
-          l.clinic_application_id === application?.id ||
-          (!l.clinic_patient_id && l.patient_user_id === patient?.user_id)),
-    ),
-  );
-  const allFiles = useMockStore((s) => s.files);
-  const allActivities = useMockStore((s) => s.activities);
-  const allPlans = useMockStore((s) => s.treatmentPlans);
-  const allTasks = useMockStore((s) => s.tasks);
-  const files = useMemo(
+  const actor = useAuth((state) => state.user);
+  const hydrated = useMockStoreHydrated();
+  const patients = useMockStore((state) => state.patients);
+  const leads = useMockStore((state) => state.leads);
+  const applications = useMockStore((state) => state.applications);
+  const assessments = useMockStore((state) => state.assessments);
+  const roadmaps = useMockStore((state) => state.roadmaps);
+  const files = useMockStore((state) => state.files);
+  const plans = useMockStore((state) => state.treatmentPlans);
+  const appointments = useMockStore((state) => state.appointments);
+  const activities = useMockStore((state) => state.activities);
+  const followUps = useMockStore((state) => state.followUps);
+  const users = useMockStore((state) => state.users);
+  const addPlan = useMockStore((state) => state.addTreatmentPlan);
+  const completeFollowUp = useMockStore((state) => state.completeFollowUp);
+  const patient = patients.find((item) => item.id === id && item.clinic_id === actor?.clinic_id);
+  const patientLeads = useMemo(
     () =>
-      allFiles.filter(
-        (f) =>
-          f.patient_user_id === patient?.user_id &&
-          (!f.clinic_id || f.clinic_id === patient?.clinic_id),
-      ),
-    [allFiles, patient?.clinic_id, patient?.user_id],
-  );
-  const activities = useMemo(
-    () => allActivities.filter((a) => a.clinic_id === patient?.clinic_id && a.lead_id === lead?.id),
-    [allActivities, lead?.id, patient?.clinic_id],
-  );
-  const internalNotes = useMemo(
-    () => activities.filter((activity) => activity.kind === "note" && activity.internal),
-    [activities],
-  );
-  const tasks = useMemo(
-    () =>
-      allTasks
+      leads
         .filter(
-          (task) =>
-            task.clinic_id === patient?.clinic_id &&
-            (task.lead_id === lead?.id ||
-              (!!patient?.user_id && task.patient_user_id === patient.user_id)),
+          (item) =>
+            item.clinic_id === patient?.clinic_id &&
+            (item.clinic_patient_id === patient?.id ||
+              (!!patient?.user_id && item.patient_user_id === patient.user_id)),
         )
-        .sort((a, b) => {
-          if (a.done !== b.done) return a.done ? 1 : -1;
-          if (a.due_at && b.due_at) return +new Date(a.due_at) - +new Date(b.due_at);
-          if (a.due_at) return -1;
-          if (b.due_at) return 1;
-          return +new Date(b.created_at) - +new Date(a.created_at);
-        }),
-    [allTasks, lead?.id, patient?.clinic_id, patient?.user_id],
+        .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)),
+    [leads, patient?.clinic_id, patient?.id, patient?.user_id],
   );
-  const plans = useMemo(
+  const lead = patientLeads[0];
+  const application = applications.find(
+    (item) =>
+      item.clinic_id === patient?.clinic_id &&
+      (item.clinic_patient_id === patient?.id || item.patient_user_id === patient?.user_id),
+  );
+  const assessment = assessments.find(
+    (item) =>
+      item.id === (patient?.assessment_id ?? lead?.assessment_id ?? application?.assessment_id),
+  );
+  const roadmap = roadmaps.find(
+    (item) => item.id === (patient?.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id),
+  );
+  const patientPlans = useMemo(
     () =>
-      allPlans.filter(
-        (t) =>
-          t.clinic_id === patient?.clinic_id &&
-          (t.clinic_patient_id === patient?.id ||
-            (!t.clinic_patient_id && t.patient_user_id === patient?.user_id)),
+      plans
+        .filter(
+          (item) =>
+            item.clinic_id === patient?.clinic_id &&
+            (item.clinic_patient_id === patient?.id ||
+              (!item.clinic_patient_id && item.patient_user_id === patient?.user_id)),
+        )
+        .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)),
+    [patient?.clinic_id, patient?.id, patient?.user_id, plans],
+  );
+  const activePlan = patient ? getActivePatientPlan(plans, patient) : undefined;
+  const patientAppointments = useMemo(
+    () =>
+      appointments
+        .filter(
+          (item) =>
+            item.clinic_id === patient?.clinic_id &&
+            (item.patient_user_id === patient?.user_id || item.patient_user_id === patient?.id),
+        )
+        .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at)),
+    [appointments, patient?.clinic_id, patient?.id, patient?.user_id],
+  );
+  const patientFiles = useMemo(
+    () =>
+      files.filter(
+        (item) =>
+          (!item.clinic_id || item.clinic_id === patient?.clinic_id) &&
+          (item.patient_user_id === patient?.user_id || item.patient_user_id === patient?.id),
       ),
-    [allPlans, patient?.clinic_id, patient?.id, patient?.user_id],
+    [files, patient?.clinic_id, patient?.id, patient?.user_id],
   );
-
-  const clinicUsers = useMemo(
-    () => users.filter((user) => user.clinic_id === patient?.clinic_id),
-    [patient?.clinic_id, users],
-  );
-  const coordinator = useMemo(
+  const patientActivity = useMemo(
     () =>
-      clinicUsers.find((user) => user.id === lead?.assigned_to) ??
-      clinicUsers.find((user) => user.role === "coordinator"),
-    [clinicUsers, lead?.assigned_to],
+      patient
+        ? getPatientActivity({ activities, patient, leadIds: patientLeads.map((item) => item.id) })
+        : [],
+    [activities, patient, patientLeads],
   );
-  const dentist = useMemo(() => clinicUsers.find((user) => user.role === "dentist"), [clinicUsers]);
-
-  const activitiesNewestFirst = useMemo(
-    () =>
-      activities
-        .slice()
-        .sort(
-          (a, b) =>
-            +new Date(b.occurred_at ?? b.created_at) - +new Date(a.occurred_at ?? a.created_at),
-        ),
-    [activities],
+  const nextFollowUp = patient
+    ? getPatientNextFollowUp(
+        followUps,
+        patient,
+        patientLeads.map((item) => item.id),
+      )
+    : undefined;
+  const [editOpen, setEditOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  if (!hydrated) return <PageLoading label="Opening patient workspace" />;
+  if (!patient || !actor?.clinic_id) throw notFound();
+  const clinicUsers = users.filter(
+    (item) => item.clinic_id === patient.clinic_id && item.active !== false,
   );
-  const nextFollowUp = useMemo(
-    () =>
-      tasks.find((task) => !task.done && !!task.due_at && task.category === "follow_up") ??
-      tasks.find((task) => !task.done && !!task.due_at),
-    [tasks],
+  const coordinator = users.find(
+    (item) => item.id === (patient.coordinator_id ?? lead?.assigned_to),
   );
-
-  const assessmentTimeframe =
-    [assessment?.travel.earliest_date, assessment?.travel.latest_date]
-      .filter(Boolean)
-      .join(" - ") || assessment?.travel.treatment_timeline;
-  const warningText =
-    [assessment?.medical.complications, assessment?.medical.additional_notes]
-      .filter(Boolean)
-      .join("\n") || undefined;
-
-  const timelineEvents = useMemo(() => {
-    const events: Array<{ id: string; at: string; title: string; detail?: string }> = [];
-    if (lead) {
-      events.push({
-        id: `lead-${lead.id}`,
-        at: lead.created_at,
-        title: "Lead Created",
-        detail: `${lead.treatment} · ${lead.source}`,
-      });
-    }
-    if (assessment) {
-      events.push({
-        id: `assessment-${assessment.id}`,
-        at: assessment.created_at,
-        title: "Assessment Submitted",
-      });
-    }
-    if (roadmap) {
-      events.push({
-        id: `roadmap-${roadmap.id}`,
-        at: roadmap.created_at,
-        title: "Roadmap Generated",
-        detail: roadmap.estimated_treatment,
-      });
-    }
-    if (application) {
-      events.push({
-        id: `application-${application.id}`,
-        at: application.created_at,
-        title: "Applied to Clinic",
-        detail: application.status,
-      });
-    }
-    for (const activity of activities) {
-      events.push({
-        id: `activity-${activity.id}`,
-        at: activity.occurred_at ?? activity.created_at,
-        title: activity.kind === "status_change" ? "Status Changed" : kindLabel(activity.kind),
-        detail: activity.body,
-      });
-    }
-    for (const plan of plans) {
-      events.push({
-        id: `plan-${plan.id}`,
-        at: plan.created_at,
-        title: "Treatment Plan Created",
-        detail: plan.title,
-      });
-    }
-    return events.sort((a, b) => +new Date(a.at) - +new Date(b.at));
-  }, [activities, application, assessment, lead, plans, roadmap]);
-
-  const [internalNote, setInternalNote] = useState("");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDueDate, setTaskDueDate] = useState("");
-  const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high">("medium");
-  const [taskAssignee, setTaskAssignee] = useState("");
-  const [communicationType, setCommunicationType] = useState<
-    "whatsapp" | "call" | "email" | "in_person"
-  >("whatsapp");
-  const [communicationSummary, setCommunicationSummary] = useState("");
-  const [communicationAt, setCommunicationAt] = useState(() =>
-    format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+  const dentist = users.find((item) => item.id === (patient.dentist_id ?? activePlan?.dentist_id));
+  const upcomingAppointments = patientAppointments.filter(
+    (item) => new Date(item.starts_at) >= new Date(),
   );
-  const [followUpDate, setFollowUpDate] = useState("");
-  const [followUpNote, setFollowUpNote] = useState("");
-  const [followUpAssignee, setFollowUpAssignee] = useState("");
-  const addTreatmentPlan = useMockStore((s) => s.addTreatmentPlan);
-  const addLeadActivity = useMockStore((s) => s.addLeadActivity);
-  const addTask = useMockStore((s) => s.addTask);
-  const toggleTask = useMockStore((s) => s.toggleTask);
-
-  if (!hydrated) return null;
-  if (!patient) throw notFound();
-
-  const createTreatmentPlan = () => {
-    const treatment = assessment?.dental.treatment_interest || patient.treatment_interest;
-    const plan = addTreatmentPlan(
+  const pastAppointments = patientAppointments
+    .filter((item) => new Date(item.starts_at) < new Date())
+    .reverse();
+  const status = derivePatientOperationalStatus({
+    patient,
+    lead,
+    plan: activePlan,
+    hasUpcomingAppointment: upcomingAppointments.length > 0,
+  });
+  const communications = patientActivity.filter((item) =>
+    ["call", "whatsapp", "email", "in_person", "note"].includes(item.kind),
+  );
+  const lastContact = communications.find((item) => item.kind !== "note");
+  const createOrOpenPlan = () => {
+    if (activePlan)
+      return void navigate({ to: "/dentalplan", search: { treatmentPlanId: activePlan.id } });
+    const plan = addPlan(
       {
         clinic_id: patient.clinic_id,
         patient_user_id: patient.user_id ?? patient.id,
@@ -244,730 +169,350 @@ function PatientDetail() {
         clinic_application_id: application?.id,
         assessment_id: assessment?.id,
         roadmap_id: roadmap?.id,
-        title: treatment
-          ? `${treatment} treatment plan`
-          : `Treatment plan for ${patient.first_name} ${patient.last_name}`,
-        summary: assessment?.dental.concerns || "Draft clinical treatment plan.",
+        dentist_id: patient.dentist_id,
+        coordinator_id: patient.coordinator_id ?? lead?.assigned_to,
+        title: `${patient.treatment_interest ?? assessment?.dental.treatment_interest ?? "Dental"} Treatment Plan`,
+        summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
         items: [],
         visits: 1,
         healing_weeks: 0,
-        preliminary_suggestions: roadmap?.treatment_estimates?.map((item) => ({ ...item })) ?? [],
+        preliminary_suggestions: roadmap?.treatment_estimates ?? [],
         status: "draft",
       },
-      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
+      actor.id,
     );
-    navigate({ to: "/pro/treatment-plans/$id", params: { id: plan.id } });
+    void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
   };
-  const saveInternalNote = () => {
-    const body = internalNote.trim();
-    if (!body || !lead) return;
-    addLeadActivity({
-      clinic_id: patient.clinic_id,
-      lead_id: lead.id,
-      kind: "note",
-      body,
-      internal: true,
-      created_by: activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
-    });
-    setInternalNote("");
-    toast.success("Internal note saved");
-  };
-
-  const saveTask = () => {
-    const title = taskTitle.trim();
-    if (!title) return;
-    addTask(
-      {
-        clinic_id: patient.clinic_id,
-        lead_id: lead?.id,
-        patient_user_id: patient.user_id,
-        title,
-        due_at: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
-        assigned_to: taskAssignee || coordinator?.id || activeUser?.id,
-        priority: taskPriority,
-        category: "task",
-        done: false,
-      },
-      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
-    );
-    setTaskTitle("");
-    setTaskDueDate("");
-    toast.success("Task added");
-  };
-
-  const saveCommunication = () => {
-    const body = communicationSummary.trim();
-    if (!body || !lead || !communicationAt) return;
-    addLeadActivity({
-      clinic_id: patient.clinic_id,
-      lead_id: lead.id,
-      kind: communicationType,
-      body,
-      internal: true,
-      occurred_at: new Date(communicationAt).toISOString(),
-      created_by: activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
-    });
-    setCommunicationSummary("");
-    toast.success("Communication recorded");
-  };
-
-  const saveFollowUp = () => {
-    const note = followUpNote.trim();
-    if (!followUpDate || !note) return;
-    addTask(
-      {
-        clinic_id: patient.clinic_id,
-        lead_id: lead?.id,
-        patient_user_id: patient.user_id,
-        title: note,
-        due_at: new Date(followUpDate).toISOString(),
-        assigned_to: followUpAssignee || coordinator?.id || activeUser?.id,
-        priority: "medium",
-        category: "follow_up",
-        done: false,
-      },
-      activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
-    );
-    setFollowUpDate("");
-    setFollowUpNote("");
-    toast.success("Follow-up scheduled");
-  };
-
-  const patientName = `${patient.first_name} ${patient.last_name}`;
-
+  const warnings = [
+    nextFollowUp && getFollowUpState(nextFollowUp) === "overdue"
+      ? "Patient follow-up is overdue."
+      : undefined,
+    !patientFiles.some((item) => ["panoramic", "cbct"].includes(item.kind)) &&
+    !(assessment?.uploads.uploaded_panoramic || assessment?.uploads.uploaded_cbct)
+      ? "No X-ray metadata is available."
+      : undefined,
+    activePlan?.status === "doctor_review"
+      ? "Treatment Plan is awaiting doctor review."
+      : undefined,
+    activePlan?.status === "viewed"
+      ? "Patient viewed the Treatment Plan; follow-up may be needed."
+      : undefined,
+  ].filter(Boolean) as string[];
   return (
-    <div className="p-4 sm:p-6 max-w-6xl space-y-6">
-      <PageHeader
-        title={patientName}
-        description={`${patient.country} • ${patient.language ?? "Language not set"} • ${patient.email}`}
-        actions={
-          <>
-            <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
-              <Plus className="size-4 mr-1" />
-              {plans.length > 0 ? "Open Treatment Plan" : "Create Treatment Plan"}
-            </Button>
-            <Button variant="outline" disabled>
-              <CalendarCheck2 className="size-4 mr-1" /> Schedule Appointment
-            </Button>
-          </>
-        }
-      />
-
-      <Card>
-        <CardContent className="p-4 sm:p-5">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <HeaderField label="Country" value={patient.country} />
-            <HeaderField label="Preferred language" value={patient.language} />
-            <HeaderField label="Lead source" value={lead?.source ?? patient.source} capitalize />
-            <HeaderField
-              label="Treatment interest"
-              value={patient.treatment_interest ?? assessment?.dental.treatment_interest}
-            />
-            <HeaderField label="Coordinator" value={coordinator?.name} />
-            <HeaderField label="Dentist" value={dentist?.name ?? "Not assigned"} />
-            <HeaderField
-              label="Current CRM stage"
-              value={lead?.status?.replace(/_/g, " ") ?? "Not linked"}
-              capitalize
-            />
-            <HeaderField label="Last activity" value={formatDateTime(lead?.last_activity_at)} />
-            <HeaderField label="Next follow-up" value={formatDateTime(nextFollowUp?.due_at)} />
+    <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Button asChild variant="ghost" size="sm" className="-ml-3">
+            <Link to="/pro/patients">← Patients</Link>
+          </Button>
+          <h1 className="mt-1 text-2xl font-semibold">
+            {patient.first_name} {patient.last_name}
+          </h1>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <StatusBadge status={status} />
+            <Badge variant="outline">{patient.country}</Badge>
+            <Badge variant="outline">{patient.language || "Language not set"}</Badge>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {clinic && <Badge variant="outline">{clinic.name}</Badge>}
-            {application?.status && (
-              <Badge variant="secondary">Application: {application.status}</Badge>
-            )}
-            {lead?.priority && <Badge variant="outline">Priority: {lead.priority}</Badge>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-primary/20">
-        <CardContent className="p-4 sm:p-5 space-y-3">
-          <div>
-            <p className="font-display font-semibold">Next follow-up</p>
-            <p className="text-sm text-muted-foreground">
-              {nextFollowUp
-                ? `${formatDateTime(nextFollowUp.due_at)} · ${nextFollowUp.title}`
-                : "No follow-up scheduled"}
-            </p>
-          </div>
-          <div className="grid md:grid-cols-[auto_1fr_200px_auto] gap-2">
-            <Input
-              type="datetime-local"
-              aria-label="Follow-up date"
-              value={followUpDate}
-              onChange={(event) => setFollowUpDate(event.target.value)}
-            />
-            <Input
-              aria-label="Follow-up note"
-              placeholder="Short follow-up note"
-              value={followUpNote}
-              onChange={(event) => setFollowUpNote(event.target.value)}
-            />
-            <Select
-              value={followUpAssignee || "auto"}
-              onValueChange={(value) => setFollowUpAssignee(value === "auto" ? "" : value)}
-            >
-              <SelectTrigger aria-label="Follow-up assignee">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Default coordinator</SelectItem>
-                {clinicUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={saveFollowUp} disabled={!followUpDate || !followUpNote.trim()}>
-              Set follow-up
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <h3 className="font-display font-semibold">Assessment</h3>
-            <DetailRows
-              rows={[
-                ["Treatment interest", assessment?.dental.treatment_interest],
-                ["Preferred destination", assessment?.travel.destination_country],
-                ["Preferred cities", assessment?.travel.preferred_cities?.join(", ")],
-                ["Travel timeframe", assessmentTimeframe],
-              ]}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <h3 className="font-display font-semibold">Medical</h3>
-            <DetailRows
-              rows={[
-                ["Allergies", assessment?.medical.allergies],
-                ["Medications", assessment?.medical.medications],
-                ["Smoking", assessment ? (assessment.medical.smoking ? "Yes" : "No") : undefined],
-                ["Important warnings", warningText],
-              ]}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <h3 className="font-display font-semibold">Files</h3>
-            {files.length === 0 ? (
-              <EmptyState
-                title="No uploads yet"
-                description="Uploaded file metadata will appear here."
-              />
-            ) : (
-              <div className="space-y-2">
-                {files.slice(0, 3).map((file) => (
-                  <div key={file.id} className="rounded-lg border p-2.5">
-                    <p className="text-sm font-medium truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {file.kind.replace(/_/g, " ")} · {formatBytes(file.size)}
-                    </p>
-                  </div>
-                ))}
-                {files.length > 3 && (
-                  <p className="text-xs text-muted-foreground">+{files.length - 3} more files</p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="overview">
-        <TabsList className="mb-4 flex-wrap h-auto">
-          {[
-            ["overview", "Overview"],
-            ["roadmap", "Roadmap Summary"],
-            ["assessment", "Assessment"],
-            ["medical", "Medical"],
-            ["files", "Files"],
-            ["notes", "Notes"],
-            ["communication", "Communication"],
-            ["tasks", "Tasks"],
-            ["treatment-plans", "Treatment Plans"],
-            ["activity", "Activity"],
-          ].map(([value, label]) => (
-            <TabsTrigger key={value} value={value} className="capitalize">
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="overview">
-          <div className="grid md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground">Treatment plans</p>
-                <p className="text-2xl font-display font-semibold mt-1">{plans.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground">Estimated plan value</p>
-                <p className="text-2xl font-display font-semibold mt-1">
-                  {formatQuoteMoney(
-                    plans.reduce(
-                      (total, plan) => total + calculateTreatmentPlanTotals(plan).total,
-                      0,
-                    ),
-                    plans[0]?.currency ?? "EUR",
-                  )}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground">Open tasks</p>
-                <p className="text-2xl font-display font-semibold mt-1">
-                  {tasks.filter((task) => !task.done).length}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-        <TabsContent value="roadmap">
-          {!roadmap || !assessment ? (
-            <EmptyState
-              title="No Roadmap linked"
-              description="A preliminary Roadmap summary will appear when the Lead includes a valid Roadmap reference."
-            />
-          ) : (
-            <div className="space-y-4">
-              <Alert>
-                <Lock className="size-4" />
-                <AlertTitle>Read-only preliminary Roadmap</AlertTitle>
-                <AlertDescription>
-                  This patient-provided Roadmap is an immutable source record. Clinical decisions
-                  belong in the clinic Treatment Plan.
-                </AlertDescription>
-              </Alert>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <DetailCard
-                  title="Roadmap summary"
-                  rows={[
-                    ["Reference", roadmap.id.slice(-8).toUpperCase()],
-                    ["Destination", assessment.travel.destination_country],
-                    ["Preferred cities", assessment.travel.preferred_cities.join(", ")],
-                    [
-                      "Estimated price",
-                      roadmap.price_max > 0
-                        ? `${formatRoadmapMoney(roadmap.price_min, roadmap.currency)}–${formatRoadmapMoney(roadmap.price_max, roadmap.currency)}`
-                        : "Not available",
-                    ],
-                    ["Prepared", format(new Date(roadmap.created_at), "MMM d, yyyy")],
-                  ]}
-                />
-                <DetailCard
-                  title="Medical summary"
-                  rows={[
-                    [
-                      "Conditions",
-                      assessment.medical.conditions.length
-                        ? assessment.medical.conditions.join(", ")
-                        : "None reported",
-                    ],
-                    ["Medications", assessment.medical.medications || "None reported"],
-                    ["Allergies", assessment.medical.allergies || "None reported"],
-                    ["Smoking", assessment.medical.smoking ? "Yes" : "No"],
-                  ]}
-                />
-              </div>
-              <Card>
-                <CardContent className="space-y-4 p-5">
-                  <div>
-                    <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-                      Estimated treatments
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(roadmap.treatment_estimates ?? []).map((item) => (
-                        <Badge key={item.treatment_key} variant="secondary">
-                          {item.label}
-                          {item.estimated_quantity ? ` × ${item.estimated_quantity}` : ""}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <DetailRows
-                    rows={[
-                      [
-                        "Treatment journey",
-                        (roadmap.treatment_journey ?? []).map((step) => step.title).join(" → ") ||
-                          roadmap.timeline_summary,
-                      ],
-                      ["Uploaded files", roadmapUploadSummary(assessment.uploads)],
-                    ]}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsContent>
-        <TabsContent value="assessment">
-          {!assessment ? (
-            <EmptyState
-              title="No assessment linked"
-              description="Assessment details will appear when available."
-            />
-          ) : (
-            <div className="grid lg:grid-cols-2 gap-4">
-              <DetailCard
-                title="Dental information"
-                rows={[
-                  ["Treatment interest", assessment.dental.treatment_interest],
-                  ["Concerns", assessment.dental.concerns],
-                  ["Affected areas", assessment.dental.affected_areas],
-                  ["Missing teeth", assessment.dental.missing_teeth],
-                  ["Expected result", assessment.dental.expected_result],
-                  ["Additional notes", assessment.dental.additional_notes],
-                ]}
-              />
-              <DetailCard
-                title="Personal information"
-                rows={[
-                  [
-                    "Name",
-                    `${assessment.personal.first_name} ${assessment.personal.last_name ?? ""}`.trim(),
-                  ],
-                  ["Email", assessment.personal.email],
-                  ["Phone", assessment.personal.phone],
-                  ["WhatsApp", assessment.personal.whatsapp],
-                  ["Country", assessment.personal.country],
-                  ["Language", assessment.personal.preferred_language],
-                ]}
-              />
-              <DetailCard
-                title="Travel preferences"
-                rows={[
-                  ["Destination", assessment.travel.destination_country],
-                  ["Preferred cities", assessment.travel.preferred_cities.join(", ")],
-                  ["Travelling from", assessment.travel.travel_from],
-                  [
-                    "Travel dates",
-                    [assessment.travel.earliest_date, assessment.travel.latest_date]
-                      .filter(Boolean)
-                      .join(" – "),
-                  ],
-                  ["Companions", String(assessment.travel.companions)],
-                  ["Hotel", assessment.travel.needs_hotel ? "Required" : "Not required"],
-                  [
-                    "Airport transfer",
-                    assessment.travel.needs_airport_transfer ? "Required" : "Not required",
-                  ],
-                  ["Budget", assessment.travel.budget],
-                ]}
-              />
-              <DetailCard
-                title="Application"
-                rows={[
-                  ["Status", application?.status],
-                  ["Source", patient.source],
-                  ["Roadmap", application?.roadmap_id ?? patient.roadmap_id],
-                  [
-                    "Submitted",
-                    application
-                      ? format(new Date(application.created_at), "MMM d, yyyy HH:mm")
-                      : undefined,
-                  ],
-                ]}
-              />
-            </div>
-          )}
-        </TabsContent>
-        <TabsContent value="medical">
-          <Card>
-            <CardContent className="p-6">
-              {!assessment ? (
-                <EmptyState
-                  title="No medical data linked"
-                  description="Medical details will appear when available."
-                />
-              ) : (
-                <div className="space-y-5">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
-                      Conditions
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {assessment.medical.conditions.length > 0 ? (
-                        assessment.medical.conditions.map((condition) => (
-                          <Badge key={condition} variant="secondary">
-                            {condition}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-sm text-muted-foreground">None reported</span>
-                      )}
-                    </div>
-                  </div>
-                  <DetailRows
-                    rows={[
-                      ["Medications", assessment.medical.medications],
-                      ["Allergies", assessment.medical.allergies],
-                      ["Smoking", assessment.medical.smoking ? "Yes" : "No"],
-                      ["Pregnancy", assessment.medical.pregnancy ? "Yes" : "No"],
-                      ["Complications", assessment.medical.complications],
-                      ["Additional notes", assessment.medical.additional_notes],
-                    ]}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="files">
-          <Card>
-            <CardContent className="p-6">
-              {files.length === 0 ? (
-                <EmptyState
-                  title="No uploaded files"
-                  description="File metadata will appear here when uploads exist."
-                />
-              ) : (
-                <div className="divide-y">
-                  {files.map((file) => (
-                    <div key={file.id} className="py-3 flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium">{file.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {file.kind.replace(/_/g, " ")} · {formatDateTime(file.created_at)}
-                        </p>
-                      </div>
-                      <Badge variant="outline">{file.mime}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="notes">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Lock className="size-4" /> Internal notes are never shared with the patient.
-              </div>
-              <Textarea
-                rows={4}
-                placeholder="Add an internal note…"
-                value={internalNote}
-                onChange={(e) => setInternalNote(e.target.value)}
-              />
-              <Button size="sm" onClick={saveInternalNote} disabled={!lead || !internalNote.trim()}>
-                Save note
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={createOrOpenPlan}>
+            {activePlan ? "Open Treatment Plan" : "Create Treatment Plan"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" aria-label="More patient actions">
+                <MoreHorizontal className="size-4" /> Actions
               </Button>
-              {!lead && (
-                <p className="text-xs text-muted-foreground">
-                  A CRM lead is required before notes can be saved.
-                </p>
-              )}
-              {internalNotes.length === 0 ? (
-                <EmptyState
-                  title="No internal notes"
-                  description="Add a note to keep clinic-only context on this patient."
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={!lead} onClick={() => setContactOpen(true)}>
+                Log contact
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!lead} onClick={() => setFollowUpOpen(true)}>
+                Schedule follow-up
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/pro/tasks">Create task</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/pro/appointments">Book appointment</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEditOpen(true)}>Edit patient</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      <Card>
+        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Meta label="Coordinator" value={coordinator?.name ?? "Unassigned"} />
+          <Meta label="Dentist" value={dentist?.name ?? "Not assigned"} />
+          <Meta
+            label="Next follow-up"
+            value={
+              nextFollowUp
+                ? `${formatCrmDate(nextFollowUp.due_at)} · ${getFollowUpState(nextFollowUp).replace(/_/g, " ")}`
+                : "Not scheduled"
+            }
+          />
+          <Meta
+            label="Last contact"
+            value={
+              lastContact
+                ? formatCrmDate(lastContact.occurred_at ?? lastContact.created_at)
+                : "No contact logged"
+            }
+          />
+          <Meta label="Source" value={patient.source ?? lead?.source ?? "manual"} />
+        </CardContent>
+      </Card>
+      <Tabs defaultValue="overview">
+        <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="clinical">Clinical Information</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="plans">Treatment Plans</TabsTrigger>
+          <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          <TabsTrigger value="communication">Communication</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <InfoCard title="Contact">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Meta label="Full name" value={`${patient.first_name} ${patient.last_name}`} />
+                <Meta label="Email" value={patient.email} link={`mailto:${patient.email}`} />
+                <Meta
+                  label="WhatsApp / phone"
+                  value={patient.whatsapp ?? patient.phone}
+                  link={
+                    patient.whatsapp || patient.phone
+                      ? `tel:${patient.whatsapp ?? patient.phone}`
+                      : undefined
+                  }
                 />
-              ) : (
-                <div className="pt-4 border-t space-y-3">
-                  {internalNotes
-                    .slice()
-                    .reverse()
-                    .map((note) => (
-                      <div key={note.id} className="rounded-lg bg-surface p-3">
-                        <p className="text-sm whitespace-pre-line">{note.body}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {format(new Date(note.created_at), "MMM d, yyyy HH:mm")} · Internal
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="communication">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Lock className="size-4" /> Communication records are clinic-only manual entries.
+                <Meta
+                  label="Preferred contact"
+                  value={
+                    patient.preferred_contact_method ??
+                    assessment?.personal.preferred_contact_method
+                  }
+                />
+                <Meta label="Preferred language" value={patient.language} />
+                <Meta label="Country" value={patient.country} />
               </div>
-              <div className="grid md:grid-cols-[180px_220px_1fr_auto] gap-2">
-                <Select
-                  value={communicationType}
-                  onValueChange={(value) => setCommunicationType(value as typeof communicationType)}
-                >
-                  <SelectTrigger aria-label="Communication type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                    <SelectItem value="call">Phone Call</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="in_person">In Person</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="datetime-local"
-                  aria-label="Communication date"
-                  value={communicationAt}
-                  onChange={(event) => setCommunicationAt(event.target.value)}
+            </InfoCard>
+            <InfoCard title="Coordination">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Meta label="Coordinator" value={coordinator?.name} />
+                <Meta label="Dentist" value={dentist?.name} />
+                <Meta label="Source" value={patient.source ?? lead?.source} />
+                <Meta label="Status" value={status.replace(/_/g, " ")} />
+                <Meta label="Destination" value={assessment?.travel.destination_country} />
+                <Meta
+                  label="Preferred city"
+                  value={assessment?.travel.preferred_cities?.join(", ")}
                 />
-                <Input
-                  aria-label="Communication summary"
-                  placeholder="Short summary"
-                  value={communicationSummary}
-                  onChange={(event) => setCommunicationSummary(event.target.value)}
-                />
-                <Button
-                  onClick={saveCommunication}
-                  disabled={!lead || !communicationAt || !communicationSummary.trim()}
-                >
-                  Add record
-                </Button>
               </div>
-              {!lead && (
-                <p className="text-xs text-muted-foreground">
-                  A CRM lead is required before communication can be recorded.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="tasks">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="grid md:grid-cols-2 xl:grid-cols-[1fr_auto_150px_200px_auto] gap-2">
-                <Input
-                  placeholder="Add task"
-                  value={taskTitle}
-                  onChange={(event) => setTaskTitle(event.target.value)}
-                />
-                <Input
-                  type="date"
-                  value={taskDueDate}
-                  onChange={(event) => setTaskDueDate(event.target.value)}
-                />
-                <Select
-                  value={taskPriority}
-                  onValueChange={(value) => setTaskPriority(value as typeof taskPriority)}
-                >
-                  <SelectTrigger aria-label="Task priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={taskAssignee || "auto"}
-                  onValueChange={(value) => setTaskAssignee(value === "auto" ? "" : value)}
-                >
-                  <SelectTrigger aria-label="Task assignee">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Default coordinator</SelectItem>
-                    {clinicUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={saveTask} disabled={!taskTitle.trim()}>
-                  <Plus className="size-4 mr-1" /> Add task
-                </Button>
-              </div>
-
-              {tasks.length === 0 ? (
-                <EmptyState
-                  title="No tasks"
-                  description="Add tasks to track follow-ups for this patient."
-                />
-              ) : (
-                <div className="divide-y rounded-lg border">
-                  {tasks.map((task) => (
-                    <label
-                      key={task.id}
-                      className="flex items-center gap-3 p-3 cursor-pointer hover:bg-surface/70"
-                    >
-                      <Checkbox
-                        checked={task.done}
-                        onCheckedChange={() =>
-                          toggleTask(
-                            task.id,
-                            activeUser?.clinic_id === patient.clinic_id ? activeUser.id : "system",
-                          )
-                        }
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className={task.done ? "line-through text-muted-foreground" : ""}>
-                          {task.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {task.due_at
-                            ? `Due ${format(new Date(task.due_at), "MMM d, yyyy")}`
-                            : "No due date"}
-                          {` · ${(task.priority ?? "medium").replace(/^./, (letter) => letter.toUpperCase())} priority`}
-                          {task.assigned_to &&
-                            ` · ${users.find((user) => user.id === task.assigned_to)?.name ?? "Assigned"}`}
-                        </p>
-                      </div>
-                      <Badge variant={task.done ? "outline" : "secondary"}>
-                        {task.done ? "Completed" : "Open"}
-                      </Badge>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="treatment-plans">
-          <div className="space-y-2">
-            {plans.length === 0 ? (
-              <EmptyState
-                title="No treatment plans yet"
-                description="Create a treatment plan to capture clinical scope and pricing assumptions."
-                action={
-                  <Button onClick={createTreatmentPlan} disabled={!patient.user_id}>
-                    <Plus className="size-4 mr-1" /> Create Treatment Plan
-                  </Button>
+            </InfoCard>
+          </div>
+          <InfoCard title="Current case">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Meta label="Latest Lead" value={lead?.treatment} />
+              <Meta
+                label="Preliminary Roadmap"
+                value={
+                  roadmap ? `Available · ${formatCrmDate(roadmap.created_at)}` : "Not available"
                 }
               />
-            ) : (
-              plans.map((p) => {
-                const planDentist = clinicUsers.find((user) => user.id === p.dentist_id);
-                const totals = calculateTreatmentPlanTotals(p);
+              <Meta
+                label="Clinic Treatment Plan"
+                value={activePlan ? `${activePlan.title} · ${activePlan.status}` : "Not created"}
+              />
+              <Meta
+                label="Next appointment"
+                value={
+                  upcomingAppointments[0]
+                    ? formatCrmDate(upcomingAppointments[0].starts_at)
+                    : "Not scheduled"
+                }
+              />
+            </div>
+          </InfoCard>
+          {warnings.length > 0 && (
+            <Alert>
+              <AlertTriangle className="size-4" />
+              <AlertTitle>Needs attention</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc pl-5">
+                  {warnings.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+          {nextFollowUp && (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle className="text-base">Next follow-up</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    completeFollowUp(nextFollowUp.id, patient.clinic_id, actor.id);
+                    toast.success("Follow-up completed");
+                  }}
+                >
+                  <Check className="size-4" />
+                  Complete
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm font-medium">{nextFollowUp.reason}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(nextFollowUp.due_at), "MMM d, yyyy HH:mm")} ·{" "}
+                  {nextFollowUp.notes || "No notes"}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        <TabsContent value="clinical">
+          <Accordion
+            type="multiple"
+            defaultValue={["dental", "medical"]}
+            className="rounded-xl border px-4"
+          >
+            <ClinicalSection value="dental" title="Dental Concerns">
+              <DetailGrid
+                rows={[
+                  [
+                    "Treatment interest",
+                    assessment?.dental.treatment_interest ?? patient.treatment_interest,
+                  ],
+                  ["Concerns", assessment?.dental.concerns],
+                  ["Affected areas", assessment?.dental.affected_areas],
+                  ["Missing teeth", assessment?.dental.missing_teeth],
+                  ["Pain / sensitivity", assessment?.dental.pain],
+                  ["Previous treatment", assessment?.dental.previous_treatment],
+                  ["Expected result", assessment?.dental.expected_result],
+                ]}
+              />
+            </ClinicalSection>
+            <ClinicalSection value="medical" title="Medical Safety">
+              {assessment ? (
+                <>
+                  <Alert>
+                    <AlertTitle>Patient-reported safety information</AlertTitle>
+                    <AlertDescription>
+                      Review clinically; these answers are not a confirmed diagnosis.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="mt-4">
+                    <DetailGrid
+                      rows={[
+                        ["Conditions", assessment.medical.conditions.join(", ") || "None reported"],
+                        ["Medications", assessment.medical.medications],
+                        ["Allergies", assessment.medical.allergies],
+                        ["Smoking", assessment.medical.smoking ? "Yes" : "No"],
+                        ["Blood thinners", assessment.medical.blood_thinners ? "Yes" : "No"],
+                        ["Complications", assessment.medical.complications],
+                      ]}
+                    />
+                  </div>
+                </>
+              ) : (
+                <EmptyState title="No medical information" />
+              )}
+            </ClinicalSection>
+            <ClinicalSection value="assessment" title="Assessment Summary">
+              {assessment ? (
+                <DetailGrid
+                  rows={[
+                    ["Submitted", formatCrmDate(assessment.created_at)],
+                    ["Destination", assessment.travel.destination_country],
+                    ["Preferred cities", assessment.travel.preferred_cities.join(", ")],
+                    ["Treatment interest", assessment.dental.treatment_interest],
+                    [
+                      "Uploaded metadata",
+                      Object.values(assessment.uploads).filter(Boolean).length
+                        ? `${Object.values(assessment.uploads).filter(Boolean).length} categories`
+                        : "None",
+                    ],
+                  ]}
+                />
+              ) : (
+                <EmptyState title="No Assessment linked" />
+              )}
+            </ClinicalSection>
+            <ClinicalSection value="roadmap" title="Preliminary Roadmap">
+              {roadmap ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Read-only preliminary information; not a clinic-confirmed Treatment Plan.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(roadmap.treatment_estimates ?? []).map((item) => (
+                      <Badge key={item.treatment_key} variant="outline">
+                        {item.label}
+                        {item.estimated_quantity ? ` · approx. ${item.estimated_quantity}` : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                  <DetailGrid
+                    rows={[
+                      ["Destination", assessment?.travel.destination_country],
+                      [
+                        "Estimated range",
+                        roadmap.price_max
+                          ? `${roadmap.price_min}–${roadmap.price_max} ${roadmap.currency}`
+                          : undefined,
+                      ],
+                      ["Prepared", formatCrmDate(roadmap.created_at)],
+                    ]}
+                  />
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/roadmap/$id" params={{ id: roadmap.id }}>
+                      Open Roadmap
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <EmptyState title="No Roadmap linked" />
+              )}
+            </ClinicalSection>
+          </Accordion>
+        </TabsContent>
+        <TabsContent value="files">
+          <FilesTab files={patientFiles} assessment={assessment} />
+        </TabsContent>
+        <TabsContent value="plans">
+          <div className="space-y-3">
+            {patientPlans.length ? (
+              patientPlans.map((plan) => {
+                const totals = calculateTreatmentPlanTotals(plan);
+                const assigned = users.find((item) => item.id === plan.dentist_id);
                 return (
-                  <Card key={p.id}>
-                    <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
+                  <Card key={plan.id}>
+                    <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
                       <div>
-                        <p className="font-medium">{p.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Created {formatDateTime(p.created_at)} · Updated{" "}
-                          {formatDateTime(p.updated_at)}
-                        </p>
+                        <p className="font-medium">{plan.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {planDentist?.name ?? "Dentist not assigned"} · {p.items.length} clinical
-                          items · {formatQuoteMoney(totals.total, p.currency ?? "EUR")}
+                          {plan.summary || "Treatment summary not provided"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {assigned?.name ?? "Dentist not assigned"} · Updated{" "}
+                          {formatCrmDate(plan.updated_at)} ·{" "}
+                          {formatQuoteMoney(totals.total, plan.currency ?? "EUR")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className="capitalize">
-                          {(p.status ?? "draft").replace(/_/g, " ")}
+                        <StatusBadge status={plan.status ?? "draft"} />
+                        <Badge variant="outline">
+                          {plan.share_token ? "Patient View prepared" : "Not shared"}
                         </Badge>
                         <Button asChild variant="outline" size="sm">
-                          <Link to="/dentalplan" search={{ treatmentPlanId: p.id }}>
+                          <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
                             Open Treatment Plan
                           </Link>
                         </Button>
@@ -976,206 +521,324 @@ function PatientDetail() {
                   </Card>
                 );
               })
+            ) : (
+              <EmptyState
+                title="No Treatment Plans"
+                description="Create the clinic-confirmed patient document when ready."
+                action={
+                  <Button onClick={createOrOpenPlan}>
+                    <Plus className="size-4" />
+                    Create Treatment Plan
+                  </Button>
+                }
+              />
             )}
           </div>
         </TabsContent>
-        <TabsContent value="activity">
+        <TabsContent value="appointments">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button asChild>
+                <Link to="/pro/appointments">Book Appointment</Link>
+              </Button>
+            </div>
+            <AppointmentGroup
+              title="Upcoming appointments"
+              items={upcomingAppointments}
+              users={users}
+              empty="No upcoming appointments"
+            />
+            <AppointmentGroup
+              title="Past appointments"
+              items={pastAppointments}
+              users={users}
+              empty="No past appointments"
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="communication">
           <Card>
-            <CardContent className="p-6">
-              {activitiesNewestFirst.length === 0 ? (
-                <EmptyState
-                  title="No activity yet"
-                  description="Lead status changes and notes will be listed once available."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {activitiesNewestFirst.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex gap-3 border-l-2 border-primary/30 pl-4 py-1"
-                    >
-                      <div className="mt-0.5">{kindIcon(activity.kind)}</div>
-                      <div className="flex-1">
-                        <p className="text-sm">{activity.body}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {kindLabel(activity.kind)}
-                          {users.find((user) => user.id === activity.created_by)
-                            ? ` · ${users.find((user) => user.id === activity.created_by)?.name}`
-                            : ""}
-                        </p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {format(
-                          new Date(activity.occurred_at ?? activity.created_at),
-                          "MMM d, HH:mm",
-                        )}
-                      </p>
+            <CardHeader className="flex-row items-center justify-between">
+              <div>
+                <CardTitle>Communication history</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Manual clinic records; no message is sent from this screen.
+                </p>
+              </div>
+              <Button disabled={!lead} onClick={() => setContactOpen(true)}>
+                Log contact
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {communications.length ? (
+                communications.map((item) => (
+                  <div key={item.id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Badge variant="outline" className="capitalize">
+                        {item.kind.replace(/_/g, " ")}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {formatCrmDate(item.occurred_at ?? item.created_at)}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="mt-2 text-sm">{item.body}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {users.find((user) => user.id === item.created_by)?.name ?? "System"}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  title="No communication recorded"
+                  description="Calls, WhatsApp, email and internal notes will appear here."
+                />
               )}
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="activity">
+          <ActivityTimeline activities={patientActivity} users={users} />
+        </TabsContent>
       </Tabs>
-
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <ClipboardList className="size-4 text-muted-foreground" />
-            <h3 className="font-display font-semibold">Timeline</h3>
-          </div>
-          {timelineEvents.length === 0 ? (
-            <EmptyState
-              title="No timeline events"
-              description="Timeline events will appear as patient records are created."
-            />
-          ) : (
-            <div className="space-y-3">
-              {timelineEvents.map((event) => (
-                <div key={event.id} className="flex gap-3 border-l-2 border-primary/30 pl-4 py-1">
-                  <p className="text-xs text-muted-foreground w-36 shrink-0">
-                    {formatDateTime(event.at)}
-                  </p>
-                  <div>
-                    <p className="text-sm font-medium">{event.title}</p>
-                    {event.detail && (
-                      <p className="text-xs text-muted-foreground">{event.detail}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <PatientFormDialog open={editOpen} onOpenChange={setEditOpen} patient={patient} />
+      {lead && (
+        <>
+          <LogContactDialog open={contactOpen} onOpenChange={setContactOpen} lead={lead} />
+          <ScheduleFollowUpDialog
+            open={followUpOpen}
+            onOpenChange={setFollowUpOpen}
+            lead={lead}
+            patient={patient}
+            users={clinicUsers}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-function HeaderField({
-  label,
-  value,
-  capitalize,
+function FilesTab({
+  files,
+  assessment,
 }: {
-  label: string;
-  value?: string;
-  capitalize?: boolean;
+  files: ReturnType<typeof useMockStore.getState>["files"];
+  assessment?: ReturnType<typeof useMockStore.getState>["assessments"][number];
+}) {
+  const metadata = assessment
+    ? Object.entries(assessment.uploads)
+        .filter(([, present]) => present)
+        .map(([kind]) => ({ kind, label: kind.replace(/^uploaded_/, "").replace(/_/g, " ") }))
+    : [];
+  const groups = [
+    {
+      title: "X-rays",
+      files: files.filter((item) => ["panoramic", "cbct"].includes(item.kind)),
+      metadata: metadata.filter((item) =>
+        ["panoramic", "cbct"].some((kind) => item.kind.includes(kind)),
+      ),
+    },
+    {
+      title: "Dental Photos",
+      files: files.filter((item) => item.kind === "dental_photo"),
+      metadata: metadata.filter((item) => item.kind.includes("photo")),
+    },
+    {
+      title: "Treatment Documents",
+      files: files.filter((item) => ["previous_plan", "previous_report"].includes(item.kind)),
+      metadata: metadata.filter(
+        (item) => item.kind.includes("plan") || item.kind.includes("report"),
+      ),
+    },
+    {
+      title: "Other Files",
+      files: files.filter(
+        (item) =>
+          !["panoramic", "cbct", "dental_photo", "previous_plan", "previous_report"].includes(
+            item.kind,
+          ),
+      ),
+      metadata: [],
+    },
+  ];
+  return (
+    <div className="space-y-4">
+      <Alert>
+        <Lock className="size-4" />
+        <AlertTitle>Clinic-only file metadata</AlertTitle>
+        <AlertDescription>
+          Current localStorage and data-URL handling is development-only and is not production-grade
+          file security.
+        </AlertDescription>
+      </Alert>
+      {groups.map((group) => (
+        <Card key={group.title}>
+          <CardHeader>
+            <CardTitle>{group.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {group.files.map((file) => (
+              <div
+                key={file.id}
+                className="flex items-center justify-between gap-3 rounded-lg border p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {file.kind.replace(/_/g, " ")} · {formatCrmDate(file.created_at)} · Clinic
+                    record
+                  </p>
+                </div>
+                <Badge variant="outline">{file.mime}</Badge>
+              </div>
+            ))}
+            {group.metadata.map((item) => (
+              <div key={item.kind} className="rounded-lg border p-3">
+                <p className="text-sm font-medium capitalize">{item.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  Assessment metadata · File content unavailable in this development environment
+                </p>
+              </div>
+            ))}
+            {!group.files.length && !group.metadata.length && (
+              <EmptyState title={`No ${group.title.toLowerCase()} available`} />
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+function AppointmentGroup({
+  title,
+  items,
+  users,
+  empty,
+}: {
+  title: string;
+  items: ReturnType<typeof useMockStore.getState>["appointments"];
+  users: ReturnType<typeof useMockStore.getState>["users"];
+  empty: string;
 }) {
   return (
-    <div className="rounded-lg border bg-surface/50 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-sm font-medium mt-1 line-clamp-2 ${capitalize ? "capitalize" : ""}`}>
-        {value ?? "Not available"}
-      </p>
-    </div>
-  );
-}
-
-type DetailRow = [string, string | undefined];
-
-function DetailCard({ title, rows }: { title: string; rows: DetailRow[] }) {
-  return (
     <Card>
-      <CardContent className="p-6">
-        <h3 className="font-display font-semibold mb-4">{title}</h3>
-        <DetailRows rows={rows} />
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {items.length ? (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+            >
+              <div>
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(item.starts_at), "MMM d, yyyy HH:mm")} ·{" "}
+                  {item.location || "Location not set"}
+                </p>
+              </div>
+              <Badge variant="outline">
+                {users.find((user) => user.id === item.created_by)?.name ?? "Clinic appointment"}
+              </Badge>
+            </div>
+          ))
+        ) : (
+          <EmptyState title={empty} />
+        )}
       </CardContent>
     </Card>
   );
 }
-
-function DetailRows({ rows }: { rows: DetailRow[] }) {
-  const visibleRows = rows.filter(([, value]) => value != null && value !== "");
-  if (visibleRows.length === 0)
-    return <p className="text-sm text-muted-foreground">No information provided.</p>;
+function ActivityTimeline({
+  activities,
+  users,
+}: {
+  activities: ReturnType<typeof useMockStore.getState>["activities"];
+  users: ReturnType<typeof useMockStore.getState>["users"];
+}) {
+  if (!activities.length)
+    return <EmptyState title="No patient activity" description="Clinic events will appear here." />;
+  const groups = activities.reduce<Record<string, typeof activities>>((result, item) => {
+    const date = new Date(item.occurred_at ?? item.created_at);
+    const key = isToday(date)
+      ? "Today"
+      : isYesterday(date)
+        ? "Yesterday"
+        : format(date, "MMM d, yyyy");
+    (result[key] ??= []).push(item);
+    return result;
+  }, {});
   return (
-    <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
-      {visibleRows.map(([label, value]) => (
-        <div key={label}>
-          <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
-          <dd className="text-sm mt-0.5 whitespace-pre-line">{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <Card>
+      <CardContent className="space-y-5 p-5">
+        {Object.entries(groups).map(([date, records]) => (
+          <section key={date}>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{date}</h3>
+            <div className="space-y-2">
+              {records.map((item) => (
+                <div key={item.id} className="rounded-lg border p-3">
+                  <p className="text-sm font-medium capitalize">{item.kind.replace(/_/g, " ")}</p>
+                  <p className="text-sm text-muted-foreground">{item.body}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {format(new Date(item.occurred_at ?? item.created_at), "HH:mm")} ·{" "}
+                    {users.find((user) => user.id === item.created_by)?.name ?? "System"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
-
-function kindLabel(kind: string) {
-  switch (kind) {
-    case "note":
-      return "Note";
-    case "status_change":
-      return "Status change";
-    case "email":
-      return "Email";
-    case "call":
-      return "Phone call";
-    case "whatsapp":
-      return "WhatsApp";
-    case "in_person":
-      return "In person";
-    case "task":
-      return "Task";
-    case "file":
-      return "File";
-    default:
-      return kind;
-  }
+function ClinicalSection({
+  value,
+  title,
+  children,
+}: {
+  value: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <AccordionItem value={value}>
+      <AccordionTrigger>{title}</AccordionTrigger>
+      <AccordionContent>{children}</AccordionContent>
+    </AccordionItem>
+  );
 }
-
-function kindIcon(kind: string): ReactNode {
-  const className = "size-4 text-muted-foreground";
-  switch (kind) {
-    case "note":
-      return <MessageSquare className={className} />;
-    case "status_change":
-      return <Stethoscope className={className} />;
-    case "email":
-      return <Mail className={className} />;
-    case "call":
-      return <Phone className={className} />;
-    case "whatsapp":
-    case "in_person":
-      return <MessageSquare className={className} />;
-    case "task":
-      return <CheckSquare className={className} />;
-    case "file":
-      return <FileText className={className} />;
-    default:
-      return <MessageSquare className={className} />;
-  }
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
 }
-
-function formatDateTime(value?: string) {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return format(date, "MMM d, yyyy HH:mm");
+function DetailGrid({ rows }: { rows: Array<[string, string | undefined]> }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {rows.map(([label, value]) => (
+        <Meta key={label} label={label} value={value} />
+      ))}
+    </div>
+  );
 }
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatRoadmapMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("en", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function roadmapUploadSummary(uploads: AssessmentUploads) {
-  const labels = [
-    uploads.uploaded_panoramic && "Panoramic X-ray",
-    uploads.uploaded_dental_photos && "Dental photos",
-    uploads.uploaded_smile_photo && "Smile photo",
-    uploads.uploaded_cbct && "CBCT",
-    uploads.uploaded_previous_plan && "Previous plan",
-    uploads.uploaded_previous_report && "Previous report",
-  ].filter(Boolean);
-  return labels.length ? labels.join(", ") : "No uploads provided";
+function Meta({ label, value, link }: { label: string; value?: string; link?: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {link && value ? (
+        <a href={link} className="break-all text-sm font-medium text-primary hover:underline">
+          {value}
+        </a>
+      ) : (
+        <p className="break-words text-sm font-medium capitalize">{value || "Not available"}</p>
+      )}
+    </div>
+  );
 }

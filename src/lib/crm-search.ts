@@ -34,23 +34,34 @@ export function buildCrmSearchIndex({
         href: item.clinic_patient_id ? `/pro/patients/${item.clinic_patient_id}` : "/pro/leads",
         keywords: [item.patient_name, item.patient_country, item.treatment, item.source].join(" "),
       })),
-    ...clinicPatients.map((item) => ({
-      id: `patient_${item.id}`,
-      group: "Patients" as const,
-      title: `${item.first_name} ${item.last_name}`.trim(),
-      subtitle: item.email || item.phone || item.country,
-      href: `/pro/patients/${item.id}`,
-      keywords: [
-        item.first_name,
-        item.last_name,
-        item.email,
-        item.phone,
-        item.whatsapp,
-        item.country,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    })),
+    ...clinicPatients.map((item) => {
+      const plan = plans
+        .filter(
+          (candidate) =>
+            candidate.clinic_id === clinicId && candidate.clinic_patient_id === item.id,
+        )
+        .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))[0];
+      return {
+        id: `patient_${item.id}`,
+        group: "Patients" as const,
+        title: `${item.first_name} ${item.last_name}`.trim(),
+        subtitle: `${item.email || item.phone || item.country}${plan ? ` · ${plan.title}` : ""}`,
+        status: plan?.status ?? item.status ?? "active",
+        href: `/pro/patients/${item.id}`,
+        keywords: [
+          item.first_name,
+          item.last_name,
+          item.email,
+          item.phone,
+          item.whatsapp,
+          item.country,
+          plan?.id,
+          plan?.title,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    }),
     ...plans
       .filter((item) => item.clinic_id === clinicId)
       .map((item) => {

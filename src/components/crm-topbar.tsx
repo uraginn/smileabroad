@@ -164,7 +164,7 @@ export function CrmTopbar({
               )}
               {canManageIntake && (
                 <DropdownMenuItem asChild>
-                  <Link to="/pro/patients">
+                  <Link to="/pro/patients" search={{ create: true }}>
                     <UserPlus />
                     Add Patient
                   </Link>
