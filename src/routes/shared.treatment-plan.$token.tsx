@@ -58,7 +58,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -839,7 +838,7 @@ function TreatmentExperience({
         }}
       >
         {open && activeGroup && (
-          <DialogContent className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-hidden rounded-3xl border-slate-200/80 p-4 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
+          <DialogContent className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-y-auto overflow-x-hidden rounded-3xl border-slate-200/80 p-4 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
             <DialogHeader className="border-b border-slate-200/80 pb-6 pr-8">
               <div className="mb-4 text-slate-700">
                 <span
@@ -864,89 +863,101 @@ function TreatmentExperience({
                 . Use the diagram to explore where this treatment applies.
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="max-h-[68vh] pr-2 sm:pr-3">
-              <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)] lg:items-start">
-                {explanation && (
-                  <div className="order-1 lg:col-start-2 lg:row-start-1">
-                    <Accordion
-                      type="single"
-                      collapsible
-                      defaultValue="what"
-                      className="rounded-2xl border border-slate-200/80 bg-white px-5"
-                    >
-                      <TreatmentInfoItem value="what" title="What is it?">
-                        {explanation.what_it_is}
-                      </TreatmentInfoItem>
-                      <TreatmentInfoItem value="why" title="Why is it included?">
-                        {explanation.plan_context}
-                      </TreatmentInfoItem>
-                      <TreatmentInfoItem value="how" title="How will it be done?">
-                        <p>{explanation.how_performed}</p>
-                        <p className="mt-3 border-t pt-3">{explanation.important_to_know}</p>
-                      </TreatmentInfoItem>
-                      <TreatmentInfoItem value="timing" title="Healing & Visits">
-                        {explanation.healing_and_visits}
-                      </TreatmentInfoItem>
-                    </Accordion>
+            <div className="space-y-8 py-6">
+              {explanation && (
+                <DialogSection label="Learn about this treatment">
+                  <Accordion
+                    type="single"
+                    collapsible
+                    defaultValue="what"
+                    className="rounded-2xl border border-slate-200/80 bg-white px-5"
+                  >
+                    <TreatmentInfoItem value="what" title="What is it?">
+                      {explanation.what_it_is}
+                    </TreatmentInfoItem>
+                    <TreatmentInfoItem value="why" title="Why is it included?">
+                      {explanation.plan_context}
+                    </TreatmentInfoItem>
+                    <TreatmentInfoItem value="how" title="How will it be done?">
+                      <p>{explanation.how_performed}</p>
+                      <p className="mt-3 border-t pt-3">{explanation.important_to_know}</p>
+                    </TreatmentInfoItem>
+                    <TreatmentInfoItem value="timing" title="Healing & Visits">
+                      {explanation.healing_and_visits}
+                    </TreatmentInfoItem>
+                  </Accordion>
+                </DialogSection>
+              )}
+              {document.diagrams && (
+                <div className="min-w-0 border-t border-slate-200/80 pt-8">
+                  <DialogSection label="Where this treatment applies">
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Select a treated tooth to view the care planned for that area.
+                    </p>
+                    <DentalDiagramTabs
+                      diagrams={document.diagrams}
+                      selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
+                      onSelect={selectTooth}
+                    />
+                    {toothChoices.length > 1 && (
+                      <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="mt-4 min-h-11">
+                            Treatments on this tooth
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-72 p-0">
+                          <Command>
+                            <CommandList>
+                              <CommandGroup
+                                heading={
+                                  activeTooth
+                                    ? `Treatments on tooth ${activeTooth}`
+                                    : "Choose treatment"
+                                }
+                              >
+                                {toothChoices.map((group) => (
+                                  <CommandItem
+                                    key={group.id}
+                                    value={group.label}
+                                    onSelect={() => {
+                                      setActiveGroupId(group.id);
+                                      setToothChoices([]);
+                                      setToothSelectorOpen(false);
+                                    }}
+                                  >
+                                    <span className="flex-1">{group.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {group.quantity} units
+                                    </span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </DialogSection>
+                </div>
+              )}
+              <div className="border-t border-slate-200/80 pt-8">
+                <DialogSection label="Price at a glance">
+                  <div className="grid gap-4 rounded-2xl bg-slate-50 p-5 text-sm sm:grid-cols-3">
+                    <PriceFact label="Units" value={String(activeGroup.quantity)} />
+                    <PriceFact
+                      label="Unit price"
+                      value={formatQuoteMoney(activeGroup.unit_price, document.price.currency)}
+                    />
+                    <PriceFact
+                      label="Group total"
+                      value={formatQuoteMoney(activeGroup.total, document.price.currency)}
+                      strong
+                    />
                   </div>
-                )}
-                {document.diagrams && (
-                  <div className="order-2 min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-                    <DialogSection label="Where this treatment applies">
-                      <p className="mb-4 text-sm text-muted-foreground">
-                        Select a treated tooth to view the care planned for that area.
-                      </p>
-                      <DentalDiagramTabs
-                        diagrams={document.diagrams}
-                        selected={
-                          activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])
-                        }
-                        onSelect={selectTooth}
-                      />
-                      {toothChoices.length > 1 && (
-                        <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="mt-4 min-h-11">
-                              Treatments on this tooth
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="w-72 p-0">
-                            <Command>
-                              <CommandList>
-                                <CommandGroup
-                                  heading={
-                                    activeTooth
-                                      ? `Treatments on tooth ${activeTooth}`
-                                      : "Choose treatment"
-                                  }
-                                >
-                                  {toothChoices.map((group) => (
-                                    <CommandItem
-                                      key={group.id}
-                                      value={group.label}
-                                      onSelect={() => {
-                                        setActiveGroupId(group.id);
-                                        setToothChoices([]);
-                                        setToothSelectorOpen(false);
-                                      }}
-                                    >
-                                      <span className="flex-1">{group.label}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {group.quantity} units
-                                      </span>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </DialogSection>
-                  </div>
-                )}
+                </DialogSection>
               </div>
-            </ScrollArea>
+            </div>
             <DialogFooter className="border-t border-slate-200/80 pt-5">
               <DialogClose asChild>
                 <Button variant="outline" className="min-w-44">
@@ -1164,8 +1175,8 @@ function DentalDiagramTabs({
   return (
     <Tabs defaultValue="proposed">
       <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200/60">
-        <TabsTrigger value="current">Current Condition</TabsTrigger>
-        <TabsTrigger value="proposed">Proposed Treatment</TabsTrigger>
+        <TabsTrigger value="current">Current</TabsTrigger>
+        <TabsTrigger value="proposed">Proposed</TabsTrigger>
       </TabsList>
       <TabsContent
         value="current"
