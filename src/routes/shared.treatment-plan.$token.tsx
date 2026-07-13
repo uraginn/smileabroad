@@ -41,7 +41,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Combobox } from "@/components/ui/combobox";
 import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Carousel,
@@ -848,80 +847,66 @@ function TreatmentExperience({
         {open && activeGroup && (
           <DialogContent className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-hidden rounded-3xl border-slate-200/80 p-4 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
             <DialogHeader className="border-b border-slate-200/80 pb-6 pr-8">
-              <div className="mb-2 flex items-center gap-3 text-slate-700">
-                <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/70">
+              <div className="mb-4 text-slate-700">
+                <span
+                  className="grid size-14 place-items-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/70"
+                  style={{ color: "var(--shared-accent)" }}
+                >
                   {(() => {
                     const Icon = treatmentIcon(activeGroup.treatment);
-                    return <Icon className="size-5" aria-hidden="true" />;
+                    return <Icon className="size-6" aria-hidden="true" />;
                   })()}
                 </span>
-                <Badge variant="secondary">{activeGroup.category}</Badge>
-                <Badge variant="outline">{activeGroup.quantity} units</Badge>
-                {activeGroup.teeth.length > 0 && (
-                  <Badge variant="outline">
-                    {activeGroup.teeth.length} treated{" "}
-                    {activeGroup.teeth.length === 1 ? "area" : "areas"}
-                  </Badge>
-                )}
-                <Badge variant="outline">
-                  {formatQuoteMoney(activeGroup.total, document.price.currency)}
-                </Badge>
               </div>
               <DialogTitle aria-live="polite" className="text-2xl tracking-[-0.03em] sm:text-3xl">
                 {activeGroup.label}
               </DialogTitle>
               <DialogDescription className="max-w-2xl leading-6">
-                Explore how this treatment fits into your personal plan.
+                Your plan includes {activeGroup.quantity} {activeGroup.label.toLowerCase()}
+                {activeGroup.quantity === 1 ? " treatment" : " treatments"}
+                {activeGroup.teeth.length
+                  ? ` across ${activeGroup.teeth.length} treated ${activeGroup.teeth.length === 1 ? "area" : "areas"}`
+                  : ""}
+                . Use the diagram to explore where this treatment applies.
               </DialogDescription>
-              <div className="mt-4 max-w-sm">
-                <Combobox
-                  value={activeGroup.id}
-                  options={document.treatment_groups.map((group) => ({
-                    value: group.id,
-                    label: `${group.label} · ${group.quantity} · ${group.category}`,
-                  }))}
-                  placeholder="Choose a treatment"
-                  searchPlaceholder="Find a treatment..."
-                  onValueChange={(id) => {
-                    setActiveGroupId(id);
-                    setToothChoices([]);
-                    setToothSelectorOpen(false);
-                  }}
-                />
-              </div>
             </DialogHeader>
             <ScrollArea className="max-h-[68vh] pr-2 sm:pr-3">
               <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)] lg:items-start">
                 {explanation && (
                   <div className="order-1 lg:col-start-2 lg:row-start-1">
-                    <DialogSection label="Treatment information">
-                      <div className="space-y-4">
-                        <TreatmentAnswer title="What is it?" text={explanation.what_it_is} />
-                        <TreatmentAnswer
-                          title="Why is it included in your plan?"
-                          text={explanation.plan_context}
-                        />
-                        <TreatmentAnswer
-                          title="What will happen?"
-                          text={explanation.how_performed}
-                        />
-                        <TreatmentAnswer
-                          title="Important to know"
-                          text={explanation.important_to_know}
-                        />
-                      </div>
-                    </DialogSection>
+                    <Accordion
+                      type="single"
+                      collapsible
+                      defaultValue="what"
+                      className="rounded-2xl border border-slate-200/80 bg-white px-5"
+                    >
+                      <TreatmentInfoItem value="what" title="What is it?">
+                        {explanation.what_it_is}
+                      </TreatmentInfoItem>
+                      <TreatmentInfoItem value="why" title="Why is it included?">
+                        {explanation.plan_context}
+                      </TreatmentInfoItem>
+                      <TreatmentInfoItem value="how" title="How will it be done?">
+                        <p>{explanation.how_performed}</p>
+                        <p className="mt-3 border-t pt-3">{explanation.important_to_know}</p>
+                      </TreatmentInfoItem>
+                      <TreatmentInfoItem value="timing" title="Healing & Visits">
+                        {explanation.healing_and_visits}
+                      </TreatmentInfoItem>
+                    </Accordion>
                   </div>
                 )}
                 {document.diagrams && (
                   <div className="order-2 min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-                    <DialogSection label="Interactive diagram">
+                    <DialogSection label="Where this treatment applies">
                       <p className="mb-4 text-sm text-muted-foreground">
-                        Select a treated tooth to browse the treatment planned for that area.
+                        Select a treated tooth to view the care planned for that area.
                       </p>
                       <DentalDiagramTabs
                         diagrams={document.diagrams}
-                        selected={activeGroup.teeth as ToothNumber[]}
+                        selected={
+                          activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])
+                        }
                         onSelect={selectTooth}
                       />
                       {toothChoices.length > 1 && (
@@ -966,22 +951,6 @@ function TreatmentExperience({
                     </DialogSection>
                   </div>
                 )}
-                <div className="order-3 lg:col-start-2 lg:row-start-2">
-                  <DialogSection label="Price summary">
-                    <div className="grid gap-3 rounded-2xl bg-slate-50 p-5 text-sm sm:grid-cols-3 lg:grid-cols-1">
-                      <PriceFact label="Units" value={String(activeGroup.quantity)} />
-                      <PriceFact
-                        label="Unit price"
-                        value={formatQuoteMoney(activeGroup.unit_price, document.price.currency)}
-                      />
-                      <PriceFact
-                        label="Treatment total"
-                        value={formatQuoteMoney(activeGroup.total, document.price.currency)}
-                        strong
-                      />
-                    </div>
-                  </DialogSection>
-                </div>
               </div>
             </ScrollArea>
             <DialogFooter className="border-t border-slate-200/80 pt-5">
@@ -1152,12 +1121,24 @@ function DialogSection({ label, children }: { label: string; children: React.Rea
   );
 }
 
-function TreatmentAnswer({ title, text }: { title: string; text: string }) {
+function TreatmentInfoItem({
+  value,
+  title,
+  children,
+}: {
+  value: string;
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
-      <h4 className="font-semibold">{title}</h4>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
-    </div>
+    <AccordionItem value={value}>
+      <AccordionTrigger className="min-h-12 text-left font-medium hover:no-underline">
+        {title}
+      </AccordionTrigger>
+      <AccordionContent className="pb-5 text-sm leading-6 text-muted-foreground">
+        {children}
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 
