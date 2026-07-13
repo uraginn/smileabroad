@@ -111,9 +111,15 @@ function SharedPlan() {
         ? [
             { id: "treatment-plan", label: "Treatment Plan" },
             { id: "treatment-details", label: "Treatment Details" },
+            ...(document.treatment_explanations.length
+              ? [{ id: "treatment-guide", label: "Treatment Guide" }]
+              : []),
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
             { id: "payment", label: "Payment" },
+            ...(document.included_services.length
+              ? [{ id: "included-services", label: "Included Services" }]
+              : []),
             ...(document.patient_notes.length
               ? [{ id: "important-information", label: "Important Information" }]
               : []),
@@ -130,12 +136,22 @@ function SharedPlan() {
       className="shared-plan min-h-screen bg-slate-50 text-slate-900"
       style={{ "--shared-accent": accent } as React.CSSProperties}
     >
-      <style>{`@media print{.no-print{display:none!important}.shared-plan{background:#fff!important}.print-card,.print-row,.payment-summary{break-inside:avoid;box-shadow:none!important}.shared-section{scroll-margin-top:0!important;margin-block:1.5rem!important}.shared-hero{min-height:11rem!important}.shared-hero img{max-height:11rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}}`}</style>
+      <style>{`@media print{.no-print{display:none!important}.shared-plan,.shared-section,.print-cta{background:#fff!important;color:#0f172a!important}.print-cta *{color:#0f172a!important}.print-card,.print-row,.payment-summary{break-inside:avoid;box-shadow:none!important}.print-grid{display:block!important}.payment-summary{position:static!important;margin-bottom:1rem}.shared-section{scroll-margin-top:0!important;margin-block:1.25rem!important;padding-block:1rem!important}.shared-hero{min-height:11rem!important}.shared-hero img{max-height:11rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}}`}</style>
       <Header document={document} />
       <SectionNavigation items={nav} />
-      <main className="mx-auto max-w-6xl space-y-12 px-4 py-8 sm:px-6 sm:py-12 lg:space-y-16">
-        <section id="treatment-plan" className="shared-section scroll-mt-24">
-          <div className="grid gap-6 border-b pb-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6">
+        <section
+          id="treatment-plan"
+          className="shared-section -mx-4 scroll-mt-24 rounded-b-3xl bg-stone-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-14"
+        >
+          <div className="grid items-center gap-8 md:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.3fr)] lg:gap-14">
+            <div className="flex justify-center md:justify-start">
+              <img
+                src="/shared-plan/medical-care.svg"
+                alt="Personalized medical care illustration"
+                className="h-auto w-full max-w-56 sm:max-w-64"
+              />
+            </div>
             <div className="max-w-3xl">
               <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
                 Hi {document.patient_name?.split(" ")[0] ?? "there"},
@@ -145,26 +161,28 @@ function SharedPlan() {
                 review. It brings together your proposed treatment, treatment journey, travel
                 arrangements and payment information in one clear document.
               </p>
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground md:max-w-xs md:justify-end">
-              <span className="flex items-center gap-2">
-                <MapPin className="size-4" aria-hidden="true" />
-                {document.clinic?.city}, {document.clinic?.country}
-              </span>
-              {document.price.valid_until && (
-                <span>Valid until {new Date(document.price.valid_until).toLocaleDateString()}</span>
-              )}
+              <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <MapPin className="size-4" aria-hidden="true" />
+                  {document.clinic?.city}, {document.clinic?.country}
+                </span>
+                {document.price.valid_until && (
+                  <span>
+                    Valid until {new Date(document.price.valid_until).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </section>
-        <section id="treatment-details" className="shared-section scroll-mt-24">
+        <section id="treatment-details" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <SectionHeading
             eyebrow="Your plan"
             title="Your Treatment Plan"
             description="Your dentist-confirmed treatments, grouped into a simple overview."
           />
           <div
-            className={`mt-8 grid gap-10 ${document.diagrams ? "lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]" : ""}`}
+            className={`print-grid mt-8 grid items-start gap-8 lg:gap-10 ${document.diagrams ? "lg:grid-cols-[minmax(20rem,5fr)_minmax(0,7fr)]" : ""}`}
           >
             <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80">
               {document.treatment_groups.length ? (
@@ -189,55 +207,79 @@ function SharedPlan() {
             </div>
             {document.diagrams && <DentalPlanPreview diagrams={document.diagrams} />}
           </div>
-          {document.treatment_explanations.length > 0 && (
-            <div className="print-expand mt-12 max-w-4xl rounded-3xl bg-white px-5 py-2 ring-1 ring-slate-200/70 sm:px-7">
-              <SectionHeading
-                eyebrow="Treatment guide"
-                title="Understanding Your Treatments"
-                description="Concise guidance personalized to the treatments included in your plan."
-                compact
-              />
-              <Accordion type="single" collapsible className="mt-3">
-                {document.treatment_explanations.map((item) => (
-                  <AccordionItem key={item.id} value={item.id}>
-                    <AccordionTrigger className="gap-4 text-left text-base hover:no-underline">
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100">
-                          <CircleHelp className="size-4" aria-hidden="true" />
-                        </span>
-                        <span>
-                          <span className="block font-medium">{item.title}</span>
-                          <span className="mt-0.5 line-clamp-1 block text-xs font-normal text-muted-foreground">
-                            {item.what_it_is}
+        </section>
+        {document.treatment_explanations.length > 0 && (
+          <section
+            id="treatment-guide"
+            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+          >
+            <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-14">
+              <div className="print-expand min-w-0 rounded-3xl bg-white px-5 py-2 ring-1 ring-slate-200/70 sm:px-7">
+                <SectionHeading
+                  eyebrow="Treatment guide"
+                  title="Understanding Your Treatments"
+                  description="Concise guidance personalized to the treatments included in your plan."
+                  compact
+                />
+                <Accordion type="single" collapsible className="mt-3">
+                  {document.treatment_explanations.map((item) => (
+                    <AccordionItem key={item.id} value={item.id}>
+                      <AccordionTrigger className="gap-4 text-left text-base hover:no-underline">
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100">
+                            <CircleHelp className="size-4" aria-hidden="true" />
+                          </span>
+                          <span>
+                            <span className="block font-medium">{item.title}</span>
+                            <span className="mt-0.5 line-clamp-1 block text-xs font-normal text-muted-foreground">
+                              {item.what_it_is}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    </AccordionTrigger>
-                    <AccordionContent className="space-y-4 pb-5 text-sm leading-6">
-                      <div>
-                        <p className="font-medium">What it is</p>
-                        <p className="mt-1 text-muted-foreground">{item.what_it_is}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium">What this means for your plan</p>
-                        <p className="mt-1 text-muted-foreground">{item.plan_context}</p>
-                      </div>
-                      {item.journey_note && (
-                        <Badge variant="outline">Planned during {item.journey_note}</Badge>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-4 pb-5 text-sm leading-6">
+                        <div>
+                          <p className="font-medium">What it is</p>
+                          <p className="mt-1 text-muted-foreground">{item.what_it_is}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">What this means for your plan</p>
+                          <p className="mt-1 text-muted-foreground">{item.plan_context}</p>
+                        </div>
+                        {item.journey_note && (
+                          <Badge variant="outline">Planned during {item.journey_note}</Badge>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+              <div className="flex justify-center lg:justify-end">
+                <img
+                  src="/shared-plan/treatment-guide.svg"
+                  alt="Treatment guide document illustration"
+                  className="h-auto w-full max-w-56 lg:max-w-72"
+                />
+              </div>
             </div>
-          )}
-        </section>
-        <section id="journey" className="shared-section scroll-mt-24">
-          <SectionHeading
-            eyebrow="How it works"
-            title="Treatment Journey"
-            description="The expected sequence of your confirmed clinic Treatment Plan."
-          />
+          </section>
+        )}
+        <section
+          id="journey"
+          className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+        >
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeading
+              eyebrow="How it works"
+              title="Treatment Journey"
+              description="The expected sequence of your confirmed clinic Treatment Plan."
+            />
+            <img
+              src="/shared-plan/treatment-journey.svg"
+              alt="Treatment schedule illustration"
+              className="h-auto w-full max-w-40 self-center sm:max-w-48"
+            />
+          </div>
           <div className="relative mt-8 space-y-0 before:absolute before:bottom-5 before:left-4 before:top-5 before:w-px before:bg-slate-300 md:flex md:gap-0 md:before:bottom-auto md:before:left-8 md:before:right-8 md:before:top-4 md:before:h-px md:before:w-auto">
             {document.journey.map((step, index) => (
               <div
@@ -266,14 +308,17 @@ function SharedPlan() {
           </div>
         </section>
         {document.travel && (
-          <section id="travel" className="shared-section scroll-mt-24">
+          <section
+            id="travel"
+            className="shared-section -mx-4 scroll-mt-24 bg-stone-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+          >
             <SectionHeading
               eyebrow="Your stay"
               title="Travel & Accommodation"
               description="The practical arrangements currently included with your Treatment Plan."
             />
             <div
-              className={`mt-7 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 ${document.travel.hotel ? "md:grid md:grid-cols-[1.2fr_0.8fr]" : "max-w-xl"}`}
+              className={`mt-7 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 ${document.travel.hotel ? "md:grid md:grid-cols-[1.2fr_0.8fr]" : "max-w-4xl md:grid md:grid-cols-[0.9fr_1.1fr]"}`}
             >
               {document.travel.hotel ? (
                 <div className="p-6 sm:p-8">
@@ -298,7 +343,15 @@ function SharedPlan() {
                     </Button>
                   )}
                 </div>
-              ) : null}
+              ) : (
+                <div className="flex items-center justify-center p-6 sm:p-8">
+                  <img
+                    src="/shared-plan/travel.svg"
+                    alt="Travel arrangements illustration"
+                    className="h-auto w-full max-w-56"
+                  />
+                </div>
+              )}
               <div
                 className={`bg-slate-50 p-6 sm:p-8 ${document.travel.hotel ? "border-t md:border-l md:border-t-0" : ""}`}
               >
@@ -319,14 +372,17 @@ function SharedPlan() {
             </div>
           </section>
         )}
-        <section id="payment" className="shared-section scroll-mt-24">
+        <section
+          id="payment"
+          className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+        >
           <SectionHeading
             eyebrow="Clear pricing"
             title="Your Treatment Cost"
             description="A transparent breakdown of treatment, services and payment stages."
           />
-          <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-            <div className="min-w-0 space-y-8">
+          <div className="print-grid mt-7 grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:items-start">
+            <div className="order-2 min-w-0 space-y-8 lg:order-1">
               <div className="overflow-x-auto rounded-2xl border bg-white">
                 <Table>
                   <TableHeader>
@@ -387,34 +443,8 @@ function SharedPlan() {
                   )}
                 </div>
               )}
-              {document.included_services.length > 0 && (
-                <div className="mt-5 border-t pt-4">
-                  <h3 className="font-medium">Included in your plan</h3>
-                  <div className="mt-4 grid gap-5 sm:grid-cols-3">
-                    {groupIncludedServices(document.included_services).map((group) => (
-                      <div key={group.label}>
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {group.label}
-                        </p>
-                        <div className="mt-2 space-y-2">
-                          {group.services.map((service) => (
-                            <p key={service} className="flex gap-2 text-sm">
-                              <Check
-                                className="mt-0.5 size-4 shrink-0"
-                                style={{ color: accent }}
-                                aria-hidden="true"
-                              />
-                              {service}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-            <aside className="payment-summary rounded-2xl bg-slate-900 p-6 text-white shadow-lg lg:sticky lg:top-20">
+            <aside className="payment-summary order-1 rounded-2xl bg-slate-900 p-6 text-white shadow-lg lg:order-2 lg:sticky lg:top-20">
               <div className="flex size-11 items-center justify-center rounded-xl bg-white/10">
                 <WalletCards className="size-5" aria-hidden="true" />
               </div>
@@ -474,8 +504,39 @@ function SharedPlan() {
             </p>
           ) : null}
         </section>
+        {document.included_services.length > 0 && (
+          <section
+            id="included-services"
+            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-14"
+          >
+            <SectionHeading
+              eyebrow="Your package"
+              title="Included in Your Plan"
+              description="Services included with your Treatment Plan, grouped for easy review."
+            />
+            <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {groupIncludedServices(document.included_services).map((group) => (
+                <div key={group.label} className="min-w-0">
+                  <h3 className="font-medium">{group.label}</h3>
+                  <div className="mt-3 space-y-3">
+                    {group.services.map((service) => (
+                      <p key={service} className="flex gap-2 text-sm leading-5">
+                        <Check
+                          className="mt-0.5 size-4 shrink-0"
+                          style={{ color: accent }}
+                          aria-hidden="true"
+                        />
+                        {service}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         {document.patient_notes.length > 0 && (
-          <section id="important-information" className="shared-section scroll-mt-24">
+          <section id="important-information" className="shared-section py-10 sm:py-12">
             <Alert>
               <AlertTitle>Important Information</AlertTitle>
               <AlertDescription>
@@ -488,8 +549,8 @@ function SharedPlan() {
             </Alert>
           </section>
         )}
-        <section id="next-steps" className="shared-section scroll-mt-24">
-          <Card className="print-card overflow-hidden border-0 bg-slate-900 text-white shadow-xl">
+        <section id="next-steps" className="shared-section scroll-mt-24 py-10 sm:py-16">
+          <Card className="print-card print-cta overflow-hidden border-0 bg-slate-900 text-white shadow-xl">
             <CardContent className="p-7 text-center sm:p-12">
               {plan.status === "accepted" ? (
                 <>
@@ -899,24 +960,26 @@ function groupIncludedServices(services: string[]) {
 function Footer({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
   const clinic = document.clinic!;
   return (
-    <footer className="mx-auto max-w-5xl border-t px-4 py-8 text-xs text-muted-foreground sm:px-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row">
-        <div>
-          <p className="font-medium text-slate-900">{clinic.name}</p>
-          <p>
-            {clinic.city}, {clinic.country}
-          </p>
-          <p>{[clinic.phone, clinic.email].filter(Boolean).join(" · ")}</p>
+    <footer className="border-t bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-10 text-xs text-muted-foreground sm:px-6 sm:py-12">
+        <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+          <div>
+            <p className="font-medium text-slate-900">{clinic.name}</p>
+            <p>
+              {clinic.city}, {clinic.country}
+            </p>
+            <p>{[clinic.phone, clinic.email].filter(Boolean).join(" · ")}</p>
+          </div>
+          <div className="sm:text-right">
+            <p>Prepared {new Date(document.prepared_at).toLocaleDateString()}</p>
+            <p>Plan reference {document.reference}</p>
+          </div>
         </div>
-        <div className="sm:text-right">
-          <p>Prepared {new Date(document.prepared_at).toLocaleDateString()}</p>
-          <p>Plan reference {document.reference}</p>
-        </div>
+        <p className="mt-5 flex gap-2">
+          <ShieldCheck className="size-4 shrink-0" />
+          {document.disclaimer}
+        </p>
       </div>
-      <p className="mt-5 flex gap-2">
-        <ShieldCheck className="size-4 shrink-0" />
-        {document.disclaimer}
-      </p>
     </footer>
   );
 }
