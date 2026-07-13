@@ -42,3 +42,24 @@ export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
 );
 export const treatmentByType = (type: TreatmentType) =>
   TREATMENT_DEFINITIONS.find((item) => item.type === type)!;
+
+export function patientTreatmentCategory(type: TreatmentType): string {
+  if (["dental-implant", "implant-crown"].includes(type)) return "Implant Treatment";
+  if (
+    [
+      "zirconium-crown",
+      "emax-crown",
+      "porcelain-crown",
+      "temporary-crown",
+      "bridge",
+      "pontic",
+      "inlay-onlay",
+    ].includes(type)
+  )
+    return "Restorative Treatment";
+  if (["veneer", "composite-bonding", "whitening"].includes(type)) return "Cosmetic Treatment";
+  if (["root-canal-treatment"].includes(type)) return "Endodontic Treatment";
+  if (["extraction"].includes(type)) return "Surgical Procedures";
+  if (["all-on-4", "all-on-6", "denture"].includes(type)) return "Full-Arch Treatment";
+  return "Supporting Procedures";
+}

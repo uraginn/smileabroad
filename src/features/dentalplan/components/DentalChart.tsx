@@ -13,6 +13,7 @@ type Props = {
   proposedTreatments: ToothTreatment[];
   selected: ToothNumber[];
   readOnly?: boolean;
+  allowReadOnlySelection?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean) => void;
   onSelectAllUpper?: () => void;
   onSelectAllLower?: () => void;
@@ -29,6 +30,7 @@ export function DentalChart({
   proposedTreatments,
   selected,
   readOnly,
+  allowReadOnlySelection,
   onSelect,
   onSelectAllUpper,
   onSelectAllLower,
@@ -45,18 +47,18 @@ export function DentalChart({
     >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        {readOnly ? (
+        {readOnly && !allowReadOnlySelection ? (
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Read-only
           </span>
-        ) : (
+        ) : !readOnly ? (
           <div className="flex gap-1">
             <Mini onClick={onSelectAllUpper}>Upper</Mini>
             <Mini onClick={onSelectAllLower}>Lower</Mini>
             <Mini onClick={onClearSelection}>Clear</Mini>
             <Mini onClick={onSelectAll}>All</Mini>
           </div>
-        )}
+        ) : null}
       </div>
       <div className="space-y-3 overflow-x-auto" onPointerUp={onDragEnd} onPointerLeave={onDragEnd}>
         <Arch
@@ -67,6 +69,7 @@ export function DentalChart({
             proposedTreatments,
             selected,
             readOnly,
+            allowReadOnlySelection,
             onSelect,
             onDragStart,
             onDragEnter,
@@ -82,6 +85,7 @@ export function DentalChart({
             proposedTreatments,
             selected,
             readOnly,
+            allowReadOnlySelection,
             onSelect,
             onDragStart,
             onDragEnter,
@@ -110,6 +114,7 @@ function Arch(props: {
   mode: PlannerMode;
   selected: ToothNumber[];
   readOnly?: boolean;
+  allowReadOnlySelection?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean) => void;
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
@@ -126,6 +131,7 @@ function Arch(props: {
           mode={props.mode}
           selected={props.selected.includes(tooth)}
           readOnly={props.readOnly}
+          allowReadOnlySelection={props.allowReadOnlySelection}
           onSelect={props.onSelect}
           onDragStart={props.onDragStart}
           onDragEnter={props.onDragEnter}

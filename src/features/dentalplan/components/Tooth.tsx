@@ -16,6 +16,7 @@ type Props = {
   mode: PlannerMode;
   selected: boolean;
   readOnly?: boolean;
+  allowReadOnlySelection?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean) => void;
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
@@ -30,6 +31,7 @@ export function Tooth({
   mode,
   selected,
   readOnly,
+  allowReadOnlySelection,
   onSelect,
   onDragStart,
   onDragEnter,
@@ -47,8 +49,8 @@ export function Tooth({
     <button
       type="button"
       onClick={(event) =>
-        !readOnly &&
-        event.detail === 0 &&
+        (!readOnly || allowReadOnlySelection) &&
+        (allowReadOnlySelection || event.detail === 0) &&
         onSelect(toothNumber, event.shiftKey || event.metaKey || event.ctrlKey)
       }
       onPointerDown={(event) => {
@@ -60,10 +62,10 @@ export function Tooth({
       onPointerUp={onDragEnd}
       onPointerCancel={onDragEnd}
       draggable={false}
-      disabled={readOnly}
+      disabled={readOnly && !allowReadOnlySelection}
       aria-label={label}
       aria-pressed={selected}
-      className={`group relative flex flex-col items-center focus:outline-none ${readOnly ? "cursor-default opacity-90" : "cursor-pointer touch-none select-none"}`}
+      className={`group relative flex flex-col items-center focus:outline-none ${readOnly && !allowReadOnlySelection ? "cursor-default opacity-90" : "cursor-pointer touch-manipulation select-none"}`}
     >
       {isUpper ? (
         <>

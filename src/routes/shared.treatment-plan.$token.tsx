@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BedDouble,
@@ -30,7 +30,7 @@ import { mapTreatmentPlanToPatientDocument, type PatientTreatmentGroup } from "@
 import { formatQuoteMoney } from "@/lib/quote";
 import { DentalChart } from "@/features/dentalplan/components/DentalChart";
 import type { ToothNumber } from "@/features/dentalplan";
-import type { PlanCurrency, ToothTreatment } from "@/types/models";
+import type { ToothTreatment } from "@/types/models";
 import {
   Accordion,
   AccordionContent,
@@ -41,6 +41,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Carousel,
   CarouselContent,
@@ -59,6 +61,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -127,6 +130,14 @@ function SharedPlan() {
         )
       : undefined,
   );
+  const allTreatmentDefinitions = useMockStore((s) => s.clinicTreatmentDefinitions);
+  const treatmentDefinitions = useMemo(
+    () =>
+      plan
+        ? allTreatmentDefinitions.filter((definition) => definition.clinic_id === plan.clinic_id)
+        : [],
+    [allTreatmentDefinitions, plan],
+  );
   const markViewed = useMockStore((s) => s.markTreatmentPlanViewed);
   const markAccepted = useMockStore((s) => s.markTreatmentPlanAccepted);
   const markDeclined = useMockStore((s) => s.markTreatmentPlanDeclined);
@@ -136,9 +147,16 @@ function SharedPlan() {
   const document = useMemo(
     () =>
       plan && clinic
-        ? mapTreatmentPlanToPatientDocument(plan, clinic, patient, branding, coordinator)
+        ? mapTreatmentPlanToPatientDocument(
+            plan,
+            clinic,
+            patient,
+            branding,
+            coordinator,
+            treatmentDefinitions,
+          )
         : undefined,
-    [plan, clinic, patient, branding, coordinator],
+    [plan, clinic, patient, branding, coordinator, treatmentDefinitions],
   );
   const faqs = useMemo(
     () => (document ? buildTreatmentFaq(document.treatment_groups) : []),
@@ -149,10 +167,6 @@ function SharedPlan() {
       document
         ? [
             { id: "treatment-plan", label: "Treatment Plan" },
-            { id: "treatment-details", label: "Treatment Details" },
-            ...(document.treatment_explanations.length
-              ? [{ id: "treatment-guide", label: "Treatment Guide" }]
-              : []),
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
             { id: "payment", label: "Payment" },
@@ -190,19 +204,13 @@ function SharedPlan() {
       <SectionNavigation items={nav} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <section
-          id="treatment-plan"
+          id="introduction"
           className="shared-section -mx-4 scroll-mt-24 rounded-b-[2rem] bg-stone-100/70 px-4 py-12 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:text-left">
-            {document.coordinator?.avatar_url ||
-            document.clinic?.logo_url ||
-            document.clinic?.banner_url ? (
+            {document.coordinator?.avatar_url || document.clinic?.logo_url ? (
               <img
-                src={
-                  document.coordinator?.avatar_url ??
-                  document.clinic?.logo_url ??
-                  document.clinic?.banner_url
-                }
+                src={document.coordinator?.avatar_url ?? document.clinic?.logo_url}
                 alt={
                   document.coordinator
                     ? `${document.coordinator.name}, your clinic coordinator`
@@ -241,88 +249,14 @@ function SharedPlan() {
             </div>
           </div>
         </section>
-        <section id="treatment-details" className="shared-section scroll-mt-24 py-10 sm:py-16">
+        <section id="treatment-plan" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <SectionHeading
             eyebrow="Your plan"
             title="Your Treatment Plan"
-            description="Your dentist-confirmed treatments, grouped into a simple overview."
+            description="A concise overview of the treatments your clinic has prepared for you."
           />
-          <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80">
-            {document.treatment_groups.length ? (
-              <div className="divide-y">
-                {document.treatment_groups.map((group) => (
-                  <TreatmentRow key={group.id} group={group} diagrams={document.diagrams} />
-                ))}
-              </div>
-            ) : (
-              <p className="p-6 text-sm text-muted-foreground">
-                The clinic has not added confirmed treatment items yet.
-              </p>
-            )}
-          </div>
-          {document.diagrams && (
-            <div className="mt-12">
-              <DentalPlanPreview diagrams={document.diagrams} />
-            </div>
-          )}
+          <TreatmentExperience document={document} />
         </section>
-        {document.treatment_explanations.length > 0 && (
-          <section
-            id="treatment-guide"
-            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
-          >
-            <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-14">
-              <div className="print-expand min-w-0 rounded-3xl bg-white px-5 py-3 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/70 sm:px-8 sm:py-5">
-                <SectionHeading
-                  eyebrow="Treatment guide"
-                  title="Understanding Your Treatments"
-                  description="Concise guidance personalized to the treatments included in your plan."
-                  compact
-                />
-                <Accordion type="single" collapsible className="mt-3">
-                  {document.treatment_explanations.map((item) => (
-                    <AccordionItem key={item.id} value={item.id}>
-                      <AccordionTrigger className="gap-4 py-5 text-left text-base transition-colors hover:text-slate-600 hover:no-underline">
-                        <span className="flex min-w-0 items-center gap-3">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100">
-                            <TreatmentGuideIcon treatmentId={item.id} />
-                          </span>
-                          <span>
-                            <span className="block font-medium">{item.title}</span>
-                            <span className="mt-0.5 line-clamp-1 block text-xs font-normal text-muted-foreground">
-                              {item.what_it_is}
-                            </span>
-                          </span>
-                        </span>
-                      </AccordionTrigger>
-                      <AccordionContent className="space-y-5 pb-6 pl-12 text-sm leading-6">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            What this treatment is
-                          </p>
-                          <p className="mt-1 text-muted-foreground">{item.what_it_is}</p>
-                        </div>
-                        <div className="rounded-2xl bg-slate-50 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Why it is in your plan
-                          </p>
-                          <p className="mt-1 text-muted-foreground">{item.plan_context}</p>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </div>
-              <div className="flex justify-center lg:justify-end">
-                <img
-                  src="/shared-plan/treatment-guide.svg"
-                  alt="Treatment guide document illustration"
-                  className="h-auto w-full max-w-48 lg:max-w-56"
-                />
-              </div>
-            </div>
-          </section>
-        )}
         <section
           id="journey"
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
@@ -400,6 +334,7 @@ function SharedPlan() {
                     <h3 className="mt-5 text-xl font-semibold">{document.travel.hotel.name}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {[
+                        configuredHotel?.categories[0],
                         document.travel.hotel.room_type,
                         document.travel.hotel.board_type,
                         document.travel.nights ? `${document.travel.nights} nights` : undefined,
@@ -546,20 +481,6 @@ function SharedPlan() {
               </div>
             </aside>
           </div>
-          {document.price.items?.length ? (
-            <div className="mt-12 border-t border-slate-200/80 pt-10">
-              <SectionHeading
-                eyebrow="Treatment breakdown"
-                title="Your Treatment at a Glance"
-                description="A clear commercial summary using the confirmed pricing in your Treatment Plan."
-                compact
-              />
-              <TreatmentPricingTable
-                items={document.price.items}
-                currency={document.price.currency}
-              />
-            </div>
-          ) : null}
           {document.included_services.length > 0 && (
             <IncludedServicesPanel services={document.included_services} accent={accent} />
           )}
@@ -750,36 +671,61 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
         {clinic.banner_url && (
           <img src={clinic.banner_url} alt="" className="size-full object-cover" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/45" />
+        <div className="absolute inset-0 bg-slate-950/60" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 via-slate-950/35 to-slate-950/85" />
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/45 to-transparent" />
       </div>
-      <div className="relative mx-auto flex min-h-72 max-w-6xl flex-col justify-end gap-6 px-4 py-9 sm:min-h-80 sm:flex-row sm:items-end sm:px-6 sm:py-12">
+      <div className="relative mx-auto flex min-h-80 max-w-6xl flex-col items-center justify-end px-4 py-10 text-center sm:min-h-96 sm:px-6 sm:py-14">
+        <div className="no-print absolute right-4 top-7 flex gap-2 sm:right-6">
+          <Button
+            size="sm"
+            className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20"
+            onClick={() => window.print()}
+          >
+            <Printer />
+            Print
+          </Button>
+          {clinic.website && (
+            <Button
+              size="sm"
+              className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20"
+              asChild
+            >
+              <a href={clinic.website} target="_blank" rel="noreferrer">
+                <ExternalLink />
+                Website
+              </a>
+            </Button>
+          )}
+        </div>
         {clinic.logo_url ? (
           <img
             src={clinic.logo_url}
             alt={`${clinic.name} logo`}
-            className="h-16 w-28 rounded-2xl border border-white/20 bg-white object-contain p-3 shadow-xl ring-4 ring-white/10 sm:h-20 sm:w-36"
+            className="mb-6 h-auto max-h-16 w-auto max-w-44 object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.35)] sm:max-h-20 sm:max-w-56"
           />
         ) : (
           <span
-            className="grid h-16 w-20 place-items-center rounded-2xl border border-white/20 text-2xl font-semibold text-white shadow-xl ring-4 ring-white/10 sm:h-20 sm:w-24"
-            style={{ background: "var(--shared-primary)" }}
+            className="mb-6 grid size-16 place-items-center rounded-full border border-white/25 text-2xl font-semibold text-white shadow-xl backdrop-blur-md sm:size-20"
+            style={{ background: "color-mix(in srgb, var(--shared-primary) 80%, transparent)" }}
             aria-label={`${clinic.name} logo fallback`}
           >
             {clinic.name.charAt(0)}
           </span>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/75">
             {clinic.name}
           </p>
-          <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
+          {clinic.tagline && (
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
+              {clinic.tagline}
+            </p>
+          )}
+          <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
             Treatment Plan & Cost Estimate
           </h1>
-          {clinic.tagline && (
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{clinic.tagline}</p>
-          )}
-          <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-white/70 sm:text-sm">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-white/70 sm:text-sm">
             <span className="font-medium text-white">
               Prepared for {document.patient_name ?? "Patient"}
             </span>
@@ -788,23 +734,6 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
             <span aria-hidden="true">•</span>
             <span>Ref. {document.reference}</span>
           </div>
-        </div>
-        <div className="no-print flex w-full gap-2 sm:w-auto sm:flex-col">
-          <Button
-            className="flex-1 bg-white text-slate-950 hover:bg-white/90 sm:flex-none"
-            onClick={() => window.print()}
-          >
-            <Printer />
-            Print
-          </Button>
-          {clinic.website && (
-            <Button className="flex-1 sm:flex-none" variant="outline" asChild>
-              <a href={clinic.website} target="_blank" rel="noreferrer">
-                <ExternalLink />
-                Website
-              </a>
-            </Button>
-          )}
         </div>
       </div>
     </header>
@@ -859,63 +788,200 @@ function SectionNavigation({ items }: { items: { id: string; label: string }[] }
     </nav>
   );
 }
-function TreatmentRow({
-  group,
-  diagrams,
+function TreatmentExperience({
+  document,
 }: {
-  group: PatientTreatmentGroup;
-  diagrams?: ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"];
+  document: ReturnType<typeof mapTreatmentPlanToPatientDocument>;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = group.teeth as ToothNumber[];
-  const Icon = treatmentIcon(group.treatment);
-  const hasDetails = Boolean(diagrams || group.patient_notes.length);
+  const [activeGroupId, setActiveGroupId] = useState(document.treatment_groups[0]?.id);
+  const [activeTooth, setActiveTooth] = useState<ToothNumber>();
+  const [toothChoices, setToothChoices] = useState<PatientTreatmentGroup[]>([]);
+  const [toothSelectorOpen, setToothSelectorOpen] = useState(false);
+  const lastTrigger = useRef<HTMLElement | null>(null);
+  const activeGroup =
+    document.treatment_groups.find((group) => group.id === activeGroupId) ??
+    document.treatment_groups[0];
+  const explanation = document.treatment_explanations.find((item) => item.id === activeGroup?.id);
+  const openTreatment = (group: PatientTreatmentGroup, trigger?: HTMLElement) => {
+    lastTrigger.current = trigger ?? null;
+    setActiveGroupId(group.id);
+    setActiveTooth(undefined);
+    setToothChoices([]);
+    setToothSelectorOpen(false);
+    setOpen(true);
+  };
+  const selectTooth = (tooth: ToothNumber) => {
+    setActiveTooth(tooth);
+    const matches = document.treatment_groups.filter((group) => group.teeth.includes(tooth));
+    if (matches.length === 1) {
+      setActiveGroupId(matches[0].id);
+      setToothChoices([]);
+      setToothSelectorOpen(false);
+    } else if (matches.length > 1) {
+      setToothChoices(matches);
+      setToothSelectorOpen(true);
+    }
+  };
   return (
     <>
-      <div className="print-row group relative flex flex-col gap-5 p-5 transition-all duration-200 hover:bg-slate-50/80 focus-within:bg-slate-50/80 sm:flex-row sm:items-center sm:p-6">
-        <div className="flex min-w-0 flex-1 gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200/70 transition-all group-hover:bg-white group-hover:text-slate-950 group-hover:shadow-sm">
-            <Icon className="size-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-lg font-semibold tracking-[-0.02em]">{group.label}</p>
-          </div>
-        </div>
-        {hasDetails && (
-          <Button
-            className="no-print shrink-0 justify-between text-slate-600 hover:text-slate-950 sm:justify-center"
-            variant="ghost"
-            size="sm"
-            onClick={() => setOpen(true)}
-          >
-            View details <ChevronRight className="size-4" aria-hidden="true" />
-          </Button>
+      <div className="mt-8">
+        {document.treatment_groups.length ? (
+          <PatientTreatmentTable
+            groups={document.treatment_groups}
+            currency={document.price.currency}
+            onOpen={openTreatment}
+          />
+        ) : (
+          <p className="p-6 text-sm text-muted-foreground">
+            The clinic has not added confirmed treatment items yet.
+          </p>
         )}
       </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        {open && (
-          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl overflow-hidden rounded-3xl border-slate-200/80 p-5 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) requestAnimationFrame(() => lastTrigger.current?.focus());
+        }}
+      >
+        {open && activeGroup && (
+          <DialogContent className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-hidden rounded-3xl border-slate-200/80 p-4 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
             <DialogHeader className="border-b border-slate-200/80 pb-6 pr-8">
-              <div className="mb-2 flex items-center gap-3">
+              <div className="mb-2 flex items-center gap-3 text-slate-700">
                 <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/70">
-                  <Icon className="size-5" aria-hidden="true" />
+                  {(() => {
+                    const Icon = treatmentIcon(activeGroup.treatment);
+                    return <Icon className="size-5" aria-hidden="true" />;
+                  })()}
                 </span>
+                <Badge variant="secondary">{activeGroup.category}</Badge>
+                <Badge variant="outline">{activeGroup.quantity} units</Badge>
+                {activeGroup.teeth.length > 0 && (
+                  <Badge variant="outline">
+                    {activeGroup.teeth.length} treated{" "}
+                    {activeGroup.teeth.length === 1 ? "area" : "areas"}
+                  </Badge>
+                )}
+                <Badge variant="outline">
+                  {formatQuoteMoney(activeGroup.total, document.price.currency)}
+                </Badge>
               </div>
-              <DialogTitle className="text-2xl tracking-[-0.03em] sm:text-3xl">
-                {group.label}
+              <DialogTitle aria-live="polite" className="text-2xl tracking-[-0.03em] sm:text-3xl">
+                {activeGroup.label}
               </DialogTitle>
               <DialogDescription className="max-w-2xl leading-6">
-                Review the clinical location and patient-specific notes for this treatment.
+                Explore how this treatment fits into your personal plan.
               </DialogDescription>
+              <div className="mt-4 max-w-sm">
+                <Combobox
+                  value={activeGroup.id}
+                  options={document.treatment_groups.map((group) => ({
+                    value: group.id,
+                    label: `${group.label} · ${group.quantity} · ${group.category}`,
+                  }))}
+                  placeholder="Choose a treatment"
+                  searchPlaceholder="Find a treatment..."
+                  onValueChange={(id) => {
+                    setActiveGroupId(id);
+                    setToothChoices([]);
+                    setToothSelectorOpen(false);
+                  }}
+                />
+              </div>
             </DialogHeader>
-            <ScrollArea className="max-h-[62vh] pr-3">
-              <div className="space-y-5 pt-5">
-                {diagrams && <DentalDiagramTabs diagrams={diagrams} selected={selected} />}
-                {group.patient_notes.map((note) => (
-                  <Alert key={note} className="rounded-2xl bg-slate-50/70">
-                    <AlertDescription>{note}</AlertDescription>
-                  </Alert>
-                ))}
+            <ScrollArea className="max-h-[68vh] pr-2 sm:pr-3">
+              <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)] lg:items-start">
+                {explanation && (
+                  <div className="order-1 lg:col-start-2 lg:row-start-1">
+                    <DialogSection label="Treatment information">
+                      <div className="space-y-4">
+                        <TreatmentAnswer title="What is it?" text={explanation.what_it_is} />
+                        <TreatmentAnswer
+                          title="Why is it included in your plan?"
+                          text={explanation.plan_context}
+                        />
+                        <TreatmentAnswer
+                          title="What will happen?"
+                          text={explanation.how_performed}
+                        />
+                        <TreatmentAnswer
+                          title="Important to know"
+                          text={explanation.important_to_know}
+                        />
+                      </div>
+                    </DialogSection>
+                  </div>
+                )}
+                {document.diagrams && (
+                  <div className="order-2 min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+                    <DialogSection label="Interactive diagram">
+                      <p className="mb-4 text-sm text-muted-foreground">
+                        Select a treated tooth to browse the treatment planned for that area.
+                      </p>
+                      <DentalDiagramTabs
+                        diagrams={document.diagrams}
+                        selected={activeGroup.teeth as ToothNumber[]}
+                        onSelect={selectTooth}
+                      />
+                      {toothChoices.length > 1 && (
+                        <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="mt-4 min-h-11">
+                              Treatments on this tooth
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-72 p-0">
+                            <Command>
+                              <CommandList>
+                                <CommandGroup
+                                  heading={
+                                    activeTooth
+                                      ? `Treatments on tooth ${activeTooth}`
+                                      : "Choose treatment"
+                                  }
+                                >
+                                  {toothChoices.map((group) => (
+                                    <CommandItem
+                                      key={group.id}
+                                      value={group.label}
+                                      onSelect={() => {
+                                        setActiveGroupId(group.id);
+                                        setToothChoices([]);
+                                        setToothSelectorOpen(false);
+                                      }}
+                                    >
+                                      <span className="flex-1">{group.label}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {group.quantity} units
+                                      </span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </DialogSection>
+                  </div>
+                )}
+                <div className="order-3 lg:col-start-2 lg:row-start-2">
+                  <DialogSection label="Price summary">
+                    <div className="grid gap-3 rounded-2xl bg-slate-50 p-5 text-sm sm:grid-cols-3 lg:grid-cols-1">
+                      <PriceFact label="Units" value={String(activeGroup.quantity)} />
+                      <PriceFact
+                        label="Unit price"
+                        value={formatQuoteMoney(activeGroup.unit_price, document.price.currency)}
+                      />
+                      <PriceFact
+                        label="Treatment total"
+                        value={formatQuoteMoney(activeGroup.total, document.price.currency)}
+                        strong
+                      />
+                    </div>
+                  </DialogSection>
+                </div>
               </div>
             </ScrollArea>
             <DialogFooter className="border-t border-slate-200/80 pt-5">
@@ -931,99 +997,194 @@ function TreatmentRow({
     </>
   );
 }
-function TreatmentPricingTable({
-  items,
+
+function PatientTreatmentTable({
+  groups,
   currency,
+  onOpen,
 }: {
-  items: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["items"]>;
-  currency: PlanCurrency;
+  groups: PatientTreatmentGroup[];
+  currency: ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["currency"];
+  onOpen: (group: PatientTreatmentGroup, trigger?: HTMLElement) => void;
 }) {
+  const categories = useMemo(() => {
+    const grouped = new Map<string, PatientTreatmentGroup[]>();
+    groups.forEach((group) => {
+      grouped.set(group.category, [...(grouped.get(group.category) ?? []), group]);
+    });
+    return [...grouped.entries()];
+  }, [groups]);
   return (
-    <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
-      <Table className="min-w-[36rem]">
-        <TableHeader className="bg-slate-50/80">
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="h-12 px-5">Treatment</TableHead>
-            <TableHead className="h-12 text-center">Units</TableHead>
-            <TableHead className="h-12 text-right">Unit Price</TableHead>
-            <TableHead className="h-12 px-5 text-right">Total</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((item) => (
-            <TableRow key={item.label} className="hover:bg-slate-50/60">
-              <TableCell className="px-5 py-4 font-medium">{item.label}</TableCell>
-              <TableCell className="py-4 text-center">
-                <Badge variant="secondary">{item.quantity}</Badge>
-              </TableCell>
-              <TableCell className="py-4 text-right text-slate-600">
-                {formatQuoteMoney(item.unit_price, currency)}
-              </TableCell>
-              <TableCell className="px-5 py-4 text-right font-semibold">
-                {formatQuoteMoney(item.total, currency)}
-              </TableCell>
+    <div className="overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/80">
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader className="bg-slate-50/80">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-12 px-6">Treatment</TableHead>
+              <TableHead className="h-12 text-center">Units</TableHead>
+              <TableHead className="h-12 text-right">Unit Price</TableHead>
+              <TableHead className="h-12 text-right">Total</TableHead>
+              <TableHead className="h-12 px-6 text-right">Action</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {categories.map(([category, categoryGroups]) => (
+              <TreatmentCategoryRows
+                key={category}
+                category={category}
+                groups={categoryGroups}
+                currency={currency}
+                onOpen={onOpen}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="divide-y md:hidden">
+        {categories.map(([category, categoryGroups]) => (
+          <section key={category} aria-labelledby={`category-${normalizeDomId(category)}`}>
+            <h3
+              id={`category-${normalizeDomId(category)}`}
+              className="border-l-4 px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"
+              style={{ borderColor: "var(--shared-accent)", background: "#f8fafc" }}
+            >
+              {category}
+            </h3>
+            <div className="divide-y">
+              {categoryGroups.map((group) => (
+                <div key={group.id} className="print-row p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold">{group.label}</p>
+                    <Badge variant="secondary">{group.quantity} units</Badge>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                    <PriceFact
+                      label="Per unit"
+                      value={formatQuoteMoney(group.unit_price, currency)}
+                    />
+                    <PriceFact
+                      label="Total"
+                      value={formatQuoteMoney(group.total, currency)}
+                      strong
+                    />
+                  </div>
+                  <Button
+                    className="no-print mt-4 min-h-11 w-full justify-between"
+                    variant="outline"
+                    aria-label={`View details for ${group.label}`}
+                    onClick={(event) => onOpen(group, event.currentTarget)}
+                  >
+                    View details <ChevronRight className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
 
-function DentalPlanPreview({
-  diagrams,
+function TreatmentCategoryRows({
+  category,
+  groups,
+  currency,
+  onOpen,
 }: {
-  diagrams: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"]>;
+  category: string;
+  groups: PatientTreatmentGroup[];
+  currency: ReturnType<typeof mapTreatmentPlanToPatientDocument>["price"]["currency"];
+  onOpen: (group: PatientTreatmentGroup, trigger?: HTMLElement) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="dental-preview min-w-0 overflow-hidden rounded-3xl bg-slate-900 text-white shadow-[0_22px_55px_-34px_rgba(15,23,42,0.75)]">
-      <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
-        <div className="flex gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/10">
-            <Stethoscope className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
-              Clinical illustration
-            </p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">View Your Dental Plan</p>
-            <p className="mt-2 text-sm leading-6 text-white/65">
-              See your complete treatment visually on the dental diagram.
-            </p>
-          </div>
-        </div>
-        <Button
-          className="no-print min-h-11 shrink-0 bg-white px-6 text-slate-950 hover:bg-white/90"
-          onClick={() => setOpen(true)}
+    <>
+      <TableRow
+        className="border-l-4 bg-slate-50/80 hover:bg-slate-50/80"
+        style={{ borderLeftColor: "var(--shared-accent)" }}
+      >
+        <TableCell
+          colSpan={5}
+          className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"
         >
-          View on Diagram <ExternalLink className="size-4" aria-hidden="true" />
-        </Button>
-      </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        {open && (
-          <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-5xl overflow-hidden rounded-3xl border-slate-200/80 p-5 shadow-[0_30px_90px_-30px_rgba(15,23,42,0.5)] sm:p-8">
-            <DialogHeader className="border-b pb-5 pr-8">
-              <DialogTitle className="text-2xl tracking-tight">Your Dental Plan</DialogTitle>
-              <DialogDescription>
-                Review your current condition and proposed treatment in a larger clinical view.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="max-h-[76vh] pr-3">
-              <DentalDiagramTabs diagrams={diagrams} selected={[]} />
-            </ScrollArea>
-          </DialogContent>
-        )}
-      </Dialog>
+          {category}
+        </TableCell>
+      </TableRow>
+      {groups.map((group) => (
+        <TableRow key={group.id} className="print-row hover:bg-slate-50/60">
+          <TableCell className="px-6 py-4 font-medium">{group.label}</TableCell>
+          <TableCell className="py-4 text-center">{group.quantity}</TableCell>
+          <TableCell className="py-4 text-right text-slate-600">
+            {formatQuoteMoney(group.unit_price, currency)}
+          </TableCell>
+          <TableCell className="py-4 text-right font-semibold">
+            {formatQuoteMoney(group.total, currency)}
+          </TableCell>
+          <TableCell className="px-6 py-4 text-right">
+            <Button
+              className="no-print"
+              variant="ghost"
+              size="sm"
+              aria-label={`View details for ${group.label}`}
+              onClick={(event) => onOpen(group, event.currentTarget)}
+            >
+              View details <ChevronRight className="size-4" aria-hidden="true" />
+            </Button>
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+function normalizeDomId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function DialogSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      {children}
+    </section>
+  );
+}
+
+function TreatmentAnswer({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
+      <h4 className="font-semibold">{title}</h4>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function PriceFact({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-1 ${strong ? "text-lg font-semibold" : "font-medium"}`}>{value}</p>
     </div>
   );
 }
 function DentalDiagramTabs({
   diagrams,
   selected,
+  onSelect,
 }: {
   diagrams: NonNullable<ReturnType<typeof mapTreatmentPlanToPatientDocument>["diagrams"]>;
   selected: ToothNumber[];
+  onSelect: (tooth: ToothNumber) => void;
 }) {
   return (
     <Tabs defaultValue="proposed">
@@ -1042,7 +1203,8 @@ function DentalDiagramTabs({
           proposedTreatments={diagrams.proposedTreatments}
           selected={selected}
           readOnly
-          onSelect={() => undefined}
+          allowReadOnlySelection
+          onSelect={(tooth) => onSelect(tooth)}
         />
       </TabsContent>
       <TabsContent
@@ -1056,7 +1218,8 @@ function DentalDiagramTabs({
           proposedTreatments={diagrams.proposedTreatments}
           selected={selected}
           readOnly
-          onSelect={() => undefined}
+          allowReadOnlySelection
+          onSelect={(tooth) => onSelect(tooth)}
         />
       </TabsContent>
     </Tabs>
@@ -1324,10 +1487,6 @@ const TREATMENT_ICONS: Partial<Record<ToothTreatment, LucideIcon>> = {
 };
 function treatmentIcon(treatment?: ToothTreatment): LucideIcon {
   return (treatment && TREATMENT_ICONS[treatment]) || Stethoscope;
-}
-function TreatmentGuideIcon({ treatmentId }: { treatmentId: string }) {
-  const Icon = treatmentIcon(treatmentId as ToothTreatment);
-  return <Icon className="size-4" aria-hidden="true" />;
 }
 function ServiceGroupIcon({ label }: { label: string }) {
   const Icon = label === "Clinical" ? Stethoscope : label === "Travel" ? Plane : HeartHandshake;

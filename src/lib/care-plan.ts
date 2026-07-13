@@ -2,6 +2,7 @@ import type {
   Assessment,
   Clinic,
   ClinicBranding,
+  ClinicTreatmentDefinition,
   Patient,
   PlanCurrency,
   Roadmap,
@@ -13,6 +14,11 @@ import type {
 import type { DentalPlanData } from "@/features/dentalplan";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 import { treatmentLabel } from "@/lib/dental";
+import {
+  patientTreatmentCategory,
+  treatmentByType,
+} from "@/features/dentalplan/data/treatmentDefinitions";
+import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
 
 export interface CarePlanPricePresentation {
   currency: PlanCurrency;
@@ -61,7 +67,10 @@ export interface CarePlanPresentation {
 export interface PatientTreatmentGroup {
   id: string;
   treatment?: ToothTreatment;
+  treatment_key?: string;
   label: string;
+  category: string;
+  patient_description?: string;
   quantity: number;
   unit_price: number;
   total: number;
@@ -73,7 +82,8 @@ export interface PatientTreatmentExplanation {
   title: string;
   what_it_is: string;
   plan_context: string;
-  journey_note?: string;
+  how_performed: string;
+  important_to_know: string;
 }
 export interface PatientJourneyStep {
   id: string;
@@ -130,9 +140,75 @@ export function mapPreliminaryRoadmap(input: {
   };
 }
 
-export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientTreatmentGroup[] {
+export function buildPatientTreatmentTable(
+  plan: TreatmentPlan,
+  treatmentDefinitions: ClinicTreatmentDefinition[] = [],
+): PatientTreatmentGroup[] {
+  const embedded = isDentalPlanData(plan.dental_plan_data) ? plan.dental_plan_data : undefined;
+  if (embedded?.proposedTreatments.length) {
+    const groups = new Map<string, PatientTreatmentGroup>();
+    const consumedPrices = new Set<string>();
+    for (const treatment of embedded.proposedTreatments) {
+      const definition = treatmentDefinitions.find(
+        (item) =>
+          item.id === treatment.treatmentDefinitionId ||
+          item.treatment_key === treatment.treatmentKey,
+      );
+      const price = (plan.price_items ?? []).find(
+        (item) =>
+          !consumedPrices.has(item.id) &&
+          (item.id === `price_${treatment.id}` ||
+            item.treatment_definition_id === treatment.treatmentDefinitionId),
+      );
+      const embeddedPrice = embedded.commercial.items.find(
+        (item) => item.treatmentId === treatment.id,
+      );
+      const treatmentKey =
+        treatment.treatmentKey ?? definition?.treatment_key ?? treatment.treatmentType;
+      const visualKey = (definition?.visual_key ??
+        treatment.visualKey ??
+        treatment.treatmentType) as TreatmentType;
+      const unitPrice = price?.unit_price ?? embeddedPrice?.unitPrice ?? 0;
+      const quantity =
+        price?.quantity ?? embeddedPrice?.qty ?? Math.max(1, treatment.toothNumbers.length);
+      const category = resolvePatientCategory(price?.category, definition, visualKey);
+      const label =
+        definition?.patient_label ??
+        definition?.display_name ??
+        treatment.displayName ??
+        treatmentByType(treatment.treatmentType).label;
+      const groupKey = `${definition?.id ?? treatmentKey}|${unitPrice}|${category}`;
+      const current = groups.get(groupKey);
+      if (current) {
+        current.quantity += quantity;
+        current.total += quantity * unitPrice;
+        treatment.toothNumbers.forEach((tooth) => {
+          if (!current.teeth.includes(tooth)) current.teeth.push(tooth);
+        });
+      } else {
+        groups.set(groupKey, {
+          id: groupKey,
+          treatment: legacyTreatmentForKey(visualKey),
+          treatment_key: treatmentKey,
+          label,
+          category,
+          patient_description: definition?.description,
+          quantity,
+          unit_price: unitPrice,
+          total: quantity * unitPrice,
+          teeth: [...new Set(treatment.toothNumbers)],
+          patient_notes: [],
+        });
+      }
+      if (price) consumedPrices.add(price.id);
+    }
+    appendUnmatchedPrices(groups, plan, consumedPrices, treatmentDefinitions);
+    return [...groups.values()].filter((group) => group.quantity > 0);
+  }
+
   const prices = plan.price_items ?? [];
   const byTreatment = new Map<ToothTreatment, PatientTreatmentGroup>();
+  const consumedPrices = new Set<string>();
   for (const item of plan.items ?? []) {
     const current = byTreatment.get(item.treatment);
     const label = treatmentLabel(item.treatment);
@@ -145,7 +221,9 @@ export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientT
       byTreatment.set(item.treatment, {
         id: item.treatment,
         treatment: item.treatment,
+        treatment_key: item.treatment,
         label,
+        category: patientCategoryForLegacy(item.treatment),
         quantity: 1,
         unit_price: 0,
         total: 0,
@@ -157,10 +235,13 @@ export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientT
   for (const group of groups) {
     const matches = prices.filter(
       (price) =>
-        normalize(price.label).includes(normalize(group.label)) ||
-        normalize(group.label).includes(normalize(price.label)),
+        !consumedPrices.has(price.id) &&
+        (price.treatment_key === group.treatment_key ||
+          normalize(price.label).includes(normalize(group.label)) ||
+          normalize(group.label).includes(normalize(price.label))),
     );
     if (matches.length) {
+      matches.forEach((match) => consumedPrices.add(match.id));
       group.quantity = matches.reduce((sum, x) => sum + x.quantity, 0);
       group.total = matches.reduce((sum, x) => sum + x.quantity * x.unit_price, 0);
       group.unit_price = group.quantity ? group.total / group.quantity : 0;
@@ -171,17 +252,19 @@ export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientT
     }
   }
   for (const price of prices) {
-    if (
-      groups.some(
-        (group) =>
-          normalize(price.label).includes(normalize(group.label)) ||
-          normalize(group.label).includes(normalize(price.label)),
-      )
-    )
-      continue;
+    if (consumedPrices.has(price.id)) continue;
+    const definition = treatmentDefinitions.find(
+      (item) =>
+        item.id === price.treatment_definition_id || item.treatment_key === price.treatment_key,
+    );
+    const visualKey = (definition?.visual_key ?? price.treatment_key ?? "other") as TreatmentType;
     groups.push({
       id: `price_${price.id}`,
-      label: price.label,
+      treatment: legacyTreatmentForKey(visualKey),
+      treatment_key: price.treatment_key,
+      label: definition?.patient_label ?? definition?.display_name ?? cleanPriceLabel(price.label),
+      category: resolvePatientCategory(price.category, definition, visualKey),
+      patient_description: definition?.description,
       quantity: price.quantity,
       unit_price: price.unit_price,
       total: price.quantity * price.unit_price,
@@ -192,13 +275,117 @@ export function groupTreatmentPlanItemsForPatient(plan: TreatmentPlan): PatientT
   return groups.filter((group) => group.quantity > 0);
 }
 
+export const groupTreatmentPlanItemsForPatient = buildPatientTreatmentTable;
+
+function appendUnmatchedPrices(
+  groups: Map<string, PatientTreatmentGroup>,
+  plan: TreatmentPlan,
+  consumedPrices: Set<string>,
+  definitions: ClinicTreatmentDefinition[],
+) {
+  for (const price of plan.price_items ?? []) {
+    if (consumedPrices.has(price.id)) continue;
+    const definition = definitions.find(
+      (item) =>
+        item.id === price.treatment_definition_id || item.treatment_key === price.treatment_key,
+    );
+    const visualKey = (definition?.visual_key ?? price.treatment_key ?? "other") as TreatmentType;
+    const category = resolvePatientCategory(price.category, definition, visualKey);
+    const label =
+      definition?.patient_label ?? definition?.display_name ?? cleanPriceLabel(price.label);
+    const groupKey = `${definition?.id ?? price.treatment_key ?? price.id}|${price.unit_price}|${category}`;
+    const current = groups.get(groupKey);
+    if (current) {
+      current.quantity += price.quantity;
+      current.total += price.quantity * price.unit_price;
+    } else {
+      groups.set(groupKey, {
+        id: groupKey,
+        treatment: legacyTreatmentForKey(visualKey),
+        treatment_key: price.treatment_key,
+        label,
+        category,
+        patient_description: definition?.description,
+        quantity: price.quantity,
+        unit_price: price.unit_price,
+        total: price.quantity * price.unit_price,
+        teeth: [],
+        patient_notes: [],
+      });
+    }
+  }
+}
+
+function cleanPriceLabel(label: string) {
+  return label
+    .split("·")[0]
+    .replace(/\s*\([^)]*units?\)\s*$/i, "")
+    .trim();
+}
+
+function resolvePatientCategory(
+  priceCategory: string | undefined,
+  definition: ClinicTreatmentDefinition | undefined,
+  visualKey: TreatmentType,
+) {
+  if (priceCategory?.trim()) return priceCategory;
+  if (definition && !definition.system && definition.category.trim()) return definition.category;
+  return patientTreatmentCategory(visualKey);
+}
+
+function legacyTreatmentForKey(key: string): ToothTreatment | undefined {
+  const matches: Partial<Record<TreatmentType, ToothTreatment>> = {
+    "dental-implant": "implant",
+    "implant-crown": "crown",
+    "zirconium-crown": "crown",
+    "emax-crown": "crown",
+    "porcelain-crown": "crown",
+    "temporary-crown": "crown",
+    "root-canal-treatment": "root_canal",
+    "composite-bonding": "composite",
+    "composite-filling": "filling",
+    "bone-graft": "bone_graft",
+    "sinus-lift": "sinus_lift",
+    "all-on-4": "implant",
+    "all-on-6": "implant",
+    extraction: "extraction",
+    bridge: "bridge",
+    pontic: "pontic",
+    veneer: "veneer",
+    whitening: "whitening",
+    denture: "denture",
+  };
+  return matches[key as TreatmentType];
+}
+
+function patientCategoryForLegacy(treatment: ToothTreatment) {
+  const keys: Record<ToothTreatment, TreatmentType> = {
+    implant: "dental-implant",
+    crown: "zirconium-crown",
+    extraction: "extraction",
+    bridge: "bridge",
+    pontic: "pontic",
+    veneer: "veneer",
+    composite: "composite-bonding",
+    filling: "composite-filling",
+    root_canal: "root-canal-treatment",
+    bone_graft: "bone-graft",
+    sinus_lift: "sinus-lift",
+    whitening: "whitening",
+    denture: "denture",
+  };
+  return patientTreatmentCategory(keys[treatment]);
+}
+
 export function buildPatientTreatmentExplanations(
   groups: PatientTreatmentGroup[],
   journey: PatientJourneyStep[],
 ): PatientTreatmentExplanation[] {
   return groups.map((group) => {
     const content = (group.treatment ? EXPLANATIONS[group.treatment] : undefined) ?? {
-      what: `${group.label} is part of the dentist-confirmed Treatment Plan.`,
+      what:
+        group.patient_description ??
+        `${group.label} is part of the dentist-confirmed Treatment Plan.`,
       context: "Your dentist included this treatment as part of your confirmed clinical plan.",
     };
     return {
@@ -206,9 +393,13 @@ export function buildPatientTreatmentExplanations(
       title: group.label,
       what_it_is: content.what,
       plan_context: content.context.replace("{quantity}", String(group.quantity)),
-      journey_note: journey.find((step) =>
-        step.description?.toLowerCase().includes(group.label.toLowerCase()),
-      )?.title,
+      how_performed:
+        journey.find((step) => step.description?.toLowerCase().includes(group.label.toLowerCase()))
+          ?.description ??
+        `Your clinic will complete the planned ${group.label.toLowerCase()} within your confirmed treatment sequence and review your progress before the next stage.`,
+      important_to_know:
+        group.patient_notes.join(" ") ||
+        "Your dentist will confirm the final clinical details with you before this part of your treatment begins.",
     };
   });
 }
@@ -219,9 +410,10 @@ export function mapTreatmentPlanToPatientDocument(
   patient?: Patient,
   branding?: ClinicBranding,
   coordinator?: User,
+  treatmentDefinitions: ClinicTreatmentDefinition[] = [],
 ): PatientTreatmentDocument {
   const totals = calculateTreatmentPlanTotals(plan);
-  const treatment_groups = groupTreatmentPlanItemsForPatient(plan);
+  const treatment_groups = buildPatientTreatmentTable(plan, treatmentDefinitions);
   const journey = buildJourney(plan);
   const embedded = isDentalPlanData(plan.dental_plan_data) ? plan.dental_plan_data : undefined;
   const travel = buildTravel(plan, branding);
@@ -254,7 +446,7 @@ export function mapTreatmentPlanToPatientDocument(
       name: clinic.name,
       city: clinic.city,
       country: clinic.country,
-      logo_url: branding?.logo_url ?? branding?.shared_view_logo_url,
+      logo_url: svgLogoUrl(branding?.logo_url ?? branding?.shared_view_logo_url),
       banner_url: clinic.cover_image || branding?.shared_view_banner_url,
       tagline: branding?.shared_view_tagline ?? clinic.short_description,
       introduction: branding?.shared_view_introduction,
@@ -295,11 +487,9 @@ export function mapTreatmentPlanToPatientDocument(
     included_services: [...new Set(plan.included_services ?? [])],
     patient_notes: [
       ...new Set(
-        [
-          plan.patient_facing_notes,
-          plan.patient_message,
-          ...treatment_groups.flatMap((group) => group.patient_notes),
-        ].filter((value): value is string => Boolean(value?.trim())),
+        [plan.patient_facing_notes, plan.patient_message].filter((value): value is string =>
+          Boolean(value?.trim()),
+        ),
       ),
     ],
     diagrams: embedded
@@ -411,6 +601,13 @@ function isDentalPlanData(value: unknown): value is DentalPlanData {
     (value as DentalPlanData).currentConditions &&
     typeof (value as DentalPlanData).currentConditions === "object",
   );
+}
+function svgLogoUrl(value?: string) {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("data:image/svg+xml") || /\.svg(?:[?#].*)?$/.test(normalized)
+    ? value
+    : undefined;
 }
 const EXPLANATIONS: Partial<Record<ToothTreatment, { what: string; context: string }>> = {
   implant: {

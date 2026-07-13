@@ -299,6 +299,7 @@ function Profile({
   const [sharedLogo, setSharedLogo] = useState(
     brand?.logo_url ?? brand?.shared_view_logo_url ?? "",
   );
+  const [logoUploadError, setLogoUploadError] = useState("");
   const [sharedBanner, setSharedBanner] = useState(
     clinic.cover_image || brand?.shared_view_banner_url || "",
   );
@@ -311,6 +312,7 @@ function Profile({
   const [sharedAccent, setSharedAccent] = useState(
     brand?.shared_view_accent_color ?? brand?.primary_color ?? "#0f766e",
   );
+  const logoIsSvg = !sharedLogo || isSvgLogoUrl(sharedLogo);
   return (
     <Card>
       <CardHeader>
@@ -346,8 +348,44 @@ function Profile({
             Your clinic identity is used automatically across patient-facing Treatment Plans.
           </p>
         </div>
-        <Field label="Clinic logo URL">
-          <Input value={sharedLogo} onChange={(e) => setSharedLogo(e.target.value)} />
+        <Field label="Clinic logo URL (SVG only)">
+          <Input
+            value={sharedLogo}
+            placeholder="https://example.com/clinic-logo.svg"
+            aria-invalid={!logoIsSvg}
+            onChange={(e) => setSharedLogo(e.target.value)}
+          />
+          {!logoIsSvg && (
+            <p className="mt-1 text-xs text-destructive">
+              Shared Treatment Plan logos must use an SVG URL.
+            </p>
+          )}
+          <div className="mt-2">
+            <Input
+              type="file"
+              accept=".svg,image/svg+xml"
+              aria-label="Upload clinic SVG logo"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                if (file.type !== "image/svg+xml" || !file.name.toLowerCase().endsWith(".svg")) {
+                  setLogoUploadError("Choose an SVG file with the image/svg+xml MIME type.");
+                  event.target.value = "";
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  if (typeof reader.result === "string") {
+                    setSharedLogo(reader.result);
+                    setLogoUploadError("");
+                  }
+                };
+                reader.onerror = () => setLogoUploadError("The SVG logo could not be read.");
+                reader.readAsDataURL(file);
+              }}
+            />
+            {logoUploadError && <p className="mt-1 text-xs text-destructive">{logoUploadError}</p>}
+          </div>
         </Field>
         <Field label="Clinic banner URL">
           <Input value={sharedBanner} onChange={(e) => setSharedBanner(e.target.value)} />
@@ -402,6 +440,7 @@ function Profile({
         )}
         <Button
           className="sm:col-span-2 sm:w-fit"
+          disabled={!logoIsSvg}
           onClick={() =>
             save(
               {
@@ -431,6 +470,11 @@ function Profile({
       </CardContent>
     </Card>
   );
+}
+
+function isSvgLogoUrl(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("data:image/svg+xml") || /\.svg(?:[?#].*)?$/.test(normalized);
 }
 function UserDialog({
   open,
