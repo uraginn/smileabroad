@@ -168,11 +168,11 @@ function SharedPlan() {
             { id: "treatment-plan", label: "Treatment Plan" },
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
-            { id: "payment", label: "Payment" },
+            { id: "investment", label: "Investment" },
+            ...(faqs.length ? [{ id: "faq", label: "FAQ" }] : []),
             ...(document.patient_notes.length
               ? [{ id: "important-information", label: "Important Information" }]
               : []),
-            ...(faqs.length ? [{ id: "faq", label: "FAQ" }] : []),
             { id: "next-steps", label: "Next Steps" },
           ]
         : [],
@@ -200,8 +200,7 @@ function SharedPlan() {
     >
       <style>{`.shared-plan [role="tab"][data-state="active"]{box-shadow:inset 0 -2px 0 var(--shared-accent)}@media print{@page{margin:14mm}.no-print{display:none!important}.shared-plan,.shared-section,.print-cta{background:#fff!important;color:#0f172a!important}.print-cta *{color:#0f172a!important}.print-card,.print-row,.payment-summary,.dental-preview{break-inside:avoid;box-shadow:none!important}.print-grid{display:block!important}.payment-summary{position:static!important;margin-bottom:1rem}.shared-section{scroll-margin-top:0!important;margin-block:1rem!important;padding-block:1rem!important}.shared-section>h2,.shared-section>div>h2{break-after:avoid}.shared-hero{min-height:10rem!important}.shared-hero img{max-height:9rem}.print-expand [data-state="closed"]+div{display:block!important;height:auto!important}.dental-preview{max-width:100%!important;overflow:hidden!important}.shared-plan a{text-decoration:none!important}}`}</style>
       <Header document={document} />
-      <SectionNavigation items={nav} />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <section
           id="introduction"
           className="shared-section -mx-4 scroll-mt-24 rounded-b-[2rem] bg-stone-100/70 px-4 py-12 sm:-mx-6 sm:px-6 sm:py-16"
@@ -229,14 +228,14 @@ function SharedPlan() {
             )}
             <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                A personal welcome from {document.clinic?.name}
+                A personal note for you
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
                 Prepared specifically for {document.patient_name?.split(" ")[0] ?? "you"}
               </h2>
               <p className="mt-4 whitespace-pre-line text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
                 {document.clinic?.introduction ??
-                  "Your clinic has prepared this personalized Treatment Plan following your clinical review. It brings together the information you need to understand your proposed care and next steps."}
+                  "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
               </p>
               {document.coordinator && (
                 <p className="mt-5 text-sm text-slate-600">
@@ -248,6 +247,9 @@ function SharedPlan() {
             </div>
           </div>
         </section>
+      </div>
+      <SectionNavigation items={nav} />
+      <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <section id="treatment-plan" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <SectionHeading
             eyebrow="Your plan"
@@ -388,13 +390,13 @@ function SharedPlan() {
           </section>
         )}
         <section
-          id="payment"
+          id="investment"
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <SectionHeading
-            eyebrow="Clear pricing"
-            title="Your Treatment Cost"
-            description="A transparent breakdown of treatment, services and payment stages."
+            eyebrow="Your investment"
+            title="Your Treatment Investment"
+            description="Your total, included services and payment schedule in one place."
           />
           <div
             className={`print-grid mt-8 grid gap-8 lg:items-start ${hasAdditionalCosts ? "lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]" : "max-w-xl"}`}
@@ -486,7 +488,7 @@ function SharedPlan() {
           {document.price.payment_schedule?.length ? (
             <div className="mt-12 border-t border-slate-200/80 pt-10">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Your payment journey
+                Payment schedule
               </p>
               <h3 className="mt-2 text-xl font-semibold">Payment milestones</h3>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -494,7 +496,6 @@ function SharedPlan() {
               </p>
               <div className="relative mt-6 grid gap-4 before:absolute before:bottom-5 before:left-5 before:top-5 before:w-px before:bg-slate-200 sm:grid-cols-2 sm:before:hidden">
                 {document.price.payment_schedule.map((payment, index) => {
-                  const journeyStep = document.journey[index];
                   return (
                     <div
                       key={`${payment.label}-${payment.due}`}
@@ -507,9 +508,6 @@ function SharedPlan() {
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {payment.label}
-                          </p>
-                          <p className="mt-1 font-medium text-slate-700">
-                            {journeyStep?.title ?? "Planned treatment stage"}
                           </p>
                           <p className="mt-3 text-xl font-semibold">
                             {formatQuoteMoney(payment.amount, document.price.currency)}
@@ -531,21 +529,6 @@ function SharedPlan() {
             </p>
           ) : null}
         </section>
-        {document.patient_notes.length > 0 && (
-          <section id="important-information" className="shared-section py-8 sm:py-10">
-            <Alert className="rounded-2xl border-slate-200 bg-slate-50/70 px-5 py-4 text-slate-700">
-              <ShieldCheck className="size-4" />
-              <AlertTitle className="font-medium">Important Information</AlertTitle>
-              <AlertDescription>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
-                  {document.patient_notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          </section>
-        )}
         {faqs.length > 0 && (
           <section
             id="faq"
@@ -574,6 +557,21 @@ function SharedPlan() {
                 ))}
               </Accordion>
             </div>
+          </section>
+        )}
+        {document.patient_notes.length > 0 && (
+          <section id="important-information" className="shared-section py-8 sm:py-10">
+            <Alert className="rounded-2xl border-slate-200 bg-slate-50/70 px-5 py-4 text-slate-700">
+              <ShieldCheck className="size-4" />
+              <AlertTitle className="font-medium">Important Information</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                  {document.patient_notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           </section>
         )}
         <section id="next-steps" className="shared-section scroll-mt-24 py-10 sm:py-16">
@@ -725,10 +723,6 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
             Treatment Plan & Cost Estimate
           </h1>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-white/70 sm:text-sm">
-            <span className="font-medium text-white">
-              Prepared for {document.patient_name ?? "Patient"}
-            </span>
-            <span aria-hidden="true">•</span>
             <span>{new Date(document.prepared_at).toLocaleDateString()}</span>
             <span aria-hidden="true">•</span>
             <span>Ref. {document.reference}</span>
@@ -1493,12 +1487,11 @@ function groupIncludedServices(services: string[]) {
 function Footer({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
   return (
     <footer className="border-t border-slate-200/80 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-xs text-muted-foreground sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-6xl px-4 py-8 text-xs text-muted-foreground sm:px-6 sm:py-10">
         <p className="flex max-w-3xl gap-2 leading-5">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-slate-500" />
           {document.disclaimer}
         </p>
-        <p className="shrink-0 sm:text-right">Plan reference {document.reference}</p>
       </div>
     </footer>
   );
