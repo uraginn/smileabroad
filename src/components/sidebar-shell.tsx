@@ -1,10 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Logo } from "@/components/logo";
 import { RoleSwitcher } from "@/components/role-switcher";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { CrmTopbar } from "@/components/crm-topbar";
 import {
   Sheet,
   SheetContent,
@@ -15,7 +14,7 @@ import {
 import { useAuth } from "@/lib/auth/mock-auth";
 import { useMockStore } from "@/lib/mock/store";
 import { cn } from "@/lib/utils";
-import { Bell, ChevronsLeftRight, Menu, Search } from "lucide-react";
+import { ChevronsLeftRight } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
@@ -25,7 +24,7 @@ export interface SidebarItem {
   icon: LucideIcon;
   badge?: string | number;
   exact?: boolean;
-  group?: "overview" | "sales" | "clinical" | "clinic";
+  group?: "work" | "operations" | "management";
 }
 
 const SIDEBAR_GROUPS: Array<{
@@ -33,10 +32,9 @@ const SIDEBAR_GROUPS: Array<{
   title: string;
   order: number;
 }> = [
-  { key: "overview", title: "Overview", order: 1 },
-  { key: "sales", title: "Sales & Patients", order: 2 },
-  { key: "clinical", title: "Clinical", order: 3 },
-  { key: "clinic", title: "Clinic Management", order: 4 },
+  { key: "work", title: "Work", order: 1 },
+  { key: "operations", title: "Operations", order: 2 },
+  { key: "management", title: "Management", order: 3 },
 ];
 
 export function SidebarShell({
@@ -164,57 +162,10 @@ export function SidebarShell({
       </Sheet>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 sm:px-6 gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Menu className="size-4" />
-            </Button>
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-semibold truncate">
-                {title ?? activeItem?.label ?? section}
-              </h1>
-              {clinic && (
-                <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
-                  {clinic.name}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-2 w-full max-w-sm">
-            <Search className="size-4 text-muted-foreground" />
-            <Input
-              readOnly
-              value="Search (placeholder)"
-              aria-label="Search placeholder"
-              className="h-8 text-xs"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="hidden sm:inline-flex">
-              Overview
-            </Badge>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Notifications placeholder"
-            >
-              <Bell className="size-4" />
-            </Button>
-            <div className="md:hidden">
-              <RoleSwitcher />
-            </div>
-          </div>
-        </header>
+        <CrmTopbar
+          activeLabel={title ?? activeItem?.label ?? section}
+          onOpenNavigation={() => setMobileOpen(true)}
+        />
         <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
       </div>
     </div>
@@ -252,6 +203,7 @@ function NavGroup({
             key={item.to}
             to={item.to}
             onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
               active

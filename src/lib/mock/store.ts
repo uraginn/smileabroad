@@ -23,6 +23,7 @@ import type {
   RoadmapTreatmentContent,
   TreatmentPlanPriceItem,
   TreatmentPlanStatus,
+  ClinicNotification,
 } from "@/types/models";
 import { dedupeTreatmentPlanPriceItems } from "@/lib/treatment-plan-commercial";
 import { mergeLegacyQuoteIntoTreatmentPlan } from "@/lib/legacy-quote-compat";
@@ -67,6 +68,7 @@ interface Store {
   assessments: Assessment[];
   files: UploadedFile[];
   activities: LeadActivity[];
+  notifications: ClinicNotification[];
   clinicTreatmentDefinitions: ClinicTreatmentDefinition[];
   dentalPlanTemplates: DentalPlanTemplate[];
   clinicHotels: ClinicHotel[];
@@ -134,6 +136,9 @@ interface Store {
     createdBy?: string,
   ) => Task;
   toggleTask: (id: string, changedBy?: string) => void;
+  syncNotifications: (clinicId: string, userId: string, records: ClinicNotification[]) => void;
+  markNotificationRead: (id: string, clinicId: string, userId?: string) => void;
+  markAllNotificationsRead: (clinicId: string, userId?: string) => void;
   saveClinicTreatmentDefinition: (
     record: Omit<ClinicTreatmentDefinition, "created_at" | "updated_at" | "created_by">,
     changedBy?: string,
@@ -287,6 +292,7 @@ export const useMockStore = create<Store>()(
       assessments: seedAssessments,
       files: seedFiles,
       activities: seedActivities,
+      notifications: [],
       clinicTreatmentDefinitions: [],
       dentalPlanTemplates: [],
       clinicHotels: [],
@@ -847,6 +853,48 @@ export const useMockStore = create<Store>()(
             : s.leads,
         }));
       },
+      syncNotifications: (clinicId, userId, records) =>
+        set((state) => {
+          const existing = new Map(state.notifications.map((item) => [item.id, item]));
+          let changed = false;
+          const next = records.map((record) => {
+            const previous = existing.get(record.id);
+            if (!previous) {
+              changed = true;
+              return record;
+            }
+            existing.delete(record.id);
+            return { ...record, read_at: previous.read_at };
+          });
+          const retained = [...existing.values()].filter(
+            (item) => item.clinic_id !== clinicId || item.user_id !== userId,
+          );
+          if (!changed && next.length + retained.length === state.notifications.length)
+            return state;
+          return { notifications: [...next, ...retained] };
+        }),
+      markNotificationRead: (id, clinicId, userId) =>
+        set((state) => ({
+          notifications: state.notifications.map((item) =>
+            item.id === id &&
+            item.clinic_id === clinicId &&
+            (!item.user_id || item.user_id === userId)
+              ? { ...item, read_at: item.read_at ?? now(), updated_at: now() }
+              : item,
+          ),
+        })),
+      markAllNotificationsRead: (clinicId, userId) => {
+        const timestamp = now();
+        set((state) => ({
+          notifications: state.notifications.map((item) =>
+            item.clinic_id === clinicId &&
+            (!item.user_id || item.user_id === userId) &&
+            !item.read_at
+              ? { ...item, read_at: timestamp, updated_at: timestamp }
+              : item,
+          ),
+        }));
+      },
       saveClinicTreatmentDefinition: (record, changedBy = "system") =>
         set((s) => {
           const existing = s.clinicTreatmentDefinitions.find(
@@ -1002,7 +1050,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 15,
+      version: 16,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1144,6 +1192,7 @@ export const useMockStore = create<Store>()(
         });
         return {
           ...stateWithoutLegacyQuotes,
+          notifications: state.notifications ?? [],
           clinics: (state.clinics ?? seedClinics).map((clinic) => ({
             ...clinic,
             ...(clinic.id === "clinic_istanbul"

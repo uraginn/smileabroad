@@ -272,6 +272,28 @@ export interface Appointment extends BaseRecord {
   notes?: string;
 }
 
+export type NotificationType =
+  | "new_application"
+  | "follow_up_overdue"
+  | "task_overdue"
+  | "plan_review"
+  | "plan_approved"
+  | "plan_viewed"
+  | "plan_accepted"
+  | "upcoming_appointment";
+
+export interface ClinicNotification extends BaseRecord {
+  clinic_id: string;
+  user_id?: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  entity_type: "lead" | "patient" | "treatment_plan" | "task" | "appointment";
+  entity_id: string;
+  action_url: string;
+  read_at?: string;
+}
+
 export type ToothTreatment =
   | "implant"
   | "crown"

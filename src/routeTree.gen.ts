@@ -22,10 +22,12 @@ import { Route as ProTemplatesRouteImport } from './routes/pro.templates'
 import { Route as ProTeamRouteImport } from './routes/pro.team'
 import { Route as ProTasksRouteImport } from './routes/pro.tasks'
 import { Route as ProSettingsRouteImport } from './routes/pro.settings'
+import { Route as ProReportsRouteImport } from './routes/pro.reports'
 import { Route as ProQuotesRouteImport } from './routes/pro.quotes'
 import { Route as ProPatientsRouteImport } from './routes/pro.patients'
 import { Route as ProLeadsRouteImport } from './routes/pro.leads'
 import { Route as ProDashboardRouteImport } from './routes/pro.dashboard'
+import { Route as ProCommunicationRouteImport } from './routes/pro.communication'
 import { Route as ProBrandingRouteImport } from './routes/pro.branding'
 import { Route as ProAppointmentsRouteImport } from './routes/pro.appointments'
 import { Route as PatientSplatRouteImport } from './routes/patient.$'
@@ -117,6 +119,11 @@ const ProSettingsRoute = ProSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ProRoute,
 } as any)
+const ProReportsRoute = ProReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => ProRoute,
+} as any)
 const ProQuotesRoute = ProQuotesRouteImport.update({
   id: '/quotes',
   path: '/quotes',
@@ -135,6 +142,11 @@ const ProLeadsRoute = ProLeadsRouteImport.update({
 const ProDashboardRoute = ProDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => ProRoute,
+} as any)
+const ProCommunicationRoute = ProCommunicationRouteImport.update({
+  id: '/communication',
+  path: '/communication',
   getParentRoute: () => ProRoute,
 } as any)
 const ProBrandingRoute = ProBrandingRouteImport.update({
@@ -294,10 +306,12 @@ export interface FileRoutesByFullPath {
   '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
+  '/pro/communication': typeof ProCommunicationRoute
   '/pro/dashboard': typeof ProDashboardRoute
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
+  '/pro/reports': typeof ProReportsRoute
   '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
@@ -337,10 +351,12 @@ export interface FileRoutesByTo {
   '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
+  '/pro/communication': typeof ProCommunicationRoute
   '/pro/dashboard': typeof ProDashboardRoute
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
+  '/pro/reports': typeof ProReportsRoute
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
   '/pro/templates': typeof ProTemplatesRoute
@@ -382,10 +398,12 @@ export interface FileRoutesById {
   '/patient/$': typeof PatientSplatRoute
   '/pro/appointments': typeof ProAppointmentsRoute
   '/pro/branding': typeof ProBrandingRoute
+  '/pro/communication': typeof ProCommunicationRoute
   '/pro/dashboard': typeof ProDashboardRoute
   '/pro/leads': typeof ProLeadsRoute
   '/pro/patients': typeof ProPatientsRouteWithChildren
   '/pro/quotes': typeof ProQuotesRouteWithChildren
+  '/pro/reports': typeof ProReportsRoute
   '/pro/settings': typeof ProSettingsRouteWithChildren
   '/pro/tasks': typeof ProTasksRoute
   '/pro/team': typeof ProTeamRoute
@@ -429,10 +447,12 @@ export interface FileRouteTypes {
     | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
+    | '/pro/communication'
     | '/pro/dashboard'
     | '/pro/leads'
     | '/pro/patients'
     | '/pro/quotes'
+    | '/pro/reports'
     | '/pro/settings'
     | '/pro/tasks'
     | '/pro/team'
@@ -472,10 +492,12 @@ export interface FileRouteTypes {
     | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
+    | '/pro/communication'
     | '/pro/dashboard'
     | '/pro/leads'
     | '/pro/patients'
     | '/pro/quotes'
+    | '/pro/reports'
     | '/pro/tasks'
     | '/pro/team'
     | '/pro/templates'
@@ -516,10 +538,12 @@ export interface FileRouteTypes {
     | '/patient/$'
     | '/pro/appointments'
     | '/pro/branding'
+    | '/pro/communication'
     | '/pro/dashboard'
     | '/pro/leads'
     | '/pro/patients'
     | '/pro/quotes'
+    | '/pro/reports'
     | '/pro/settings'
     | '/pro/tasks'
     | '/pro/team'
@@ -643,6 +667,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProSettingsRouteImport
       parentRoute: typeof ProRoute
     }
+    '/pro/reports': {
+      id: '/pro/reports'
+      path: '/reports'
+      fullPath: '/pro/reports'
+      preLoaderRoute: typeof ProReportsRouteImport
+      parentRoute: typeof ProRoute
+    }
     '/pro/quotes': {
       id: '/pro/quotes'
       path: '/quotes'
@@ -669,6 +700,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/pro/dashboard'
       preLoaderRoute: typeof ProDashboardRouteImport
+      parentRoute: typeof ProRoute
+    }
+    '/pro/communication': {
+      id: '/pro/communication'
+      path: '/communication'
+      fullPath: '/pro/communication'
+      preLoaderRoute: typeof ProCommunicationRouteImport
       parentRoute: typeof ProRoute
     }
     '/pro/branding': {
@@ -980,10 +1018,12 @@ const ProTreatmentPlansRouteWithChildren =
 interface ProRouteChildren {
   ProAppointmentsRoute: typeof ProAppointmentsRoute
   ProBrandingRoute: typeof ProBrandingRoute
+  ProCommunicationRoute: typeof ProCommunicationRoute
   ProDashboardRoute: typeof ProDashboardRoute
   ProLeadsRoute: typeof ProLeadsRoute
   ProPatientsRoute: typeof ProPatientsRouteWithChildren
   ProQuotesRoute: typeof ProQuotesRouteWithChildren
+  ProReportsRoute: typeof ProReportsRoute
   ProSettingsRoute: typeof ProSettingsRouteWithChildren
   ProTasksRoute: typeof ProTasksRoute
   ProTeamRoute: typeof ProTeamRoute
@@ -994,10 +1034,12 @@ interface ProRouteChildren {
 const ProRouteChildren: ProRouteChildren = {
   ProAppointmentsRoute: ProAppointmentsRoute,
   ProBrandingRoute: ProBrandingRoute,
+  ProCommunicationRoute: ProCommunicationRoute,
   ProDashboardRoute: ProDashboardRoute,
   ProLeadsRoute: ProLeadsRoute,
   ProPatientsRoute: ProPatientsRouteWithChildren,
   ProQuotesRoute: ProQuotesRouteWithChildren,
+  ProReportsRoute: ProReportsRoute,
   ProSettingsRoute: ProSettingsRouteWithChildren,
   ProTasksRoute: ProTasksRoute,
   ProTeamRoute: ProTeamRoute,

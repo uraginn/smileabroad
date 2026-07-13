@@ -7,12 +7,9 @@ import {
   ClipboardList,
   CalendarCheck,
   CheckSquare,
-  FileBox,
   Settings,
-  Palette,
-  UserRound,
-  SlidersHorizontal,
-  Map,
+  MessageSquare,
+  BarChart3,
 } from "lucide-react";
 import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { PageLoading } from "@/components/ui-bits";
@@ -20,31 +17,30 @@ import { PageLoading } from "@/components/ui-bits";
 export const Route = createFileRoute("/pro")({ component: ProLayout });
 
 const items = [
-  { to: "/pro/dashboard", label: "Dashboard", icon: LayoutDashboard, group: "overview" as const },
-
-  { to: "/pro/leads", label: "Leads", icon: Kanban, group: "sales" as const },
-  { to: "/pro/patients", label: "Patients", icon: Users, group: "sales" as const },
-  { to: "/pro/tasks", label: "Tasks", icon: CheckSquare, group: "sales" as const },
-  { to: "/pro/appointments", label: "Appointments", icon: CalendarCheck, group: "sales" as const },
-
+  { to: "/pro/dashboard", label: "Dashboard", icon: LayoutDashboard, group: "work" as const },
+  { to: "/pro/leads", label: "Leads", icon: Kanban, group: "work" as const },
+  { to: "/pro/patients", label: "Patients", icon: Users, group: "work" as const },
   {
     to: "/pro/treatment-plans",
     label: "Treatment Plans",
     icon: ClipboardList,
-    group: "clinical" as const,
+    group: "work" as const,
   },
-
-  { to: "/pro/team", label: "Team", icon: UserRound, group: "clinic" as const },
-  { to: "/pro/templates", label: "Templates", icon: FileBox, group: "clinic" as const },
-  { to: "/pro/branding", label: "Branding", icon: Palette, group: "clinic" as const },
-  { to: "/pro/settings", label: "Settings", icon: Settings, group: "clinic" as const, exact: true },
+  { to: "/pro/tasks", label: "Tasks", icon: CheckSquare, group: "operations" as const },
   {
-    to: "/pro/settings/dental-planner",
-    label: "Dental Planner",
-    icon: SlidersHorizontal,
-    group: "clinic" as const,
+    to: "/pro/appointments",
+    label: "Appointments",
+    icon: CalendarCheck,
+    group: "operations" as const,
   },
-  { to: "/pro/settings/roadmap", label: "Roadmap", icon: Map, group: "clinic" as const },
+  {
+    to: "/pro/communication",
+    label: "Communication",
+    icon: MessageSquare,
+    group: "operations" as const,
+  },
+  { to: "/pro/reports", label: "Reports", icon: BarChart3, group: "management" as const },
+  { to: "/pro/settings", label: "Settings", icon: Settings, group: "management" as const },
 ];
 
 function ProLayout() {
@@ -52,8 +48,11 @@ function ProLayout() {
   const user = useAuth((state) => state.user);
   if (!hydrated) return <PageLoading label="Loading clinic workspace" />;
   if (!user || user.role === "platform_admin") return <Navigate to="/login" replace />;
+  const visibleItems = ["clinic_owner", "clinic_admin"].includes(user.role)
+    ? items
+    : items.filter((item) => item.to !== "/pro/settings");
   return (
-    <SidebarShell items={items} section="Clinic CRM">
+    <SidebarShell items={visibleItems} section="Clinic CRM">
       <Outlet />
     </SidebarShell>
   );

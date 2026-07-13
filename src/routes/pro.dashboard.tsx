@@ -1,294 +1,301 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { format, isSameDay } from "date-fns";
 import {
-  useMockStore,
+  AlertCircle,
+  CalendarCheck,
+  CheckSquare,
+  ClipboardList,
+  Eye,
+  FileCheck2,
+  Inbox,
+  Plus,
+} from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
+import { RecentActivityList, type ActivityItem } from "@/components/recent-activity-list";
+import { useAuth } from "@/lib/auth/mock-auth";
+import { formatCrmDate } from "@/lib/format";
+import {
+  selectClinicAppointments,
   selectClinicLeads,
   selectClinicPatients,
   selectClinicPlans,
   selectClinicTasks,
-  selectClinicAppointments,
+  useMockStore,
 } from "@/lib/mock/store";
-import { useAuth } from "@/lib/auth/mock-auth";
-import { StatCard, PageHeader, EmptyState } from "@/components/ui-bits";
-import { RecentActivityList, type ActivityItem } from "@/components/recent-activity-list";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { LEAD_STATUSES } from "@/lib/constants";
-import { formatQuoteMoney } from "@/lib/quote";
-import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
-import {
-  Kanban,
-  Users,
-  ClipboardList,
-  CheckSquare,
-  CalendarCheck,
-  CheckCircle2,
-  Clock3,
-  CircleEllipsis,
-  type LucideIcon,
-} from "lucide-react";
-import { format } from "date-fns";
-import { useShallow } from "zustand/react/shallow";
 
 export const Route = createFileRoute("/pro/dashboard")({ component: ProDashboard });
 
 function ProDashboard() {
-  const clinicId = useAuth((s) => s.user?.clinic_id) ?? "clinic_istanbul";
+  const user = useAuth((state) => state.user);
+  const clinicId = user?.clinic_id ?? "";
   const leads = useMockStore(useShallow(selectClinicLeads(clinicId)));
   const patients = useMockStore(useShallow(selectClinicPatients(clinicId)));
   const plans = useMockStore(useShallow(selectClinicPlans(clinicId)));
   const tasks = useMockStore(useShallow(selectClinicTasks(clinicId)));
-  const appts = useMockStore(useShallow(selectClinicAppointments(clinicId)));
+  const appointments = useMockStore(useShallow(selectClinicAppointments(clinicId)));
   const applications = useMockStore(
-    useShallow((s) => s.applications.filter((a) => a.clinic_id === clinicId)),
+    useShallow((state) => state.applications.filter((item) => item.clinic_id === clinicId)),
   );
   const activities = useMockStore(
-    useShallow((s) => s.activities.filter((a) => a.clinic_id === clinicId)),
+    useShallow((state) => state.activities.filter((item) => item.clinic_id === clinicId)),
   );
-  const clinics = useMockStore((s) => s.clinics);
-  const users = useMockStore((s) => s.users);
+  const users = useMockStore((state) => state.users);
+  const clinics = useMockStore((state) => state.clinics);
   const clinic = clinics.find((item) => item.id === clinicId);
-  const newLeads = leads.filter((l) => l.status === "new_lead");
-  const openTasks = tasks.filter((t) => !t.done);
-  const nextAppts = appts
-    .slice()
-    .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at))
-    .slice(0, 5);
-  const draftPlans = plans.filter((plan) => (plan.status ?? "draft") === "draft");
-  const awaitingReview = plans.filter((plan) => plan.status === "doctor_review");
-  const totalPlanValue = plans.reduce(
-    (sum, plan) => sum + calculateTreatmentPlanTotals(plan).total,
-    0,
+  const now = new Date();
+  const overdueFollowUps = tasks.filter(
+    (item) =>
+      item.category === "follow_up" && !item.done && item.due_at && new Date(item.due_at) < now,
   );
-
-  const activityItems: ActivityItem[] = [
-    ...activities.map((item) => ({
+  const tasksDueToday = tasks.filter(
+    (item) => !item.done && item.due_at && isSameDay(new Date(item.due_at), now),
+  );
+  const newApplications = applications.filter((item) => item.status === "submitted");
+  const awaitingReview = plans.filter((item) => item.status === "doctor_review");
+  const approvedNotSent = plans.filter((item) => item.status === "approved");
+  const viewedPlans = plans.filter((item) => item.status === "viewed");
+  const upcomingAppointments = appointments
+    .filter((item) => new Date(item.starts_at) >= now)
+    .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at));
+  const actionablePlans = [...awaitingReview, ...approvedNotSent, ...viewedPlans]
+    .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))
+    .slice(0, 5);
+  const recentApplications = newApplications
+    .slice()
+    .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
+    .slice(0, 5);
+  const activityItems: ActivityItem[] = activities
+    .slice()
+    .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
+    .slice(0, 8)
+    .map((item) => ({
       id: item.id,
-      type: (item.kind === "status_change" ? "lead" : "note") as "lead" | "note",
-      title: item.kind === "status_change" ? "Lead status updated" : "Lead note added",
+      type: item.kind === "status_change" ? "lead" : "note",
+      title: item.kind === "status_change" ? "Lead status updated" : "Clinic activity",
       patient: leads.find((lead) => lead.id === item.lead_id)?.patient_name,
       status: item.kind.replace(/_/g, " "),
       timestamp: item.created_at,
       description: item.body,
       to: "/pro/leads",
-    })),
-    ...tasks.map((task) => ({
-      id: task.id,
-      type: "task" as const,
-      title: task.title,
-      patient: leads.find((lead) => lead.id === task.lead_id)?.patient_name,
-      status: task.done ? "completed" : "open",
-      timestamp: task.updated_at,
-      description: "Task updated",
-      to: "/pro/tasks",
-    })),
-    ...applications.map((app) => ({
-      id: app.id,
-      type: "application" as const,
-      title: "Clinic application received",
-      patient: leads.find((lead) => lead.clinic_application_id === app.id)?.patient_name,
-      status: app.status,
-      timestamp: app.updated_at,
-      description: "Patient submitted roadmap application.",
-      to: "/pro/leads",
-    })),
-    ...plans.map((plan) => ({
-      id: plan.id,
-      type: "plan" as const,
-      title: plan.title,
-      patient: leads.find((lead) => lead.clinic_patient_id === plan.clinic_patient_id)
-        ?.patient_name,
-      status: plan.status,
-      timestamp: plan.updated_at,
-      description: `${plan.items.length} treatment items`,
-      to: "/pro/treatment-plans/$id",
-      params: { id: plan.id },
-    })),
-  ]
-    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
-    .slice(0, 10);
+    }));
 
-  const leadCounts = LEAD_STATUSES.map((status) => ({
-    ...status,
-    count: leads.filter((lead) => lead.status === status.value).length,
-  })).filter((item) => item.count > 0);
+  const attention = [
+    {
+      label: "Follow-ups overdue",
+      count: overdueFollowUps.length,
+      icon: AlertCircle,
+      to: "/pro/tasks",
+      tone: "text-destructive",
+    },
+    {
+      label: "Tasks due today",
+      count: tasksDueToday.length,
+      icon: CheckSquare,
+      to: "/pro/tasks",
+      tone: "text-warning-foreground",
+    },
+    {
+      label: "New applications",
+      count: newApplications.length,
+      icon: Inbox,
+      to: "/pro/leads",
+      tone: "text-primary",
+    },
+    {
+      label: "Awaiting doctor review",
+      count: awaitingReview.length,
+      icon: ClipboardList,
+      to: "/pro/treatment-plans",
+      tone: "text-warning-foreground",
+    },
+    {
+      label: "Approved, not sent",
+      count: approvedNotSent.length,
+      icon: FileCheck2,
+      to: "/pro/treatment-plans",
+      tone: "text-success",
+    },
+    {
+      label: "Upcoming appointments",
+      count: upcomingAppointments.length,
+      icon: CalendarCheck,
+      to: "/pro/appointments",
+      tone: "text-primary",
+    },
+    {
+      label: "Patient viewed plans",
+      count: viewedPlans.length,
+      icon: Eye,
+      to: "/pro/treatment-plans",
+      tone: "text-accent",
+    },
+  ];
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <PageHeader
-        title="Clinic operations dashboard"
-        description={`${clinic?.name ?? "Clinic"} overview • ${format(new Date(), "EEEE, MMM d, yyyy")}`}
+        title="Today in your clinic"
+        description={`${clinic?.name ?? "Clinic"} · ${format(now, "EEEE, MMM d, yyyy")}`}
         actions={
-          <Button asChild>
-            <Link to="/pro/leads">Open pipeline</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link to="/pro/treatment-plans" search={{ create: true }}>
+                <Plus className="size-4" />
+                Create Treatment Plan
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/pro/leads">Add New Lead</Link>
+            </Button>
+          </div>
         }
       />
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
-        <StatCard
-          icon={Kanban}
-          label="New leads"
-          value={newLeads.length}
-          tone="accent"
-          hint={`${leads.length} total`}
-          comparison="vs all pipeline"
-        />
-        <StatCard
-          icon={Users}
-          label="Patients"
-          value={patients.length}
-          hint="Clinic-owned records"
-        />
-        <StatCard
-          icon={ClipboardList}
-          label="Active Treatment Plans"
-          value={plans.length}
-          tone="success"
-          comparison={`${draftPlans.length} draft`}
-        />
-        <StatCard
-          icon={Clock3}
-          label="Awaiting Review"
-          value={awaitingReview.length}
-          hint={`Estimated value ${formatQuoteMoney(totalPlanValue, plans[0]?.currency ?? "EUR")}`}
-        />
-        <StatCard
-          icon={CheckSquare}
-          label="Open tasks"
-          value={openTasks.length}
-          tone="warning"
-          comparison={`${tasks.length} total tasks`}
-        />
-        <StatCard
-          icon={CalendarCheck}
-          label="Appointments"
-          value={appts.length}
-          comparison={`${nextAppts.length} upcoming`}
-        />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+        {attention.map(({ label, count, icon: Icon, to, tone }) => (
+          <a
+            key={label}
+            href={to}
+            className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Card className="h-full transition-colors hover:bg-muted/30">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <Icon className={`size-4 ${tone}`} />
+                  <Badge variant={count ? "default" : "outline"}>{count}</Badge>
+                </div>
+                <p className="mt-3 text-sm font-medium">{label}</p>
+              </CardContent>
+            </Card>
+          </a>
+        ))}
       </div>
 
-      <div className="grid xl:grid-cols-12 gap-6">
-        <Card className="xl:col-span-7">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-lg font-semibold">Pipeline snapshot</h2>
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/pro/leads">View board →</Link>
-              </Button>
-            </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <WorkCard title="Recent applications" action={<Link to="/pro/leads">View Leads</Link>}>
+          {recentApplications.length ? (
+            recentApplications.map((application) => {
+              const lead = leads.find((item) => item.clinic_application_id === application.id);
+              const coordinator = users.find((item) => item.id === lead?.assigned_to);
+              return (
+                <WorkRow
+                  key={application.id}
+                  title={lead?.patient_name ?? "Patient application"}
+                  subtitle={`${lead?.patient_country ?? "Country unavailable"} · ${lead?.treatment ?? "Treatment not specified"}`}
+                  meta={`${formatCrmDate(application.created_at)}${coordinator ? ` · ${coordinator.name}` : ""}`}
+                  status={lead?.status ?? application.status}
+                  href={
+                    lead?.clinic_patient_id
+                      ? `/pro/patients/${lead.clinic_patient_id}`
+                      : "/pro/leads"
+                  }
+                />
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No new applications"
+              description="New clinic applications will appear here."
+            />
+          )}
+        </WorkCard>
 
-            {leadCounts.length === 0 ? (
-              <EmptyState
-                title="No lead activity yet"
-                description="New applications will appear as leads in your pipeline."
-              />
-            ) : (
-              <div className="space-y-3">
-                {leadCounts.map((item) => {
-                  const pct = Math.max(
-                    8,
-                    Math.round((item.count / Math.max(1, leads.length)) * 100),
-                  );
-                  return (
-                    <div key={item.value} className="space-y-1.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>{item.label}</span>
-                        <Badge variant="outline">{item.count}</Badge>
-                      </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <WorkCard
+          title="Follow-ups requiring attention"
+          action={<Link to="/pro/tasks">Open Tasks</Link>}
+        >
+          {overdueFollowUps.length ? (
+            overdueFollowUps.slice(0, 5).map((task) => {
+              const lead = leads.find((item) => item.id === task.lead_id);
+              const assigned = users.find((item) => item.id === task.assigned_to);
+              const overdueDays = Math.max(
+                1,
+                Math.floor((now.getTime() - new Date(task.due_at!).getTime()) / 86400000),
+              );
+              return (
+                <WorkRow
+                  key={task.id}
+                  title={lead?.patient_name ?? task.title}
+                  subtitle={task.title}
+                  meta={`${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue${assigned ? ` · ${assigned.name}` : ""}`}
+                  status="overdue"
+                  href="/pro/tasks"
+                />
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No overdue follow-ups"
+              description="Your follow-up queue is up to date."
+            />
+          )}
+        </WorkCard>
 
-            <Separator className="my-5" />
+        <WorkCard
+          title="Treatment Plans requiring action"
+          action={<Link to="/pro/treatment-plans">View Plans</Link>}
+        >
+          {actionablePlans.length ? (
+            actionablePlans.map((plan) => {
+              const patient = patients.find((item) => item.id === plan.clinic_patient_id);
+              const dentist = users.find((item) => item.id === plan.dentist_id);
+              const next =
+                plan.status === "doctor_review"
+                  ? "Doctor review required"
+                  : plan.status === "approved"
+                    ? "Copy link and mark sent"
+                    : "Patient follow-up recommended";
+              return (
+                <WorkRow
+                  key={plan.id}
+                  title={patient ? `${patient.first_name} ${patient.last_name}` : plan.title}
+                  subtitle={`${next}${dentist ? ` · ${dentist.name}` : ""}`}
+                  meta={`Updated ${formatCrmDate(plan.updated_at)}`}
+                  status={plan.status ?? "draft"}
+                  href={`/pro/treatment-plans/${plan.id}`}
+                />
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No Treatment Plans need attention"
+              description="Plans awaiting review or patient follow-up will appear here."
+            />
+          )}
+        </WorkCard>
 
-            <div className="grid sm:grid-cols-3 gap-3">
-              <MiniSummary
-                icon={CircleEllipsis}
-                label="Awaiting review"
-                value={leads.filter((lead) => lead.status === "awaiting_review").length}
-              />
-              <MiniSummary
-                icon={Clock3}
-                label="Planning in progress"
-                value={leads.filter((lead) => lead.status === "treatment_planning").length}
-              />
-              <MiniSummary
-                icon={CheckCircle2}
-                label="Booked"
-                value={leads.filter((lead) => lead.status === "booked").length}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="xl:col-span-5">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-lg font-semibold">Tasks & appointments</h2>
-              <div className="flex gap-2">
-                <Button asChild variant="ghost" size="sm">
-                  <Link to="/pro/tasks">Tasks</Link>
-                </Button>
-                <Button asChild variant="ghost" size="sm">
-                  <Link to="/pro/appointments">Calendar</Link>
-                </Button>
-              </div>
-            </div>
-
-            {openTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open tasks.</p>
-            ) : (
-              <div className="space-y-2">
-                {openTasks.slice(0, 4).map((task) => {
-                  const assigned = users.find((user) => user.id === task.assigned_to);
-                  return (
-                    <div
-                      key={task.id}
-                      className="p-3 rounded-lg bg-surface border border-border/50"
-                    >
-                      <p className="text-sm font-medium">{task.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {task.due_at
-                          ? `Due ${format(new Date(task.due_at), "MMM d, HH:mm")}`
-                          : "No due date"}
-                        {assigned ? ` • ${assigned.name}` : ""}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <Separator className="my-4" />
-
-            <h3 className="text-sm font-semibold mb-2">Upcoming appointments</h3>
-            {nextAppts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No appointments scheduled.</p>
-            ) : (
-              <div className="space-y-2">
-                {nextAppts.map((appointment) => (
-                  <div key={appointment.id} className="p-3 rounded-lg border border-border/50">
-                    <p className="text-sm font-medium">{appointment.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {format(new Date(appointment.starts_at), "MMM d, HH:mm")}
-                      {appointment.location ? ` • ${appointment.location}` : ""}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <WorkCard
+          title="Upcoming appointments"
+          action={<Link to="/pro/appointments">Open Calendar</Link>}
+        >
+          {upcomingAppointments.length ? (
+            upcomingAppointments.slice(0, 5).map((appointment) => {
+              const patient = patients.find(
+                (item) =>
+                  item.user_id === appointment.patient_user_id ||
+                  item.id === appointment.patient_user_id,
+              );
+              return (
+                <WorkRow
+                  key={appointment.id}
+                  title={patient ? `${patient.first_name} ${patient.last_name}` : appointment.title}
+                  subtitle={appointment.title}
+                  meta={format(new Date(appointment.starts_at), "MMM d, HH:mm")}
+                  href="/pro/appointments"
+                />
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No appointments scheduled"
+              description="Upcoming clinic appointments will appear here."
+            />
+          )}
+        </WorkCard>
       </div>
 
       <RecentActivityList items={activityItems} />
@@ -296,22 +303,52 @@ function ProDashboard() {
   );
 }
 
-function MiniSummary({
-  icon: Icon,
-  label,
-  value,
+function WorkCard({
+  title,
+  action,
+  children,
 }: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
+  title: string;
+  action: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border bg-surface p-3">
-      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <Icon className="size-3.5" />
-        {label}
-      </p>
-      <p className="font-display text-xl font-semibold mt-1">{value}</p>
-    </div>
+    <Card>
+      <CardHeader className="flex-row items-center justify-between">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <Button asChild variant="ghost" size="sm">
+          {action}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+function WorkRow({
+  title,
+  subtitle,
+  meta,
+  status,
+  href,
+}: {
+  title: string;
+  subtitle: string;
+  meta: string;
+  status?: string;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="flex items-start justify-between gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">{meta}</p>
+      </div>
+      {status && <StatusBadge status={status} />}
+    </a>
   );
 }

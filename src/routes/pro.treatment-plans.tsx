@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
@@ -43,10 +43,19 @@ import { formatQuoteMoney } from "@/lib/quote";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 
-export const Route = createFileRoute("/pro/treatment-plans")({ component: Plans });
+export const Route = createFileRoute("/pro/treatment-plans")({
+  validateSearch: (search: Record<string, unknown>): { create?: boolean } => ({
+    create:
+      search.create === true || search.create === "true" || search.create === "1"
+        ? true
+        : undefined,
+  }),
+  component: Plans,
+});
 
 function Plans() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { create } = Route.useSearch();
   const activeUser = useAuth((state) => state.user);
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
@@ -62,6 +71,9 @@ function Plans() {
   const leads = useMockStore((state) => state.leads);
   const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
+  useEffect(() => {
+    if (create) setCreateOpen(true);
+  }, [create]);
   if (pathname !== "/pro/treatment-plans") return <Outlet />;
   return (
     <div className="space-y-4 p-4 sm:p-6">
