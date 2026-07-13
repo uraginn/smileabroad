@@ -1,6 +1,7 @@
-import { LockKeyhole } from "lucide-react";
+import { AlertTriangle, Check, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { calculateCommercial } from "../utils/commercial";
@@ -11,9 +12,11 @@ import { TreatmentSummary } from "./TreatmentSummary";
 export function FinalReviewStep({
   plan,
   hotels = [],
+  onNavigate,
 }: {
   plan: DentalPlan;
   hotels?: DentalPlanStudioProps["hotels"];
+  onNavigate?: (step: number) => void;
 }) {
   const totals = calculateCommercial({
     ...plan.commercial,
@@ -26,12 +29,51 @@ export function FinalReviewStep({
   });
   const defaults = derivePlanDefaults(plan);
   const selectedHotel = hotels?.find((hotel) => hotel.id === plan.travel.selectedHotelId);
+  const scheduled = plan.commercial.paymentSchedule.reduce((sum, item) => sum + item.amount, 0);
+  const readiness = [
+    { label: "Patient information", ready: Boolean(plan.patient.fullName), step: 0 },
+    { label: "Clinical plan", ready: plan.proposedTreatments.length > 0, step: 1 },
+    { label: "Pricing", ready: totals.total > 0, step: 3 },
+    { label: "Payment schedule", ready: totals.total > 0 && scheduled === totals.total, step: 3 },
+    {
+      label: "Sharing readiness",
+      ready: Boolean(plan.patient.fullName && plan.proposedTreatments.length && totals.total),
+      step: 5,
+    },
+  ];
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Readiness summary</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {readiness.map((item) => (
+            <Button
+              key={item.label}
+              variant="outline"
+              className="h-auto justify-start gap-2 py-3"
+              onClick={() => onNavigate?.(item.step)}
+            >
+              {item.ready ? (
+                <Check className="size-4 text-success" />
+              ) : (
+                <AlertTriangle className="size-4 text-warning-foreground" />
+              )}
+              <span className="text-left">
+                <span className="block text-xs text-muted-foreground">
+                  {item.ready ? "Ready" : "Review needed"}
+                </span>
+                {item.label}
+              </span>
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Patient and assessment</CardTitle>
+            <CardTitle>Patient and case</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>
@@ -46,6 +88,9 @@ export function FinalReviewStep({
               <b>Contact:</b> {plan.patient.email || plan.patient.phone || "Not provided"}
             </p>
             <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">
+                <LockKeyhole className="mr-1 size-3" /> Clinic only
+              </Badge>
               {plan.importedAssessment.medicalConditions.map((item) => (
                 <Badge key={item} variant="secondary">
                   {item}

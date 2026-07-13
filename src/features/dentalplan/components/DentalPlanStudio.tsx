@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -200,10 +201,15 @@ function PlannerShell({
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div>
-            <h1 className="text-xl font-semibold">Dental Treatment Planner</h1>
+            <Button asChild variant="ghost" size="sm" className="mb-1 -ml-3">
+              <Link to="/pro/treatment-plans">Back to Treatment Plans</Link>
+            </Button>
+            <h1 className="text-xl font-semibold">
+              {plan.patient.fullName || "Dental Treatment Planner"}
+            </h1>
             <p className="text-sm text-muted-foreground">
               {context?.mode === "crm"
-                ? "CRM-connected clinical workflow"
+                ? `Treatment Plan · ${plan.patient.dentistId ? "Dentist assigned" : "Dentist not assigned"}`
                 : context?.mode === "template"
                   ? "Clinic template editor · patient data excluded"
                   : "Standalone development workflow"}
@@ -312,27 +318,6 @@ function PlannerShell({
         </Dialog>
         {step === 0 && (
           <>
-            {context?.mode !== "template" && templates.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Choose a clinic template</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-w-xl">
-                    <Combobox
-                      options={templates.map((template) => ({
-                        value: template.id,
-                        label: `${template.name} · ${template.category} · ${template.planData.proposedTreatments.length} treatments`,
-                      }))}
-                      onValueChange={requestTemplate}
-                      placeholder="Select a reusable template"
-                      searchPlaceholder="Search templates..."
-                      emptyText="No templates found"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
             {context?.mode === "template" ? (
               <Card>
                 <CardHeader>
@@ -350,6 +335,29 @@ function PlannerShell({
         )}{" "}
         {step === 1 && (
           <div className="space-y-4">
+            {context?.mode !== "template" && templates.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">
+                    Start from template <Badge variant="outline">Optional</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-w-xl">
+                    <Combobox
+                      options={templates.map((template) => ({
+                        value: template.id,
+                        label: `${template.name} · ${template.category} · ${template.planData.proposedTreatments.length} treatments`,
+                      }))}
+                      onValueChange={requestTemplate}
+                      placeholder="Select a reusable clinical template"
+                      searchPlaceholder="Search templates..."
+                      emptyText="No templates found"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             {preliminarySuggestions.length > 0 && (
               <Card className="border-primary/20">
                 <CardHeader>
@@ -383,7 +391,13 @@ function PlannerShell({
         {step === 3 && (
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
         )}
-        {step === 4 && <FinalReviewStep plan={plan} hotels={hotels} />}
+        {step === 4 && (
+          <FinalReviewStep
+            plan={plan}
+            hotels={hotels}
+            onNavigate={(draftStep) => change({ draftStep })}
+          />
+        )}
         {step === 5 &&
           (shareSection ?? (
             <Card>
@@ -454,26 +468,18 @@ function PatientStep({
           <CardTitle>Patient identity</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Field label="First name">
+          <Field label="Full name">
             <Input
-              value={plan.patient.firstName}
-              onChange={(e) =>
+              value={plan.patient.fullName}
+              onChange={(e) => {
+                const fullName = e.target.value;
+                const parts = fullName.trim().split(/\s+/);
                 update({
-                  firstName: e.target.value,
-                  fullName: `${e.target.value} ${plan.patient.lastName}`.trim(),
-                })
-              }
-            />
-          </Field>
-          <Field label="Last name">
-            <Input
-              value={plan.patient.lastName}
-              onChange={(e) =>
-                update({
-                  lastName: e.target.value,
-                  fullName: `${plan.patient.firstName} ${e.target.value}`.trim(),
-                })
-              }
+                  fullName,
+                  firstName: parts[0] ?? "",
+                  lastName: parts.slice(1).join(" "),
+                });
+              }}
             />
           </Field>
           <Field label="Date of birth">

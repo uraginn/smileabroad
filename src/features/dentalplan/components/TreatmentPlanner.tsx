@@ -377,21 +377,12 @@ export function TreatmentPlanner({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          Patient
-          <input
-            type="text"
-            value={history.state.patientName ?? ""}
-            onChange={(event) =>
-              history.set((previous) => ({ ...previous, patientName: event.target.value }), {
-                commit: false,
-              })
-            }
-            placeholder="Patient name"
-            className="rounded border bg-background px-2 py-1 text-sm"
-            disabled={readOnly}
-          />
-        </label>
+        <p className="text-sm text-muted-foreground">
+          Planning for{" "}
+          <span className="font-medium text-foreground">
+            {history.state.patient.fullName || "patient"}
+          </span>
+        </p>
         <div className="flex items-center gap-2">
           <ToolButton onClick={history.undo} disabled={!history.canUndo || readOnly}>
             Undo
@@ -405,7 +396,7 @@ export function TreatmentPlanner({
         </div>
       </div>
       <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
-        <TabsList>
+        <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="current">Current Dental Condition</TabsTrigger>
           <TabsTrigger value="proposed">Proposed Treatment Plan</TabsTrigger>
         </TabsList>

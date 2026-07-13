@@ -65,7 +65,10 @@ export function UnifiedPlanShareSection({
               <p className="text-sm text-muted-foreground">Current document status</p>
               <StatusBadge status={plan.status ?? "draft"} />
             </div>
-            <Button variant="outline" onClick={preview}>
+            <Button
+              variant={(plan.status ?? "draft") === "draft" ? "default" : "outline"}
+              onClick={preview}
+            >
               Preview Patient View
             </Button>
           </div>
@@ -106,6 +109,7 @@ export function UnifiedPlanShareSection({
             )}
             {(plan.status ?? "draft") === "approved" && (
               <Button
+                variant="outline"
                 onClick={() => {
                   markSent(plan.id, plan.clinic_id, actorId);
                   toast.success("Treatment Plan marked as sent");
@@ -114,8 +118,12 @@ export function UnifiedPlanShareSection({
                 Mark Sent
               </Button>
             )}
-            <Button variant="outline" disabled={!publicLinkReady} onClick={copyLink}>
-              Copy Share Link
+            <Button
+              variant={publicLinkReady ? "default" : "outline"}
+              disabled={!publicLinkReady}
+              onClick={copyLink}
+            >
+              Copy Patient Link
             </Button>
             {["approved", "sent", "viewed"].includes(plan.status ?? "") && (
               <AlertDialog>

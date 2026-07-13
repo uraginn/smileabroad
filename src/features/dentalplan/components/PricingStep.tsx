@@ -22,6 +22,7 @@ import {
 import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan } from "../types/dental-plan.types";
 import { calculateCommercial, syncPricingItems } from "../utils/commercial";
+import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 export function PricingStep({
   plan,
   change,
@@ -37,6 +38,7 @@ export function PricingStep({
   }>;
 }) {
   const commercial = plan.commercial;
+  const recommendedVisits = derivePlanDefaults(plan).recommendedVisits;
   const update = (patch: Partial<typeof commercial>) =>
     change({ commercial: { ...commercial, ...patch } });
   const synced = syncPricingItems(plan, treatmentDefaults);
@@ -45,6 +47,19 @@ export function PricingStep({
     // Sync only when dental treatment structure changes; prices are retained by treatment ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.proposedTreatments, commercial.currency, treatmentDefaults]);
+  useEffect(() => {
+    if (commercial.paymentSchedule.length) return;
+    update({
+      paymentSchedule: [
+        { id: crypto.randomUUID(), label: "1st Visit", amount: 0, due: "Due at first visit" },
+        ...(recommendedVisits > 1
+          ? [{ id: crypto.randomUUID(), label: "2nd Visit", amount: 0, due: "Due at second visit" }]
+          : []),
+      ],
+    });
+    // Initialize once when a plan has no persisted payment schedule.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commercial.paymentSchedule.length, recommendedVisits]);
   const billableCommercial = {
     ...commercial,
     hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
@@ -251,7 +266,7 @@ export function PricingStep({
                     ...commercial.paymentSchedule,
                     {
                       id: crypto.randomUUID(),
-                      label: `Payment ${commercial.paymentSchedule.length + 1}`,
+                      label: `${ordinal(commercial.paymentSchedule.length + 1)} Visit`,
                       amount: 0,
                       due: "",
                     },
@@ -320,10 +335,27 @@ export function PricingStep({
               Scheduled payments exceed the current plan total.
             </p>
           )}
+          {scheduled <= totals.total && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2 text-sm">
+              <span>Remaining amount</span>
+              <span className="font-medium">
+                {formatQuoteMoney(Math.max(0, totals.total - scheduled), commercial.currency)}
+              </span>
+              {totals.total > 0 && scheduled === totals.total && (
+                <span className="text-success">Payment schedule matches the final total.</span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
+}
+function ordinal(value: number) {
+  if (value === 1) return "1st";
+  if (value === 2) return "2nd";
+  if (value === 3) return "3rd";
+  return `${value}th`;
 }
 function Money({
   label,

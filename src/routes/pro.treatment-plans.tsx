@@ -1,9 +1,26 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { MoreHorizontal } from "lucide-react";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,12 +48,19 @@ export const Route = createFileRoute("/pro/treatment-plans")({ component: Plans 
 function Plans() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const activeUser = useAuth((state) => state.user);
+  const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [patientId, setPatientId] = useState("");
+  const [dentistId, setDentistId] = useState("");
+  const [coordinatorId, setCoordinatorId] = useState("");
   const clinicId = activeUser?.clinic_id ?? "clinic_istanbul";
   const plans = useMockStore(useShallow(selectClinicPlans(clinicId)));
   const patients = useMockStore(
     useShallow((state) => state.patients.filter((patient) => patient.clinic_id === clinicId)),
   );
   const users = useMockStore((state) => state.users);
+  const leads = useMockStore((state) => state.leads);
+  const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
   if (pathname !== "/pro/treatment-plans") return <Outlet />;
   return (
@@ -44,11 +68,17 @@ function Plans() {
       <PageHeader
         title="Treatment Plans"
         description="Prepare clinical care, travel, pricing, review and sharing in one patient-document workspace."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" /> Create Treatment Plan
+          </Button>
+        }
       />
       {plans.length === 0 ? (
         <EmptyState
           title="No treatment plans"
           description="Create a Treatment Plan from a patient or Lead to begin."
+          action={<Button onClick={() => setCreateOpen(true)}>Create Treatment Plan</Button>}
         />
       ) : (
         <Card>
@@ -113,6 +143,136 @@ function Plans() {
             </Table>
           </CardContent>
         </Card>
+      )}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Treatment Plan</DialogTitle>
+            <DialogDescription>
+              Select the patient and assignment, then continue directly to the planner.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Patient or Lead</Label>
+              <Select value={patientId} onValueChange={setPatientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a patient" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((patient) => {
+                    const lead = leads.find(
+                      (item) =>
+                        item.clinic_id === clinicId && item.clinic_patient_id === patient.id,
+                    );
+                    return (
+                      <SelectItem key={patient.id} value={patient.id}>
+                        {patient.first_name} {patient.last_name}
+                        {lead ? ` · ${lead.treatment}` : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AssignmentSelect
+                label="Assigned dentist"
+                value={dentistId}
+                onChange={setDentistId}
+                users={users.filter(
+                  (user) =>
+                    user.clinic_id === clinicId && user.role === "dentist" && user.active !== false,
+                )}
+              />
+              <AssignmentSelect
+                label="Assigned coordinator"
+                value={coordinatorId}
+                onChange={setCoordinatorId}
+                users={users.filter(
+                  (user) =>
+                    user.clinic_id === clinicId &&
+                    ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role) &&
+                    user.active !== false,
+                )}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!patientId}
+              onClick={() => {
+                const patient = patients.find((item) => item.id === patientId);
+                if (!patient) return;
+                const lead = leads.find(
+                  (item) => item.clinic_id === clinicId && item.clinic_patient_id === patient.id,
+                );
+                const plan = addTreatmentPlan(
+                  {
+                    clinic_id: clinicId,
+                    patient_user_id: patient.user_id ?? patient.id,
+                    clinic_patient_id: patient.id,
+                    lead_id: lead?.id,
+                    clinic_application_id: lead?.clinic_application_id,
+                    assessment_id: lead?.assessment_id ?? patient.assessment_id,
+                    roadmap_id: lead?.roadmap_id ?? patient.roadmap_id,
+                    dentist_id: dentistId || undefined,
+                    coordinator_id: coordinatorId || lead?.assigned_to,
+                    title: patient.treatment_interest
+                      ? `${patient.treatment_interest} treatment plan`
+                      : `Treatment plan for ${patient.first_name} ${patient.last_name}`,
+                    summary: "Draft clinical treatment plan.",
+                    items: [],
+                    visits: 1,
+                    healing_weeks: 0,
+                    status: "draft",
+                  },
+                  activeUser?.id,
+                );
+                setCreateOpen(false);
+                void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+              }}
+            >
+              Continue to Treatment Planner
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AssignmentSelect({
+  label,
+  value,
+  onChange,
+  users,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  users: Array<{ id: string; name: string }>;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange} disabled={!users.length}>
+        <SelectTrigger>
+          <SelectValue placeholder={users.length ? "Optional" : "No users configured"} />
+        </SelectTrigger>
+        <SelectContent>
+          {users.map((user) => (
+            <SelectItem key={user.id} value={user.id}>
+              {user.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!users.length && (
+        <p className="text-xs text-muted-foreground">Configure clinic users in Settings.</p>
       )}
     </div>
   );

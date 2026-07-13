@@ -234,12 +234,11 @@ function PatientDetail() {
   if (!patient) throw notFound();
 
   const createTreatmentPlan = () => {
-    if (!patient.user_id) return;
     const treatment = assessment?.dental.treatment_interest || patient.treatment_interest;
     const plan = addTreatmentPlan(
       {
         clinic_id: patient.clinic_id,
-        patient_user_id: patient.user_id,
+        patient_user_id: patient.user_id ?? patient.id,
         clinic_patient_id: patient.id,
         lead_id: lead?.id,
         clinic_application_id: application?.id,

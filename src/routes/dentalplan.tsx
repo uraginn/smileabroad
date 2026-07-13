@@ -574,7 +574,7 @@ function DentalPlanRoute() {
         transfers_included:
           value.travel.includedServices.includes("Airport Transfer") ||
           value.travel.includedServices.includes("Hotel Transfer"),
-        flight_included: value.travel.includedServices.includes("Flights"),
+        flight_included: value.travel.includedServices.includes("Flight Included"),
         prepared_at: existingPlan?.prepared_at ?? new Date().toISOString(),
         patient_document_version: existingPlan?.patient_document_version ?? 1,
       },

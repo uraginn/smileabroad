@@ -247,12 +247,9 @@ export function TravelServicesStep({
             selected={plan.travel.includedServices}
             onChange={setService}
           />
-          <ServiceGroup
-            title="Travel"
-            services={TRAVEL_SERVICES}
-            selected={plan.travel.includedServices}
-            onChange={setService}
-          />
+          <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+            Travel selections are controlled above and included automatically in this summary.
+          </div>
           <div className="flex gap-2">
             <Input
               value={custom}
