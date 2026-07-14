@@ -120,7 +120,7 @@ export function buildClinicReport(input: {
     planStatuses: by(plans.map((x) => x.status ?? "draft")),
     sourceRows,
     team,
-    countries: by(patients.map((x) => x.country)),
+    countries: by(patients.map((x) => x.country ?? "Unknown")),
     interests: by(patients.map((x) => x.treatment_interest ?? "Unknown")),
     acceptedValue: value(accepted),
     averagePlanValue: plans.length ? value(plans) / plans.length : 0,

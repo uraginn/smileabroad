@@ -151,7 +151,9 @@ function Patients() {
     source,
   ]);
   const clinicUsers = users.filter((item) => item.clinic_id === clinicId && item.active !== false);
-  const countries = [...new Set(patients.map((item) => item.country))].sort();
+  const countries = [
+    ...new Set(patients.map((item) => item.country).filter(Boolean)),
+  ].sort() as string[];
   const languages = [...new Set(patients.map((item) => item.language).filter(Boolean))] as string[];
   if (pathname !== "/pro/patients") return <Outlet />;
   return (

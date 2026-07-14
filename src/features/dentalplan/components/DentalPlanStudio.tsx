@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -47,7 +49,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-const STEPS = ["Patient", "Clinical Plan", "Travel & Services", "Pricing", "Review", "Share"];
+const STEPS = [
+  "Patient & Assignment",
+  "Clinical Plan",
+  "Travel & Services",
+  "Pricing",
+  "Review",
+  "Share",
+];
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
   const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
   const [plan, setPlan] = useState<DentalPlan | null>(null);
@@ -137,40 +146,25 @@ function PlannerShell({
     const source = createDentalPlan(template.planData);
     setPlan({
       ...plan,
-      currentConditions: source.currentConditions,
       proposedTreatments: source.proposedTreatments,
       treatmentGroups: source.treatmentGroups,
-      planningPreferences: source.planningPreferences,
-      travel: {
-        ...plan.travel,
-        selectedHotelId: source.travel.selectedHotelId,
-        hotelIncluded: source.travel.hotelIncluded,
-        hotelRequired: source.travel.hotelRequired,
-        hotelNights: source.travel.hotelNights,
-        roomType: source.travel.roomType,
-        boardType: source.travel.boardType,
-        airportTransfer: source.travel.airportTransfer,
-        localTransfer: source.travel.localTransfer,
-        flightIncluded: source.travel.flightIncluded,
-        includedServices: source.travel.includedServices,
-      },
-      commercial: { ...plan.commercial, items: source.commercial.items },
       updatedAt: new Date().toISOString(),
     });
     toast.success(`${template.name} applied`);
   };
   const requestTemplate = (templateId: string) => {
-    const hasPlanningData =
-      Object.keys(plan.currentConditions).length > 0 || plan.proposedTreatments.length > 0;
+    const hasPlanningData = plan.proposedTreatments.length > 0;
     if (hasPlanningData) setPendingTemplateId(templateId);
     else applyTemplate(templateId);
   };
   const save = () => {
+    if (readOnly) return;
     repository.savePlan(plan);
     onSave?.(plan);
     setResult("Draft saved.");
   };
   const finalize = async () => {
+    if (readOnly) return;
     const hardConflicts = validatePlanForFinalize(plan);
     if (hardConflicts.length) {
       setResult(`Resolve before finalizing: ${hardConflicts.join(" ")}`);
@@ -223,10 +217,10 @@ function PlannerShell({
                   ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
                   : "Not saved"}
             </span>
-            <Button variant="outline" onClick={save}>
+            <Button variant="outline" onClick={save} disabled={readOnly}>
               Save draft
             </Button>
-            {context?.mode === "crm" && onSaveAsTemplate && (
+            {context?.mode === "crm" && onSaveAsTemplate && !readOnly && (
               <Button variant="outline" onClick={() => setTemplateNameOpen(true)}>
                 Save as template
               </Button>
@@ -270,8 +264,8 @@ function PlannerShell({
             <AlertDialogHeader>
               <AlertDialogTitle>Replace current planning data?</AlertDialogTitle>
               <AlertDialogDescription>
-                The selected template will replace the current diagram, treatments and linked
-                groups. Patient identity, medical data and CRM references will be preserved.
+                The selected template will replace proposed treatments and linked groups. Current
+                conditions, patient, assignment, travel and pricing data will stay unchanged.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -359,11 +353,14 @@ function PlannerShell({
               </Card>
             )}
             {preliminarySuggestions.length > 0 && (
-              <Card className="border-primary/20">
-                <CardHeader>
-                  <CardTitle className="text-base">Preliminary Roadmap suggestions</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <Collapsible className="rounded-lg border border-primary/20 bg-card px-4">
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" className="w-full justify-between px-0">
+                    Preliminary Roadmap suggestions
+                    <ChevronDown className="size-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pb-4">
                   <div className="flex flex-wrap gap-2">
                     {preliminarySuggestions.map((item) => (
                       <Badge key={item.key} variant="outline">
@@ -376,8 +373,8 @@ function PlannerShell({
                     Reference only. Suggestions do not select teeth or become confirmed treatments
                     until edited by the clinic.
                   </p>
-                </CardContent>
-              </Card>
+                </CollapsibleContent>
+              </Collapsible>
             )}
             <TreatmentPlanner
               value={plan}
@@ -421,7 +418,7 @@ function PlannerShell({
           ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button disabled={finalizing || !plan.proposedTreatments.length}>
+                <Button disabled={readOnly || finalizing || !plan.proposedTreatments.length}>
                   {finalizing ? "Saving…" : "Save Treatment Plan and continue"}
                 </Button>
               </AlertDialogTrigger>
@@ -461,91 +458,67 @@ function PatientStep({
       patient: { ...plan.patient, ...patch },
       patientName: patch.fullName ?? plan.patientName,
     });
+  const hasSourceContext = Boolean(
+    plan.patient.leadId ||
+    plan.patient.assessmentId ||
+    plan.patient.roadmapId ||
+    plan.patient.applicationId ||
+    plan.patient.uploadedFiles.length ||
+    plan.importedAssessment.destinationCountry ||
+    plan.patient.treatmentInterest,
+  );
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Patient identity</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Field label="Full name">
-            <Input
-              value={plan.patient.fullName}
-              onChange={(e) => {
-                const fullName = e.target.value;
-                const parts = fullName.trim().split(/\s+/);
-                update({
-                  fullName,
-                  firstName: parts[0] ?? "",
-                  lastName: parts.slice(1).join(" "),
-                });
-              }}
-            />
-          </Field>
-          <Field label="Date of birth">
-            <Input
-              type="date"
-              value={plan.patient.dateOfBirth ?? ""}
-              onChange={(e) => update({ dateOfBirth: e.target.value })}
-            />
-          </Field>
-          <Field label="Age">
-            <Input
-              type="number"
-              min={0}
-              value={plan.patient.age ?? ""}
-              onChange={(e) => update({ age: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </Field>
-          <Field label="Country">
-            <CountryCombobox
-              value={plan.patient.country ?? ""}
-              onChange={(country) => update({ country })}
-            />
-          </Field>
-          <Field label="City">
-            <Input
-              value={plan.patient.city ?? ""}
-              onChange={(e) => update({ city: e.target.value })}
-            />
-          </Field>
-          <Field label="Email">
-            <Input
-              value={plan.patient.email ?? ""}
-              onChange={(e) => update({ email: e.target.value })}
-            />
-          </Field>
-          <Field label="Phone">
-            <Input
-              value={plan.patient.phone ?? ""}
-              onChange={(e) => update({ phone: e.target.value })}
-            />
-          </Field>
-          <Field label="WhatsApp">
-            <Input
-              value={plan.patient.whatsapp ?? ""}
-              onChange={(e) => update({ whatsapp: e.target.value })}
-            />
-          </Field>
-          <Field label="Preferred language">
-            <Input
-              value={plan.patient.preferredLanguage ?? ""}
-              onChange={(e) => update({ preferredLanguage: e.target.value })}
-            />
-          </Field>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Case context</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Patient source">
-              <Badge variant="secondary" className="h-9 w-fit items-center">
-                {plan.patient.source ?? "Manual"}
-              </Badge>
+    <Card>
+      <CardHeader>
+        <CardTitle>Patient & Assignment</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <section aria-labelledby="patient-information-heading">
+          <h3 id="patient-information-heading" className="mb-4 text-sm font-semibold">
+            Patient information
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Full name">
+              <Input
+                value={plan.patient.fullName}
+                onChange={(e) => {
+                  const fullName = e.target.value;
+                  const parts = fullName.trim().split(/\s+/);
+                  update({
+                    fullName,
+                    firstName: parts[0] ?? "",
+                    lastName: parts.slice(1).join(" "),
+                  });
+                }}
+              />
             </Field>
+            <Field label="Email (optional)">
+              <Input
+                type="email"
+                value={plan.patient.email ?? ""}
+                onChange={(e) => update({ email: e.target.value })}
+              />
+            </Field>
+            <Field label="Country">
+              <CountryCombobox
+                value={plan.patient.country ?? ""}
+                onChange={(country) => update({ country })}
+              />
+            </Field>
+            <Field label="Preferred language (optional)">
+              <Input
+                value={plan.patient.preferredLanguage ?? ""}
+                onChange={(e) => update({ preferredLanguage: e.target.value })}
+              />
+            </Field>
+          </div>
+        </section>
+        <Separator />
+        <section aria-labelledby="assignment-heading">
+          <h3 id="assignment-heading" className="mb-4 text-sm font-semibold">
+            Clinical ownership
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
             <Field label="Assigned dentist">
               <TeamSelect
                 value={plan.patient.dentistId}
@@ -565,37 +538,63 @@ function PatientStep({
               />
             </Field>
           </div>
-          <Separator />
-          <div className="flex flex-wrap gap-2">
-            {plan.patient.assessmentId && <Badge variant="outline">Assessment available</Badge>}
-            {plan.patient.roadmapId && <Badge variant="outline">Roadmap available</Badge>}
-            {plan.patient.applicationId && (
-              <Badge variant="outline">Clinic application available</Badge>
-            )}
-            {plan.patient.leadId && <Badge variant="outline">CRM lead linked</Badge>}
-            {!plan.patient.assessmentId && !plan.patient.roadmapId && !plan.patient.leadId && (
-              <span className="text-sm text-muted-foreground">
-                No originating digital case references.
-              </span>
-            )}
-          </div>
-          <div>
-            <p className="mb-2 text-sm font-medium">Uploaded case files</p>
-            <div className="flex flex-wrap gap-2">
-              {plan.patient.uploadedFiles.length ? (
-                plan.patient.uploadedFiles.map((file, index) => (
-                  <Badge key={`${file.kind}-${index}`} variant="secondary">
-                    {file.kind.replace(/_/g, " ")}
-                  </Badge>
-                ))
-              ) : (
-                <span className="text-sm text-muted-foreground">No uploaded files available.</span>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        </section>
+        {hasSourceContext && (
+          <>
+            <Separator />
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" className="w-full justify-between px-0">
+                  Source information
+                  <ChevronDown className="size-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-3">
+                <div className="flex flex-wrap gap-2">
+                  {plan.patient.source && (
+                    <Badge variant="secondary">
+                      Source: {plan.patient.source.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                  {plan.patient.assessmentId && (
+                    <Badge variant="outline">Assessment available</Badge>
+                  )}
+                  {plan.patient.roadmapId && (
+                    <Badge variant="outline">Preliminary Roadmap available</Badge>
+                  )}
+                  {plan.patient.applicationId && (
+                    <Badge variant="outline">Clinic application available</Badge>
+                  )}
+                  {plan.patient.leadId && <Badge variant="outline">CRM Lead linked</Badge>}
+                  {plan.importedAssessment.destinationCountry && (
+                    <Badge variant="outline">
+                      Destination: {plan.importedAssessment.destinationCountry}
+                    </Badge>
+                  )}
+                  {plan.patient.treatmentInterest && (
+                    <Badge variant="outline">
+                      Preliminary interest: {plan.patient.treatmentInterest}
+                    </Badge>
+                  )}
+                </div>
+                {plan.patient.uploadedFiles.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Uploaded case files</p>
+                    <div className="flex flex-wrap gap-2">
+                      {plan.patient.uploadedFiles.map((file, index) => (
+                        <Badge key={`${file.kind}-${index}`} variant="secondary">
+                          {file.kind.replace(/_/g, " ")}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 function TeamSelect({
@@ -610,18 +609,17 @@ function TeamSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {users.map((user) => (
-          <SelectItem key={user.id} value={user.id}>
-            {user.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Combobox
+      value={value || "unassigned"}
+      options={[
+        { value: "unassigned", label: "Unassigned" },
+        ...users.map((user) => ({ value: user.id, label: user.name })),
+      ]}
+      onValueChange={(next) => onChange(next === "unassigned" ? "" : next)}
+      placeholder={placeholder}
+      searchPlaceholder={`Search ${placeholder.toLowerCase()}...`}
+      emptyText="No matching clinic user"
+    />
   );
 }
 function TravelStep({

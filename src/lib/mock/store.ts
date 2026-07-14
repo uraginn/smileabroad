@@ -347,12 +347,12 @@ export const useMockStore = create<Store>()(
       roadmapTreatmentContent: DEFAULT_ROADMAP_TREATMENT_CONTENT,
 
       addPatient: (patient, createdBy = "system") => {
-        const normalizedEmail = patient.email.trim().toLowerCase();
+        const normalizedEmail = patient.email?.trim().toLowerCase() ?? "";
         const normalizedPhone = (patient.phone ?? patient.whatsapp ?? "").replace(/\D/g, "");
         const existing = get().patients.find(
           (item) =>
             item.clinic_id === patient.clinic_id &&
-            ((normalizedEmail && item.email.trim().toLowerCase() === normalizedEmail) ||
+            ((normalizedEmail && item.email?.trim().toLowerCase() === normalizedEmail) ||
               (normalizedPhone &&
                 (item.phone ?? item.whatsapp ?? "").replace(/\D/g, "") === normalizedPhone)),
         );

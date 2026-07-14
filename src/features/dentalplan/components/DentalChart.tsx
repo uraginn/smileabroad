@@ -14,6 +14,7 @@ type Props = {
   selected: ToothNumber[];
   readOnly?: boolean;
   allowReadOnlySelection?: boolean;
+  showSelectionTools?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean, anchor?: HTMLButtonElement) => void;
   onSelectAllUpper?: () => void;
   onSelectAllLower?: () => void;
@@ -31,6 +32,7 @@ export function DentalChart({
   selected,
   readOnly,
   allowReadOnlySelection,
+  showSelectionTools = true,
   onSelect,
   onSelectAllUpper,
   onSelectAllLower,
@@ -51,7 +53,7 @@ export function DentalChart({
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Read-only
           </span>
-        ) : !readOnly ? (
+        ) : !readOnly && showSelectionTools ? (
           <div className="flex gap-1">
             <Mini onClick={onSelectAllUpper}>Upper</Mini>
             <Mini onClick={onSelectAllLower}>Lower</Mini>

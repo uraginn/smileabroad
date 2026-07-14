@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type {
   BridgeUnitRole,
   ConditionType,
@@ -59,6 +70,10 @@ export function TreatmentPlanner({
   useEffect(() => onChangeRef.current(history.state), [history.state]);
   const [mode, setMode] = useState<PlannerMode>("current");
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingWarning, setPendingWarning] = useState<{
+    definition: EffectiveTreatmentDefinition;
+    messages: string[];
+  }>();
   const currentSelection = useToothSelection();
   const proposedSelection = useToothSelection();
   const selection = mode === "current" ? currentSelection : proposedSelection;
@@ -149,7 +164,7 @@ export function TreatmentPlanner({
     [history],
   );
   const applyTreatmentToSelection = useCallback(
-    (selectedDefinition: EffectiveTreatmentDefinition) => {
+    (selectedDefinition: EffectiveTreatmentDefinition, warningConfirmed = false) => {
       const treatment = selectedDefinition.baseTreatmentKey;
       if (!selection.selected.length) {
         setMessage("Select at least one tooth first.");
@@ -163,15 +178,23 @@ export function TreatmentPlanner({
         return;
       }
       const warnings = ruleResults.filter((result) => result.severity === "warning");
-      if (
-        warnings.length &&
-        !window.confirm(
-          `${warnings.map((result) => result.message).join("\n")}\n\nContinue with clinician override?`,
-        )
-      )
+      if (warnings.length && !warningConfirmed) {
+        setPendingWarning({
+          definition: selectedDefinition,
+          messages: warnings.map((result) => result.message),
+        });
         return;
+      }
       if (treatment === "all-on-4") {
         const arch = archForSelection(selection.selected);
+        if (
+          history.state.treatmentGroups.some(
+            (group) => group.type === "all-on-4" && group.arch === arch,
+          )
+        ) {
+          setMessage(`An All-on-4 treatment already exists for the ${arch} arch.`);
+          return;
+        }
         const preset = ALL_ON_4_PRESETS[arch];
         const groupId = crypto.randomUUID();
         history.commit((previous) => {
@@ -214,6 +237,16 @@ export function TreatmentPlanner({
               ),
             ),
         );
+        if (
+          history.state.proposedTreatments.some(
+            (item) =>
+              item.treatmentType === "whitening" &&
+              item.toothNumbers.some((tooth) => teeth.includes(tooth)),
+          )
+        ) {
+          setMessage("Whitening is already included for the selected arch.");
+          return;
+        }
         const id = crypto.randomUUID();
         const groupId = crypto.randomUUID();
         history.commit((previous) => ({
@@ -238,6 +271,16 @@ export function TreatmentPlanner({
         return;
       }
       if (treatment === "bridge") {
+        if (
+          history.state.proposedTreatments.some(
+            (item) =>
+              item.treatmentType === "bridge" &&
+              selection.selected.some((tooth) => item.toothNumbers.includes(tooth)),
+          )
+        ) {
+          setMessage("A bridge is already included for one or more selected teeth.");
+          return;
+        }
         const result = validateBridge(selection.selected);
         if (!result.ok) {
           setMessage(result.message);
@@ -245,6 +288,17 @@ export function TreatmentPlanner({
         }
         setBridgeTeeth([...selection.selected]);
         setBridgeDefinition(selectedDefinition);
+        return;
+      }
+      const duplicateTreatment = history.state.proposedTreatments.find(
+        (item) =>
+          (item.treatmentDefinitionId
+            ? item.treatmentDefinitionId === selectedDefinition.id
+            : item.treatmentType === treatment) &&
+          selection.selected.some((tooth) => item.toothNumbers.includes(tooth)),
+      );
+      if (duplicateTreatment) {
+        setMessage(`${selectedDefinition.displayName} is already included for a selected tooth.`);
         return;
       }
       for (const tooth of selection.selected) {
@@ -376,6 +430,35 @@ export function TreatmentPlanner({
   );
   return (
     <div className="space-y-4">
+      <AlertDialog
+        open={!!pendingWarning}
+        onOpenChange={(open) => !open && setPendingWarning(undefined)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clinical warning</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {pendingWarning?.messages.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+                <p>Continue only when the treating clinician has reviewed this exception.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingWarning) applyTreatmentToSelection(pendingWarning.definition, true);
+                setPendingWarning(undefined);
+              }}
+            >
+              Continue with clinician override
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Planning for{" "}
@@ -415,7 +498,37 @@ export function TreatmentPlanner({
           {message}
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <Badge variant="secondary">{selection.selected.length} selected</Badge>
+          {selection.selected.slice(0, 6).map((tooth) => (
+            <Badge key={tooth} variant="outline">
+              {tooth}
+            </Badge>
+          ))}
+          {selection.selected.length > 6 && (
+            <Badge variant="outline">+{selection.selected.length - 6}</Badge>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button type="button" size="sm" variant="outline" onClick={selection.selectAllUpper}>
+            Upper arch
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={selection.selectAllLower}>
+            Lower arch
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={!selection.selected.length}
+            onClick={selection.clear}
+          >
+            Clear
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
         <DentalChart
           title={mode === "current" ? "Current Dental Condition" : "Proposed Treatment Plan"}
           mode={mode}
@@ -423,6 +536,7 @@ export function TreatmentPlanner({
           proposedTreatments={history.state.proposedTreatments}
           selected={selection.selected}
           readOnly={readOnly}
+          showSelectionTools={false}
           onSelect={selection.toggle}
           onSelectAllUpper={selection.selectAllUpper}
           onSelectAllLower={selection.selectAllLower}
@@ -434,10 +548,6 @@ export function TreatmentPlanner({
         />
         <div className="space-y-4">
           <div className="rounded-lg border bg-card p-4">
-            <div className="mb-2 text-xs text-muted-foreground">
-              <Badge variant="secondary">{selection.selected.length} selected</Badge>
-              {selection.selected.length ? ` · ${selection.selected.join(", ")}` : ""}
-            </div>
             {mode === "current" ? (
               <ConditionSelector
                 disabled={!!readOnly || !selection.selected.length}
@@ -445,7 +555,8 @@ export function TreatmentPlanner({
               />
             ) : (
               <TreatmentSelector
-                disabled={!!readOnly || !selection.selected.length}
+                disabled={!!readOnly}
+                canApply={selection.selected.length > 0}
                 onApply={applyTreatmentToSelection}
                 definitions={definitions}
               />

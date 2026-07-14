@@ -2,16 +2,24 @@ import { CONDITION_DEFINITIONS } from "../data/conditionDefinitions";
 import type { ConditionType } from "../types/dental-plan.types";
 const GROUPS: Array<{ label: string; types: ConditionType[] }> = [
   {
-    label: "Tooth status",
-    types: ["healthy", "missing", "fractured", "mobility", "extraction-required"],
+    label: "Missing / Extracted",
+    types: ["missing", "extraction-required"],
   },
   {
     label: "Existing restorations",
     types: ["existing-filling", "existing-crown", "existing-bridge", "existing-implant"],
   },
   {
-    label: "Endodontic and pathology",
-    types: ["root-canal-treated", "decay", "impacted", "periodontal-problem", "other"],
+    label: "Tooth conditions",
+    types: ["healthy", "decay", "fractured", "mobility", "periodontal-problem"],
+  },
+  {
+    label: "Endodontic",
+    types: ["root-canal-treated"],
+  },
+  {
+    label: "Other findings",
+    types: ["impacted", "other"],
   },
 ];
 export function ConditionSelector({

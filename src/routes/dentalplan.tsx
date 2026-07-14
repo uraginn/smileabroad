@@ -4,6 +4,7 @@ import { DentalPlanStudio, createDentalPlan } from "@/features/dentalplan";
 import type { DentalPlanData, TreatmentType } from "@/features/dentalplan";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { canUser } from "@/lib/auth/permissions";
 import { treatmentLabel } from "@/lib/dental";
 import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
 import { calculateCommercial } from "@/features/dentalplan/utils/commercial";
@@ -119,6 +120,8 @@ function DentalPlanRoute() {
     search.leadId ||
     search.assessmentId
   );
+  const canViewPlans = canUser(user, "treatment_plans.view");
+  const canEditClinical = canUser(user, "treatment_plans.edit_clinical");
   const caseFiles = useMemo(
     () =>
       [
@@ -229,8 +232,17 @@ function DentalPlanRoute() {
           uploadedFiles: caseFiles,
           treatmentInterest:
             linkedPatient?.treatment_interest ?? embedded.patient.treatmentInterest,
-          dentistId: existingPlan?.dentist_id ?? embedded.patient.dentistId ?? defaultDentist?.id,
-          coordinatorId: existingPlan?.coordinator_id,
+          dentistId:
+            existingPlan?.dentist_id ??
+            embedded.patient.dentistId ??
+            linkedPatient?.dentist_id ??
+            defaultDentist?.id,
+          coordinatorId:
+            existingPlan?.coordinator_id ??
+            embedded.patient.coordinatorId ??
+            lead?.assigned_to ??
+            linkedPatient?.coordinator_id ??
+            (user?.role === "coordinator" ? user.id : undefined),
           planTitle: existingPlan?.title ?? embedded.patient.planTitle,
         },
         importedAssessment,
@@ -266,8 +278,12 @@ function DentalPlanRoute() {
         applicationId: application?.id,
         leadId: lead?.id,
         uploadedFiles: caseFiles,
-        dentistId: existingPlan?.dentist_id ?? defaultDentist?.id,
-        coordinatorId: existingPlan?.coordinator_id,
+        dentistId: existingPlan?.dentist_id ?? linkedPatient?.dentist_id ?? defaultDentist?.id,
+        coordinatorId:
+          existingPlan?.coordinator_id ??
+          lead?.assigned_to ??
+          linkedPatient?.coordinator_id ??
+          (user?.role === "coordinator" ? user.id : undefined),
         planTitle: existingPlan?.title ?? "Dental treatment plan",
         preparationDate: new Date().toISOString().slice(0, 10),
         currency: "EUR",
@@ -295,6 +311,8 @@ function DentalPlanRoute() {
     existingPlan,
     patients,
     user?.clinic_id,
+    user?.id,
+    user?.role,
     assessment,
     roadmap,
     application,
@@ -308,6 +326,15 @@ function DentalPlanRoute() {
   if (hydrated && templateMode && !activeTemplate)
     return <div className="p-8">Template unavailable for the active clinic.</div>;
   if (!hydrated && requestedCrmContext) return <div className="p-8">Loading CRM contextâ€¦</div>;
+  if (hydrated && requestedCrmContext && user && !canViewPlans)
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Planner access unavailable</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your clinic role does not include access to Treatment Plans.
+        </p>
+      </div>
+    );
   if (hydrated && requestedCrmContext && !crmMode)
     return (
       <div className="p-8">
@@ -318,7 +345,15 @@ function DentalPlanRoute() {
       </div>
     );
   const saveDraft = (value: DentalPlanData) => {
-    if (!existingPlan || !user?.clinic_id) return;
+    if (!existingPlan || !user?.clinic_id || !canEditClinical) return;
+    if (patient)
+      updatePatient(patient.id, {
+        first_name: value.patient.firstName,
+        last_name: value.patient.lastName,
+        email: value.patient.email || undefined,
+        country: value.patient.country || undefined,
+        language: value.patient.preferredLanguage || undefined,
+      });
     const draftItems: TreatmentPlanItem[] = value.proposedTreatments.flatMap((treatment) =>
       treatment.toothNumbers.map((tooth) => ({
         id: `dpi_${treatment.id}_${tooth}`,
@@ -372,6 +407,7 @@ function DentalPlanRoute() {
     );
   };
   const finalize = async (value: DentalPlanData) => {
+    if (!canEditClinical) throw new Error("Your clinic role cannot modify Treatment Plans.");
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
     let linkedPatient =
@@ -385,7 +421,7 @@ function DentalPlanRoute() {
         (item) =>
           !!normalizedEmail &&
           item.clinic_id === user.clinic_id &&
-          item.email.trim().toLowerCase() === normalizedEmail,
+          item.email?.trim().toLowerCase() === normalizedEmail,
       );
       linkedPatient =
         duplicate ??
@@ -394,9 +430,9 @@ function DentalPlanRoute() {
             clinic_id: user.clinic_id,
             first_name: value.patient.firstName,
             last_name: value.patient.lastName,
-            email: value.patient.email ?? "",
+            email: value.patient.email || undefined,
             phone: value.patient.phone,
-            country: value.patient.country ?? "",
+            country: value.patient.country || undefined,
             city: value.patient.city,
             date_of_birth: value.patient.dateOfBirth,
             language: value.patient.preferredLanguage,
@@ -585,7 +621,7 @@ function DentalPlanRoute() {
   };
   return (
     <DentalPlanStudio
-      readOnly={user?.role === "viewer"}
+      readOnly={requestedCrmContext && !canEditClinical}
       context={{
         mode: templateMode ? "template" : crmMode ? "crm" : "standalone",
         clinicId: user?.clinic_id,
@@ -614,7 +650,9 @@ function DentalPlanRoute() {
         .filter(
           (member) =>
             member.clinic_id === user?.clinic_id &&
-            (member.active !== false || member.id === initial?.patient.dentistId),
+            (member.active !== false ||
+              member.id === initial?.patient.dentistId ||
+              member.id === initial?.patient.coordinatorId),
         )
         .map(({ id, name, role, title, specialty }) => ({
           id,
@@ -670,6 +708,7 @@ function DentalPlanRoute() {
           })),
         }))}
       onFinalize={finalize}
+      onChange={crmMode ? saveDraft : undefined}
       onSaveAsTemplate={(value, name) => {
         if (!user?.clinic_id) return;
         saveTemplate(

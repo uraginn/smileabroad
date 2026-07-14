@@ -151,7 +151,7 @@ function LeadWorkspace() {
     if (!linkedPatient && assessment?.personal.email) {
       const email = assessment.personal.email.trim().toLowerCase();
       linkedPatient = patients.find(
-        (item) => item.clinic_id === clinicId && item.email.trim().toLowerCase() === email,
+        (item) => item.clinic_id === clinicId && item.email?.trim().toLowerCase() === email,
       );
       linkedPatient ??= addPatient(
         {

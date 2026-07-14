@@ -15,35 +15,46 @@ import type { EffectiveTreatmentDefinition, TreatmentType } from "../types/denta
 
 const GROUPS: Array<{ label: string; types: TreatmentType[] }> = [
   {
+    label: "Implant",
+    types: ["dental-implant", "implant-crown"],
+  },
+  {
     label: "Restorative",
     types: [
       "composite-filling",
-      "composite-bonding",
-      "veneer",
       "zirconium-crown",
       "emax-crown",
       "porcelain-crown",
-      "root-canal-treatment",
+      "temporary-crown",
+      "bridge",
+      "pontic",
+      "inlay-onlay",
     ],
   },
+  { label: "Cosmetic", types: ["veneer", "composite-bonding", "whitening"] },
+  { label: "Endodontic", types: ["root-canal-treatment"] },
+  { label: "Surgical", types: ["extraction"] },
   {
-    label: "Surgical and implant",
-    types: ["extraction", "dental-implant", "implant-crown", "bone-graft", "sinus-lift"],
+    label: "Full Arch",
+    types: ["all-on-4", "all-on-6", "denture"],
   },
-  { label: "Prosthetic", types: ["bridge", "pontic", "all-on-4", "all-on-6", "denture"] },
-  { label: "Cosmetic", types: ["whitening"] },
+  { label: "Supporting Procedures", types: ["bone-graft", "sinus-lift", "other"] },
 ];
 
 export function TreatmentSelector({
   disabled,
+  canApply,
   onApply,
   definitions,
 }: {
   disabled: boolean;
+  canApply: boolean;
   onApply: (treatment: EffectiveTreatmentDefinition) => void;
   definitions: EffectiveTreatmentDefinition[];
 }) {
   const [open, setOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
+  const selected = definitions.find((item) => item.id === selectedId);
   const customGroups = [
     ...new Set(definitions.filter((item) => !item.system).map((item) => item.category)),
   ].map((category) => ({
@@ -72,7 +83,7 @@ export function TreatmentSelector({
             disabled={disabled}
             className="w-full justify-between"
           >
-            Choose treatment
+            <span className="truncate">{selected?.displayName ?? "Choose treatment"}</span>
             <ChevronsUpDown className="size-4 opacity-50" />
           </Button>
         </PopoverTrigger>
@@ -92,7 +103,7 @@ export function TreatmentSelector({
                         key={treatment.id}
                         value={`${treatment.displayName} ${group.label}`}
                         onSelect={() => {
-                          onApply(treatment);
+                          setSelectedId(treatment.id);
                           setOpen(false);
                         }}
                       >
@@ -110,6 +121,18 @@ export function TreatmentSelector({
           </Command>
         </PopoverContent>
       </Popover>
+      <Button
+        type="button"
+        className="w-full"
+        disabled={disabled || !canApply || !selected}
+        onClick={() => {
+          if (!selected) return;
+          onApply(selected);
+          setSelectedId(undefined);
+        }}
+      >
+        {canApply ? "Apply selected treatment" : "Select teeth to apply"}
+      </Button>
     </div>
   );
 }
