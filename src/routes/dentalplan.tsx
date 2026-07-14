@@ -7,7 +7,7 @@ import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { canUser } from "@/lib/auth/permissions";
 import { treatmentLabel } from "@/lib/dental";
 import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
-import { calculateCommercial } from "@/features/dentalplan/utils/commercial";
+import { calculateCommercial, priceForTreatment } from "@/features/dentalplan/utils/commercial";
 import { UnifiedPlanShareSection } from "@/features/dentalplan/components/UnifiedPlanShareSection";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
@@ -182,16 +182,23 @@ function DentalPlanRoute() {
             const matchingItem = existingPlan.price_items?.find(
               (item) =>
                 item.id === `price_${treatment.id}` ||
-                item.treatment_key === treatment.treatmentType,
+                item.treatment_key === (treatment.treatmentKey ?? treatment.treatmentType),
             );
             const fallback = embedded?.commercial?.items.find(
-              (item) => item.treatmentId === treatment.id,
+              (item) =>
+                item.treatmentId === treatment.id ||
+                item.treatmentDefinitionId === treatment.treatmentDefinitionId ||
+                item.treatmentKey === (treatment.treatmentKey ?? treatment.treatmentType),
             );
             return {
               treatmentId: treatment.id,
+              treatmentKey: treatment.treatmentKey ?? treatment.treatmentType,
+              treatmentDefinitionId: treatment.treatmentDefinitionId,
               label: fallback?.label ?? matchingItem?.label ?? treatment.treatmentType,
               qty: Math.max(1, treatment.toothNumbers.length),
               unitPrice: matchingItem?.unit_price ?? fallback?.unitPrice ?? 0,
+              priceOverridden:
+                matchingItem?.manually_overridden ?? fallback?.priceOverridden ?? false,
             };
           }),
           hotelTotal: existingPlan.hotel_total ?? 0,
@@ -386,8 +393,7 @@ function DentalPlanRoute() {
         tooth,
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
         notes: treatment.notes,
-        unit_price:
-          value.commercial.items.find((item) => item.treatmentId === treatment.id)?.unitPrice ?? 0,
+        unit_price: priceForTreatment(treatment, value.commercial.items),
       })),
     );
     const totals = calculateCommercial(value.commercial);
@@ -426,16 +432,12 @@ function DentalPlanRoute() {
               patient_facing_notes: value.travel.patientFacingNotes,
               currency: value.commercial.currency,
               price_items: value.commercial.items.map((item) => {
-                const treatment = value.proposedTreatments.find(
-                  (candidate) => candidate.id === item.treatmentId,
-                );
                 return {
                   id: `price_${item.treatmentId}`,
                   label: item.label,
                   quantity: item.qty,
                   unit_price: item.unitPrice,
-                  treatment_key: treatment?.treatmentType,
-                  treatment_group_id: treatment?.treatmentGroupId,
+                  treatment_key: item.treatmentKey,
                   manually_overridden: item.priceOverridden,
                 };
               }),
@@ -538,15 +540,7 @@ function DentalPlanRoute() {
         tooth,
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
         notes: treatment.notes,
-        unit_price:
-          finalValue.commercial.items.find((price) => price.treatmentId === treatment.id)
-            ?.unitPrice ??
-          existingPlan?.items.find(
-            (item) =>
-              item.tooth === tooth &&
-              item.treatment === (treatmentMap[treatment.treatmentType] ?? "crown"),
-          )?.unit_price ??
-          0,
+        unit_price: priceForTreatment(treatment, finalValue.commercial.items),
       })),
     );
     const defaults = derivePlanDefaults(finalValue);
@@ -667,16 +661,12 @@ function DentalPlanRoute() {
         {
           currency: commercialPatch.currency,
           price_items: finalValue.commercial.items.map((item) => {
-            const treatment = finalValue.proposedTreatments.find(
-              (candidate) => candidate.id === item.treatmentId,
-            );
             return {
               id: `price_${item.treatmentId}`,
               label: item.label,
               quantity: item.qty,
               unit_price: item.unitPrice,
-              treatment_group_id: treatment?.treatmentGroupId,
-              treatment_key: treatment?.treatmentType,
+              treatment_key: item.treatmentKey,
               manually_overridden: item.priceOverridden,
             };
           }),

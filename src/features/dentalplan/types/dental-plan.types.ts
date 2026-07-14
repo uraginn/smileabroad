@@ -182,6 +182,9 @@ export type DentalPlannerTravel = {
 };
 export type DentalPricingItem = {
   treatmentId: string;
+  treatmentKey?: string;
+  treatmentDefinitionId?: string;
+  category?: string;
   label: string;
   qty: number;
   unitPrice: number;

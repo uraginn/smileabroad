@@ -1,9 +1,15 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, MoreHorizontal, Plus } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  MoreHorizontal,
+  Plus,
+  UserRound,
+  UserRoundPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -47,7 +53,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { canUser } from "@/lib/auth/permissions";
@@ -75,12 +80,10 @@ function Plans() {
   const activeUser = useAuth((state) => state.user);
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const [creationMode, setCreationMode] = useState<"existing" | "new">("existing");
+  const [newPatientOpen, setNewPatientOpen] = useState(false);
+  const [existingPatientOpen, setExistingPatientOpen] = useState(false);
   const [caseId, setCaseId] = useState("");
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [country, setCountry] = useState("");
-  const [preferredLanguage, setPreferredLanguage] = useState("");
   const [dentistId, setDentistId] = useState("");
   const [coordinatorId, setCoordinatorId] = useState("");
   const [creating, setCreating] = useState(false);
@@ -119,14 +122,6 @@ function Plans() {
     [clinicUsers],
   );
   const defaultDentist = activeDentists.find((member) => member.default_planner_dentist);
-  const normalizedEmail = email.trim().toLowerCase();
-  const duplicatePatient = useMemo(
-    () =>
-      normalizedEmail
-        ? patients.find((patient) => patient.email?.trim().toLowerCase() === normalizedEmail)
-        : undefined,
-    [normalizedEmail, patients],
-  );
 
   useEffect(() => {
     if (create && canCreate) setCreateOpen(true);
@@ -135,56 +130,66 @@ function Plans() {
   const resetCreation = () => {
     setCaseId("");
     setFullName("");
-    setEmail("");
-    setCountry("");
-    setPreferredLanguage("");
     setDentistId("");
     setCoordinatorId("");
     setCreating(false);
     creatingRef.current = false;
   };
-  const handleDialogState = (open: boolean) => {
-    setCreateOpen(open);
-    if (!open) resetCreation();
+  const closeCreation = () => {
+    setCreateOpen(false);
+    setNewPatientOpen(false);
+    setExistingPatientOpen(false);
+    resetCreation();
   };
-  const selectCase = (value: string) => {
-    setCaseId(value);
-    const selected = resolveSelectedCase(value, patients, clinicLeads);
-    setDentistId(selected.patient?.dentist_id ?? defaultDentist?.id ?? "");
-    setCoordinatorId(
-      selected.lead?.assigned_to ??
-        selected.patient?.coordinator_id ??
-        (activeUser?.role === "coordinator" ? activeUser.id : ""),
-    );
+  const openNewPatient = () => {
+    resetCreation();
+    setDentistId(defaultDentist?.id ?? "");
+    setCoordinatorId(activeUser?.role === "coordinator" ? activeUser.id : "");
+    setCreateOpen(false);
+    setNewPatientOpen(true);
   };
-  const selectDuplicatePatient = (patient: Patient) => {
-    setCreationMode("existing");
-    selectCase(`patient:${patient.id}`);
+  const openExistingPatient = () => {
+    resetCreation();
+    setCreateOpen(false);
+    setExistingPatientOpen(true);
   };
-  const createPlan = () => {
+  const createPlan = (selectedCaseId?: string) => {
     if (creatingRef.current || !activeUser || !canCreate) return;
     creatingRef.current = true;
     setCreating(true);
     try {
       let patient: Patient;
       let lead: Lead | undefined;
-      if (creationMode === "existing") {
-        const selected = resolveSelectedCase(caseId, patients, clinicLeads);
+      if (selectedCaseId) {
+        const selected = resolveSelectedCase(selectedCaseId, patients, clinicLeads);
         lead = selected.lead;
+        const resolvedDentistId = selected.patient?.dentist_id ?? defaultDentist?.id ?? "";
+        const resolvedCoordinatorId =
+          selected.lead?.assigned_to ??
+          selected.patient?.coordinator_id ??
+          (activeUser.role === "coordinator" ? activeUser.id : "");
         const resolvedPatient =
           selected.patient ??
           createPatientFromLead(
             lead,
             assessments,
             clinicId,
-            dentistId,
-            coordinatorId,
+            resolvedDentistId,
+            resolvedCoordinatorId,
             activeUser.id,
             addPatient,
           );
         if (!resolvedPatient) throw new Error("Select a valid clinic Patient or Lead.");
         patient = resolvedPatient;
         lead ??= latestPatientLead(patient, clinicLeads);
+        const plan = addTreatmentPlan(
+          createPlanRecord(patient, lead, resolvedDentistId, resolvedCoordinatorId, clinicId),
+          activeUser.id,
+        );
+        toast.success("Treatment Plan ready");
+        closeCreation();
+        void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+        return;
       } else {
         const name = splitFullName(fullName);
         patient = addPatient(
@@ -192,9 +197,6 @@ function Plans() {
             clinic_id: clinicId,
             first_name: name.firstName,
             last_name: name.lastName,
-            email: email.trim() || undefined,
-            country: country.trim() || undefined,
-            language: preferredLanguage.trim() || undefined,
             source: "manual",
             dentist_id: dentistId || undefined,
             coordinator_id: coordinatorId || undefined,
@@ -207,7 +209,7 @@ function Plans() {
         activeUser.id,
       );
       toast.success("Treatment Plan ready");
-      handleDialogState(false);
+      closeCreation();
       void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Treatment Plan creation failed");
@@ -224,9 +226,12 @@ function Plans() {
         description="Prepare clinical care, travel, pricing, review and sharing in one patient-document workspace."
         actions={
           canCreate ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="size-4" /> Create Treatment Plan
-            </Button>
+            <CreatePlanMenu
+              open={createOpen}
+              onOpenChange={setCreateOpen}
+              onNew={openNewPatient}
+              onExisting={openExistingPatient}
+            />
           ) : undefined
         }
       />
@@ -236,7 +241,12 @@ function Plans() {
           description="Create a Treatment Plan from a patient or Lead to begin."
           action={
             canCreate ? (
-              <Button onClick={() => setCreateOpen(true)}>Create Treatment Plan</Button>
+              <CreatePlanMenu
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                onNew={openNewPatient}
+                onExisting={openExistingPatient}
+              />
             ) : undefined
           }
         />
@@ -304,105 +314,28 @@ function Plans() {
           </CardContent>
         </Card>
       )}
-      <Dialog open={createOpen} onOpenChange={handleDialogState}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <Dialog
+        open={newPatientOpen}
+        onOpenChange={(open) => (open ? setNewPatientOpen(true) : closeCreation())}
+      >
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Treatment Plan</DialogTitle>
+            <DialogTitle>New patient plan</DialogTitle>
             <DialogDescription>
-              Start from an existing case or create a minimal clinic Patient record.
+              Create the minimum clinic record needed to start planning.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <Tabs
-              value={creationMode}
-              onValueChange={(value) => {
-                setCreationMode(value as typeof creationMode);
-                setCaseId("");
-                setDentistId(defaultDentist?.id ?? "");
-                setCoordinatorId(activeUser?.role === "coordinator" ? activeUser.id : "");
-              }}
-            >
-              <TabsList className="grid h-auto w-full grid-cols-2">
-                <TabsTrigger value="existing" className="min-h-10 whitespace-normal">
-                  Existing patient or Lead
-                </TabsTrigger>
-                <TabsTrigger value="new" className="min-h-10">
-                  New patient
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            {creationMode === "existing" ? (
-              <div className="space-y-1.5">
-                <Label>Patient or Lead</Label>
-                <CaseCombobox
-                  value={caseId}
-                  patients={patients}
-                  leads={clinicLeads}
-                  onChange={selectCase}
-                />
-              </div>
-            ) : (
-              <div className="space-y-4 rounded-lg border p-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-patient-name">Full name</Label>
-                  <Input
-                    id="new-patient-name"
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                    autoComplete="name"
-                    placeholder="Patient full name"
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-patient-email">Email (optional)</Label>
-                    <Input
-                      id="new-patient-email"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      autoComplete="email"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-patient-country">Country (optional)</Label>
-                    <Input
-                      id="new-patient-country"
-                      value={country}
-                      onChange={(event) => setCountry(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="new-patient-language">Preferred language (optional)</Label>
-                    <Input
-                      id="new-patient-language"
-                      value={preferredLanguage}
-                      onChange={(event) => setPreferredLanguage(event.target.value)}
-                    />
-                  </div>
-                </div>
-                {duplicatePatient && (
-                  <Alert>
-                    <AlertTitle>Existing patient found</AlertTitle>
-                    <AlertDescription className="space-y-3">
-                      <p>
-                        This email already belongs to {duplicatePatient.first_name}{" "}
-                        {duplicatePatient.last_name}. Choose that record to avoid an accidental
-                        duplicate.
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => selectDuplicatePatient(duplicatePatient)}
-                      >
-                        Use existing patient
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="new-patient-name">Full name</Label>
+              <Input
+                id="new-patient-name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                autoComplete="name"
+                placeholder="Patient full name"
+              />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <AssignmentSelect
                 label="Assigned dentist"
@@ -419,23 +352,89 @@ function Plans() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => handleDialogState(false)}>
+            <Button variant="outline" onClick={closeCreation}>
               Cancel
             </Button>
             <Button
-              disabled={
-                creating ||
-                !canCreate ||
-                (creationMode === "existing" ? !caseId : !fullName.trim() || !!duplicatePatient)
-              }
-              onClick={createPlan}
+              disabled={creating || !canCreate || !fullName.trim()}
+              onClick={() => createPlan()}
             >
               {creating ? "Creating…" : "Continue to Treatment Planner"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={existingPatientOpen}
+        onOpenChange={(open) => (open ? setExistingPatientOpen(true) : closeCreation())}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Open an existing case</DialogTitle>
+            <DialogDescription>
+              Search clinic Patients and Leads. Selecting a record opens its plan immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Patient or Lead</Label>
+            <CaseCombobox
+              value={caseId}
+              patients={patients}
+              leads={clinicLeads}
+              onChange={(value) => {
+                setCaseId(value);
+                createPlan(value);
+              }}
+            />
+          </div>
+          {creating && (
+            <p className="text-sm text-muted-foreground">Opening Treatment Plannerâ€¦</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function CreatePlanMenu({
+  open,
+  onOpenChange,
+  onNew,
+  onExisting,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onNew: () => void;
+  onExisting: () => void;
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button>
+          <Plus className="size-4" /> Create Treatment Plan
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 space-y-1 p-2">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto w-full justify-start gap-3 p-3 text-left"
+          onClick={onNew}
+        >
+          <UserRoundPlus className="size-5 shrink-0" />
+          <span className="font-medium">New patient</span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto w-full justify-start gap-3 p-3 text-left"
+          onClick={onExisting}
+        >
+          <UserRound className="size-5 shrink-0" />
+          <span className="font-medium">Existing patient</span>
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -485,6 +484,9 @@ function CaseCombobox({
                     key={itemValue}
                     value={[
                       lead.patient_name,
+                      lead.id,
+                      lead.clinic_application_id,
+                      lead.assessment_id,
                       lead.treatment,
                       lead.status,
                       lead.patient_country,

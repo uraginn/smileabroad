@@ -22,6 +22,7 @@ import {
 import { CountryCombobox } from "./CountryCombobox";
 import { TravelServicesStep } from "./TravelServicesStep";
 import { PricingStep } from "./PricingStep";
+import { syncPricingItems } from "../utils/commercial";
 import { FinalReviewStep } from "./FinalReviewStep";
 import { TreatmentPlanner } from "./TreatmentPlanner";
 import type {
@@ -102,7 +103,7 @@ function PlannerShell({
           id: override?.id ?? `system_${base.type}`,
           treatmentKey: override?.treatmentKey ?? base.type,
           displayName: override?.displayName ?? base.label,
-          category: override?.category ?? "System",
+          category: override?.category ?? base.category,
           baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
           visualKey: override?.visualKey ?? base.type,
           perTooth: override?.perTooth ?? base.perTooth,
@@ -131,6 +132,13 @@ function PlannerShell({
   const [reviewShareTab, setReviewShareTab] = useState(plan.draftStep >= 5 ? "share" : "review");
   const change = (patch: Partial<DentalPlan>) =>
     setPlan({ ...plan, ...patch, updatedAt: new Date().toISOString() });
+  useEffect(() => {
+    const items = syncPricingItems(plan, effectiveTreatments);
+    if (JSON.stringify(items) === JSON.stringify(plan.commercial.items)) return;
+    setPlan({ ...plan, commercial: { ...plan.commercial, items } });
+    // Pricing follows proposed treatments and currency, including when another planner step is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.proposedTreatments, plan.commercial.currency, effectiveTreatments]);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
@@ -298,6 +306,7 @@ function PlannerShell({
               value={plan}
               onChange={setPlan}
               readOnly={readOnly}
+              pricingReadOnly={commercialReadOnly}
               definitions={effectiveTreatments}
             />
           </div>
@@ -312,12 +321,7 @@ function PlannerShell({
           />
         )}{" "}
         {step === 3 && (
-          <PricingStep
-            plan={plan}
-            change={change}
-            treatmentDefaults={treatmentDefaults}
-            readOnly={readOnly || commercialReadOnly}
-          />
+          <PricingStep plan={plan} change={change} readOnly={readOnly || commercialReadOnly} />
         )}
         {step === 4 && (
           <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
@@ -454,31 +458,6 @@ function PatientStep({
               />
             </Field>
           </div>
-          <Collapsible className="mt-4 rounded-lg border px-3">
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" className="w-full justify-between px-0">
-                Additional patient details
-                <ChevronDown className="size-4" />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="grid gap-4 pb-4 md:grid-cols-2">
-              <Field label="Email (optional)">
-                <Input
-                  disabled={readOnly}
-                  type="email"
-                  value={plan.patient.email ?? ""}
-                  onChange={(e) => update({ email: e.target.value })}
-                />
-              </Field>
-              <Field label="Preferred language (optional)">
-                <Input
-                  disabled={readOnly}
-                  value={plan.patient.preferredLanguage ?? ""}
-                  onChange={(e) => update({ preferredLanguage: e.target.value })}
-                />
-              </Field>
-            </CollapsibleContent>
-          </Collapsible>
         </section>
         <Separator />
         <section aria-labelledby="assignment-heading">

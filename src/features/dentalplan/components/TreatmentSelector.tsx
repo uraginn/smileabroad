@@ -13,32 +13,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
-import type { EffectiveTreatmentDefinition, TreatmentType } from "../types/dental-plan.types";
-
-const GROUPS: Array<{ label: string; types: TreatmentType[] }> = [
-  {
-    label: "Implant",
-    types: ["dental-implant", "implant-crown", "all-on-4", "all-on-6"],
-  },
-  {
-    label: "Restorative",
-    types: [
-      "composite-filling",
-      "zirconium-crown",
-      "emax-crown",
-      "porcelain-crown",
-      "temporary-crown",
-      "bridge",
-      "pontic",
-      "inlay-onlay",
-    ],
-  },
-  { label: "Cosmetic", types: ["veneer", "composite-bonding", "whitening"] },
-  { label: "Endodontic", types: ["root-canal-treatment"] },
-  { label: "Surgical", types: ["extraction"] },
-  { label: "Supporting", types: ["bone-graft", "sinus-lift"] },
-  { label: "Other", types: ["denture", "other"] },
-];
+import type { EffectiveTreatmentDefinition } from "../types/dental-plan.types";
 
 export function TreatmentSelector({
   definitions,
@@ -49,12 +24,10 @@ export function TreatmentSelector({
   selectedId?: string;
   onSelect: (treatmentId: string) => void;
 }) {
-  const grouped = GROUPS.map((group) => ({
-    label: group.label,
-    definitions: definitions.filter((item) =>
-      item.system ? group.types.includes(item.baseTreatmentKey) : group.label === "Other",
-    ),
-  })).filter((group) => group.definitions.length);
+  const grouped = [...new Set(definitions.map((item) => item.category))].map((category) => ({
+    label: category,
+    definitions: definitions.filter((item) => item.category === category),
+  }));
   return (
     <div className="space-y-3">
       <div>

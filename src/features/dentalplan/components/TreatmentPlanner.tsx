@@ -2,7 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -45,17 +54,20 @@ import { ConditionSummary } from "./ConditionSummary";
 import { TreatmentLegend } from "./TreatmentLegend";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { BridgeConfigurator } from "./BridgeConfigurator";
+import { formatQuoteMoney } from "@/lib/quote";
 
 export type TreatmentPlannerProps = {
   value: DentalPlan;
   onChange: (plan: DentalPlan) => void;
   readOnly?: boolean;
+  pricingReadOnly?: boolean;
   definitions: EffectiveTreatmentDefinition[];
 };
 export function TreatmentPlanner({
   value,
   onChange,
   readOnly,
+  pricingReadOnly,
   definitions,
 }: TreatmentPlannerProps) {
   const history = useHistoryState(value);
@@ -504,7 +516,7 @@ export function TreatmentPlanner({
     [proposedSelection],
   );
   return (
-    <div className="space-y-4">
+    <section className="space-y-4 rounded-xl border bg-card p-3 sm:p-5">
       <AlertDialog
         open={!!pendingWarning}
         onOpenChange={(open) => !open && setPendingWarning(undefined)}
@@ -534,6 +546,19 @@ export function TreatmentPlanner({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div>
+          <h2 className="font-semibold">Clinical Planning</h2>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <Badge variant="outline">
+              {mode === "current" ? "Current condition" : "Proposed treatment"}
+            </Badge>
+            {!!selection.selected.length && (
+              <Badge variant="secondary">{selection.selected.length} selected</Badge>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
           <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
@@ -687,13 +712,38 @@ export function TreatmentPlanner({
           }
         />
       ) : (
-        <TreatmentSummary
-          treatments={history.state.proposedTreatments}
-          readOnly={readOnly}
-          onDelete={(ids) => !readOnly && deleteTreatments(ids)}
-          onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}
-          onHighlight={highlightTeeth}
-        />
+        <>
+          <UnitPricing
+            plan={history.state}
+            readOnly={readOnly || pricingReadOnly}
+            onPriceChange={(treatmentId, unitPrice) =>
+              history.set(
+                (current) => ({
+                  ...current,
+                  commercial: {
+                    ...current.commercial,
+                    items: current.commercial.items.map((item) =>
+                      item.treatmentId === treatmentId
+                        ? { ...item, unitPrice, priceOverridden: true }
+                        : item,
+                    ),
+                  },
+                  updatedAt: new Date().toISOString(),
+                }),
+                { commit: false },
+              )
+            }
+          />
+          <TreatmentSummary
+            treatments={history.state.proposedTreatments}
+            pricingItems={history.state.commercial.items}
+            currency={history.state.commercial.currency}
+            readOnly={readOnly}
+            onDelete={(ids) => !readOnly && deleteTreatments(ids)}
+            onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}
+            onHighlight={highlightTeeth}
+          />
+        </>
       )}
       <Collapsible className="rounded-lg border bg-card px-4">
         <CollapsibleTrigger asChild>
@@ -727,7 +777,87 @@ export function TreatmentPlanner({
           </p>
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </section>
+  );
+}
+
+function UnitPricing({
+  plan,
+  readOnly,
+  onPriceChange,
+}: {
+  plan: DentalPlan;
+  readOnly?: boolean;
+  onPriceChange: (treatmentId: string, unitPrice: number) => void;
+}) {
+  if (!plan.commercial.items.length)
+    return (
+      <section className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+        Treatment unit pricing will appear after a proposed treatment is applied.
+      </section>
+    );
+  const categories = [...new Set(plan.commercial.items.map((item) => item.category ?? "Other"))];
+  return (
+    <section
+      className="overflow-hidden rounded-lg border bg-card"
+      aria-labelledby="unit-pricing-heading"
+    >
+      <div className="border-b px-4 py-3">
+        <h3 id="unit-pricing-heading" className="font-semibold">
+          Unit pricing
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Plan-specific prices. Clinic defaults remain unchanged.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Treatment</TableHead>
+              <TableHead className="w-24">Units</TableHead>
+              <TableHead className="w-40">Unit price</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categories.flatMap((category) => [
+              <TableRow key={`category-${category}`} className="bg-muted/40 hover:bg-muted/40">
+                <TableCell
+                  colSpan={4}
+                  className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {category}
+                </TableCell>
+              </TableRow>,
+              ...plan.commercial.items
+                .filter((item) => (item.category ?? "Other") === category)
+                .map((item) => (
+                  <TableRow key={item.treatmentId}>
+                    <TableCell className="font-medium">{item.label}</TableCell>
+                    <TableCell>{item.qty}</TableCell>
+                    <TableCell>
+                      <Input
+                        aria-label={`${item.label} unit price`}
+                        type="number"
+                        min={0}
+                        disabled={readOnly}
+                        value={item.unitPrice}
+                        onChange={(event) =>
+                          onPriceChange(item.treatmentId, Math.max(0, Number(event.target.value)))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatQuoteMoney(item.qty * item.unitPrice, plan.commercial.currency)}
+                    </TableCell>
+                  </TableRow>
+                )),
+            ])}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   );
 }
 function MedicalSafetyPanel({ plan }: { plan: DentalPlan }) {

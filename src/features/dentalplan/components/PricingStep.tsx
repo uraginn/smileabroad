@@ -10,38 +10,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan } from "../types/dental-plan.types";
-import { calculateCommercial, syncPricingItems } from "../utils/commercial";
+import { calculateCommercial } from "../utils/commercial";
 export function PricingStep({
   plan,
   change,
-  treatmentDefaults = [],
   readOnly,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
   readOnly?: boolean;
-  treatmentDefaults?: Array<{
-    id?: string;
-    treatmentKey: string;
-    displayName: string;
-    prices: Partial<Record<DentalPlan["commercial"]["currency"], number>>;
-  }>;
 }) {
   const commercial = plan.commercial;
   const update = (patch: Partial<typeof commercial>) => {
     if (!readOnly) change({ commercial: { ...commercial, ...patch } });
   };
-  const synced = syncPricingItems(plan, treatmentDefaults);
   const billableCommercial = {
     ...commercial,
     hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
@@ -53,11 +37,6 @@ export function PricingStep({
   };
   const totals = calculateCommercial(billableCommercial);
   const previousTotal = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (JSON.stringify(synced) !== JSON.stringify(commercial.items)) update({ items: synced });
-    // Sync only when dental treatment structure changes; prices are retained by treatment ID.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan.proposedTreatments, commercial.currency, treatmentDefaults]);
   useEffect(() => {
     if (commercial.paymentSchedule.length >= 2) return;
     update({
@@ -118,11 +97,11 @@ export function PricingStep({
       <fieldset disabled={readOnly} className="contents">
         <Card>
           <CardHeader>
-            <CardTitle>Treatment pricing</CardTitle>
+            <CardTitle>Commercial summary & payment</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+          <CardContent className="space-y-6 p-4 sm:p-6">
+            <section className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
+              <div className="space-y-1.5">
                 <Label>Currency</Label>
                 <Select
                   value={commercial.currency}
@@ -142,65 +121,15 @@ export function PricingStep({
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Plan valid until</Label>
-                <Input
-                  type="date"
-                  value={commercial.validUntil ?? ""}
-                  onChange={(e) => update({ validUntil: e.target.value })}
+              <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
+                <Row
+                  label="Treatment subtotal"
+                  value={formatQuoteMoney(totals.subtotal, commercial.currency)}
+                  strong
                 />
               </div>
-            </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Treatment item</TableHead>
-                    <TableHead className="w-24">Quantity</TableHead>
-                    <TableHead className="w-40">Unit price</TableHead>
-                    <TableHead className="text-right">Item total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {commercial.items.map((item) => (
-                    <TableRow key={item.treatmentId}>
-                      <TableCell className="min-w-56">{item.label}</TableCell>
-                      <TableCell>{item.qty}</TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={item.unitPrice}
-                          onChange={(e) =>
-                            update({
-                              items: commercial.items.map((entry) =>
-                                entry.treatmentId === item.treatmentId
-                                  ? {
-                                      ...entry,
-                                      unitPrice: Math.max(0, Number(e.target.value)),
-                                      priceOverridden: true,
-                                    }
-                                  : entry,
-                              ),
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatQuoteMoney(item.qty * item.unitPrice, commercial.currency)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Commercial summary & payment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 p-4 sm:p-6">
+            </section>
+            <Separator />
             <section aria-labelledby="service-costs-heading">
               <h3 id="service-costs-heading" className="mb-4 font-semibold">
                 Package costs

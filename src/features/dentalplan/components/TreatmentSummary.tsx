@@ -11,18 +11,27 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { treatmentByType } from "../data/treatmentDefinitions";
-import type { ToothTreatment } from "../types/dental-plan.types";
+import { formatQuoteMoney } from "@/lib/quote";
+import type {
+  DentalPricingItem,
+  DentalPlannerCommercial,
+  ToothTreatment,
+} from "../types/dental-plan.types";
 
 type TreatmentGroup = ReturnType<typeof groupTreatments>[number];
 
 export function TreatmentSummary({
   treatments,
+  pricingItems = [],
+  currency = "EUR",
   readOnly,
   onDelete,
   onEdit,
   onHighlight,
 }: {
   treatments: ToothTreatment[];
+  pricingItems?: DentalPricingItem[];
+  currency?: DentalPlannerCommercial["currency"];
   readOnly?: boolean;
   onDelete: (ids: string[]) => void;
   onEdit: (ids: string[], notes: string) => void;
@@ -53,6 +62,13 @@ export function TreatmentSummary({
                   {group.teeth.length > 6
                     ? `${group.teeth.length} teeth`
                     : `Teeth ${group.teeth.join(", ")}`}
+                </p>
+                <p className="mt-1 text-xs font-medium">
+                  {formatQuoteMoney(
+                    group.quantity *
+                      (pricingItems.find((item) => item.treatmentId === group.key)?.unitPrice ?? 0),
+                    currency,
+                  )}
                 </p>
               </div>
               <div className="flex flex-wrap gap-1">

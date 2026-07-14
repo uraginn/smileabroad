@@ -6,6 +6,7 @@ export type TreatmentDefinition = {
   color: string;
   supported: boolean;
   perTooth: boolean;
+  category: string;
 };
 export type TreatmentRole = "procedure" | "restoration" | "support" | "global" | "group";
 export type TreatmentTarget = "natural-tooth" | "implant-site" | "arch" | "tooth-site";
@@ -39,6 +40,29 @@ const definitions: Array<[TreatmentType, string, string, string, boolean, boolea
   ["denture", "Denture", "Dn", "#737373", false, false],
   ["other", "Other", "?", "#64748b", false, true],
 ];
+export const TREATMENT_CATEGORY_BY_TYPE: Record<TreatmentType, string> = {
+  "dental-implant": "Implant",
+  "implant-crown": "Implant",
+  "all-on-4": "Full Arch",
+  "all-on-6": "Full Arch",
+  extraction: "Surgical",
+  "sinus-lift": "Surgical",
+  "bone-graft": "Supporting",
+  "zirconium-crown": "Restorative",
+  "emax-crown": "Restorative",
+  "porcelain-crown": "Restorative",
+  "temporary-crown": "Restorative",
+  bridge: "Restorative",
+  pontic: "Restorative",
+  "composite-filling": "Restorative",
+  "inlay-onlay": "Restorative",
+  "composite-bonding": "Cosmetic",
+  veneer: "Cosmetic",
+  whitening: "Cosmetic",
+  "root-canal-treatment": "Endodontic",
+  denture: "Other",
+  other: "Other",
+};
 export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
   ([type, label, short, color, supported, perTooth]) => ({
     type,
@@ -47,6 +71,7 @@ export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
     color,
     supported,
     perTooth,
+    category: TREATMENT_CATEGORY_BY_TYPE[type],
   }),
 );
 export const treatmentByType = (type: TreatmentType) =>
