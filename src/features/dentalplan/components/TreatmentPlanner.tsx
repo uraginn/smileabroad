@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,7 +23,6 @@ import type {
   PlannerMode,
   ToothCondition,
   ToothNumber,
-  TreatmentType,
   EffectiveTreatmentDefinition,
 } from "../types/dental-plan.types";
 import { useHistoryState } from "../hooks/useHistoryState";
@@ -38,6 +36,7 @@ import {
   validateClinicalTreatment,
 } from "../rules/clinicalRules";
 import { treatmentComposition } from "../data/treatmentDefinitions";
+import { CONDITION_DEFINITIONS } from "../data/conditionDefinitions";
 import { DentalChart } from "./DentalChart";
 import { ConditionSelector } from "./ConditionSelector";
 import { TreatmentSelector } from "./TreatmentSelector";
@@ -73,6 +72,8 @@ export function TreatmentPlanner({
   }, [value.id]);
   useEffect(() => onChangeRef.current(history.state), [history.state]);
   const [mode, setMode] = useState<PlannerMode>("current");
+  const [selectedCondition, setSelectedCondition] = useState<ConditionType>();
+  const [selectedTreatmentId, setSelectedTreatmentId] = useState<string>();
   const [message, setMessage] = useState<string | null>(null);
   const [pendingWarning, setPendingWarning] = useState<{
     definition: EffectiveTreatmentDefinition;
@@ -81,6 +82,10 @@ export function TreatmentPlanner({
   const currentSelection = useToothSelection();
   const proposedSelection = useToothSelection();
   const selection = mode === "current" ? currentSelection : proposedSelection;
+  const selectedTreatment = definitions.find((item) => item.id === selectedTreatmentId);
+  const selectedConditionLabel = CONDITION_DEFINITIONS.find(
+    (item) => item.type === selectedCondition,
+  )?.label;
   const [bridgeTeeth, setBridgeTeeth] = useState<ToothNumber[] | null>(null);
   const [bridgeDefinition, setBridgeDefinition] = useState<EffectiveTreatmentDefinition | null>(
     null,
@@ -445,21 +450,37 @@ export function TreatmentPlanner({
     },
     [bridgeDefinition, bridgeTeeth, history],
   );
-  const deleteTreatment = useCallback(
-    (id: string) =>
+  const deleteTreatments = useCallback(
+    (ids: string[]) =>
       history.commit((previous) => {
-        const target = previous.proposedTreatments.find((item) => item.id === id);
-        if (!target) return previous;
+        const idSet = new Set(ids);
+        const groupIds = new Set(
+          previous.proposedTreatments
+            .filter((item) => idSet.has(item.id) && item.treatmentGroupId)
+            .map((item) => item.treatmentGroupId as string),
+        );
         return {
           ...previous,
-          proposedTreatments: previous.proposedTreatments.filter((item) =>
-            target.treatmentGroupId
-              ? item.treatmentGroupId !== target.treatmentGroupId
-              : item.id !== id,
+          proposedTreatments: previous.proposedTreatments.filter(
+            (item) =>
+              !idSet.has(item.id) &&
+              !(item.treatmentGroupId && groupIds.has(item.treatmentGroupId)),
           ),
-          treatmentGroups: target.treatmentGroupId
-            ? previous.treatmentGroups.filter((group) => group.id !== target.treatmentGroupId)
-            : previous.treatmentGroups,
+          treatmentGroups: previous.treatmentGroups.filter((group) => !groupIds.has(group.id)),
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    [history],
+  );
+  const editTreatments = useCallback(
+    (ids: string[], notes: string) =>
+      history.commit((previous) => {
+        const idSet = new Set(ids);
+        return {
+          ...previous,
+          proposedTreatments: previous.proposedTreatments.map((item) =>
+            idSet.has(item.id) ? { ...item, notes } : item,
+          ),
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -514,12 +535,12 @@ export function TreatmentPlanner({
         </AlertDialogContent>
       </AlertDialog>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Planning for{" "}
-          <span className="font-medium text-foreground">
-            {history.state.patient.fullName || "patient"}
-          </span>
-        </p>
+        <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+            <TabsTrigger value="current">Current</TabsTrigger>
+            <TabsTrigger value="proposed">Proposed</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="flex items-center gap-2">
           <ToolButton onClick={history.undo} disabled={!history.canUndo || readOnly}>
             Undo
@@ -549,26 +570,6 @@ export function TreatmentPlanner({
           </AlertDialog>
         </div>
       </div>
-      <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
-          <TabsTrigger value="current">Current Dental Condition</TabsTrigger>
-          <TabsTrigger value="proposed">Proposed Treatment Plan</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <p className="text-sm text-muted-foreground">
-        {mode === "current"
-          ? "Record the patient’s present dental condition. These observations are not priced procedures."
-          : "Plan procedures on top of the inherited current condition without changing the original diagnosis."}
-      </p>
-      <MedicalSafetyPanel plan={history.state} />
-      {message && (
-        <div
-          role="alert"
-          className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {message}
-        </div>
-      )}
       <div className="space-y-4">
         <DentalChart
           title={mode === "current" ? "Current Dental Condition" : "Proposed Treatment Plan"}
@@ -589,14 +590,17 @@ export function TreatmentPlanner({
           onBoxSelect={selection.selectBox}
         />
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2">
-          <Badge variant="secondary">{selection.selected.length} teeth selected</Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary">{selection.selected.length} teeth selected</Badge>
+            {selection.selected.length > 0 && selection.selected.length <= 6
+              ? selection.selected.map((tooth) => (
+                  <Badge key={tooth} variant="outline">
+                    {tooth}
+                  </Badge>
+                ))
+              : null}
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            <Button type="button" size="sm" variant="outline" onClick={selection.selectAllUpper}>
-              Upper
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={selection.selectAllLower}>
-              Lower
-            </Button>
             <Button
               type="button"
               size="sm"
@@ -606,21 +610,47 @@ export function TreatmentPlanner({
             >
               Clear
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !!readOnly ||
+                !selection.selected.length ||
+                (mode === "current" ? !selectedCondition : !selectedTreatment)
+              }
+              onClick={() => {
+                if (mode === "current" && selectedCondition) {
+                  applyConditionToSelection(selectedCondition);
+                  setSelectedCondition(undefined);
+                } else if (mode === "proposed" && selectedTreatment) {
+                  applyTreatmentToSelection(selectedTreatment);
+                  setSelectedTreatmentId(undefined);
+                }
+              }}
+            >
+              {mode === "current"
+                ? `Apply ${selectedConditionLabel ?? "condition"}`
+                : `Apply ${selectedTreatment?.displayName ?? "treatment"}`}
+            </Button>
           </div>
         </div>
         <div className="space-y-3">
           <div className="rounded-lg border bg-card p-4">
+            {message && (
+              <div
+                role="alert"
+                className="mb-3 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {message}
+              </div>
+            )}
             {mode === "current" ? (
-              <ConditionSelector
-                disabled={!!readOnly || !selection.selected.length}
-                onApply={applyConditionToSelection}
-              />
+              <ConditionSelector selectedType={selectedCondition} onSelect={setSelectedCondition} />
             ) : (
               <TreatmentSelector
-                disabled={!!readOnly}
-                canApply={selection.selected.length > 0}
-                onApply={applyTreatmentToSelection}
                 definitions={definitions}
+                selectedId={selectedTreatmentId}
+                onSelect={setSelectedTreatmentId}
               />
             )}
           </div>
@@ -659,7 +689,9 @@ export function TreatmentPlanner({
       ) : (
         <TreatmentSummary
           treatments={history.state.proposedTreatments}
-          onDelete={(id) => !readOnly && deleteTreatment(id)}
+          readOnly={readOnly}
+          onDelete={(ids) => !readOnly && deleteTreatments(ids)}
+          onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}
           onHighlight={highlightTeeth}
         />
       )}
@@ -672,7 +704,8 @@ export function TreatmentPlanner({
             <ChevronDown className="size-4" />
           </Button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pb-4">
+        <CollapsibleContent className="space-y-3 pb-4">
+          <MedicalSafetyPanel plan={history.state} />
           <Textarea
             aria-label="Clinic-only clinical notes"
             value={history.state.travel.internalNotes ?? ""}
@@ -732,81 +765,6 @@ function MedicalSafetyPanel({ plan }: { plan: DentalPlan }) {
         {medical.smoking && <Badge variant="destructive">Smoking reported</Badge>}
         {medical.pregnancy && <Badge variant="outline">Pregnancy reported</Badge>}
       </div>
-    </div>
-  );
-}
-function PlanningDefaultsPanel({
-  plan,
-  defaults,
-  onChange,
-}: {
-  plan: DentalPlan;
-  defaults: ReturnType<typeof derivePlanDefaults>;
-  onChange: (
-    key: keyof DentalPlan["planningPreferences"],
-    mode: "automatic" | "custom",
-    value: string,
-  ) => void;
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="mb-4">
-        <h3 className="font-semibold">Suggested visit and healing plan</h3>
-        <p className="text-xs text-muted-foreground">
-          Suggested from selected treatments — confirm clinically.
-        </p>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {(["visits", "visitDuration", "healingPeriod", "estimatedStay"] as const).map((key) => {
-          const preference = plan.planningPreferences[key];
-          const automatic =
-            key === "visits"
-              ? String(defaults.recommendedVisits)
-              : key === "visitDuration"
-                ? defaults.visitDurationSummary
-                : key === "healingPeriod"
-                  ? defaults.healingPeriodSummary
-                  : (defaults.estimatedStaySummary ?? "");
-          return (
-            <div key={key} className="space-y-2">
-              <p className="text-sm font-medium">{key.replace(/([A-Z])/g, " $1")}</p>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1 text-xs ${preference.mode === "automatic" ? "bg-secondary" : ""}`}
-                  onClick={() => onChange(key, "automatic", automatic)}
-                >
-                  Automatic
-                </button>
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1 text-xs ${preference.mode === "custom" ? "bg-secondary" : ""}`}
-                  onClick={() => onChange(key, "custom", preference.value || automatic)}
-                >
-                  Custom
-                </button>
-              </div>
-              <Input
-                value={preference.mode === "automatic" ? automatic : preference.value}
-                disabled={preference.mode === "automatic"}
-                onChange={(event) => onChange(key, "custom", event.target.value)}
-              />
-            </div>
-          );
-        })}
-      </div>
-      {defaults.reasons.length > 0 && (
-        <ul className="mt-4 list-disc pl-5 text-xs text-muted-foreground">
-          {defaults.reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
-      )}
-      {defaults.warnings.map((warning) => (
-        <p key={warning} className="mt-2 rounded bg-warning/15 p-2 text-sm">
-          {warning}
-        </p>
-      ))}
     </div>
   );
 }

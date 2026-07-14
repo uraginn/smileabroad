@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Check } from "lucide-react";
 import {
   Accordion,
@@ -6,7 +5,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -33,28 +31,24 @@ const GROUPS: Array<{ label: string; types: TreatmentType[] }> = [
       "bridge",
       "pontic",
       "inlay-onlay",
-      "root-canal-treatment",
     ],
   },
   { label: "Cosmetic", types: ["veneer", "composite-bonding", "whitening"] },
+  { label: "Endodontic", types: ["root-canal-treatment"] },
   { label: "Surgical", types: ["extraction"] },
   { label: "Supporting", types: ["bone-graft", "sinus-lift"] },
   { label: "Other", types: ["denture", "other"] },
 ];
 
 export function TreatmentSelector({
-  disabled,
-  canApply,
-  onApply,
   definitions,
+  selectedId,
+  onSelect,
 }: {
-  disabled: boolean;
-  canApply: boolean;
-  onApply: (treatment: EffectiveTreatmentDefinition) => void;
   definitions: EffectiveTreatmentDefinition[];
+  selectedId?: string;
+  onSelect: (treatmentId: string) => void;
 }) {
-  const [selectedId, setSelectedId] = useState<string>();
-  const selected = definitions.find((item) => item.id === selectedId);
   const grouped = GROUPS.map((group) => ({
     label: group.label,
     definitions: definitions.filter((item) =>
@@ -63,24 +57,11 @@ export function TreatmentSelector({
   })).filter((group) => group.definitions.length);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Treatment controls</p>
-          <p className="text-xs text-muted-foreground">
-            Choose a category, search the registry and apply it to the selected teeth.
-          </p>
-        </div>
-        <Button
-          type="button"
-          disabled={disabled || !canApply || !selected}
-          onClick={() => {
-            if (!selected) return;
-            onApply(selected);
-            setSelectedId(undefined);
-          }}
-        >
-          Apply {selected?.displayName ?? "treatment"}
-        </Button>
+      <div>
+        <p className="text-sm font-semibold">Treatment controls</p>
+        <p className="text-xs text-muted-foreground">
+          Choose a category and search the treatment registry.
+        </p>
       </div>
       <Accordion type="single" collapsible className="rounded-lg border px-3">
         {grouped.map((group) => (
@@ -106,7 +87,7 @@ export function TreatmentSelector({
                       <CommandItem
                         key={treatment.id}
                         value={`${treatment.displayName} ${group.label}`}
-                        onSelect={() => setSelectedId(treatment.id)}
+                        onSelect={() => onSelect(treatment.id)}
                       >
                         <span
                           className="mr-2 size-3 rounded-sm border"

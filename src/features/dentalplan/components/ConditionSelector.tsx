@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Check } from "lucide-react";
 import {
   Accordion,
@@ -6,7 +5,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -32,34 +30,19 @@ const GROUPS: Array<{ label: string; types: ConditionType[] }> = [
 ];
 
 export function ConditionSelector({
-  disabled,
-  onApply,
+  selectedType,
+  onSelect,
 }: {
-  disabled: boolean;
-  onApply: (condition: ConditionType) => void;
+  selectedType?: ConditionType;
+  onSelect: (condition: ConditionType) => void;
 }) {
-  const [selectedType, setSelectedType] = useState<ConditionType>();
-  const selected = CONDITION_DEFINITIONS.find((item) => item.type === selectedType);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Condition controls</p>
-          <p className="text-xs text-muted-foreground">
-            Choose a category, search clinical findings and apply one to the selected teeth.
-          </p>
-        </div>
-        <Button
-          type="button"
-          disabled={disabled || !selectedType}
-          onClick={() => {
-            if (!selectedType) return;
-            onApply(selectedType);
-            setSelectedType(undefined);
-          }}
-        >
-          Apply {selected?.label ?? "condition"}
-        </Button>
+      <div>
+        <p className="text-sm font-semibold">Condition controls</p>
+        <p className="text-xs text-muted-foreground">
+          Choose a category and search clinical findings.
+        </p>
       </div>
       <Accordion type="single" collapsible className="rounded-lg border px-3">
         {GROUPS.map((group) => (
@@ -84,7 +67,7 @@ export function ConditionSelector({
                       <CommandItem
                         key={condition.type}
                         value={`${condition.label} ${group.label}`}
-                        onSelect={() => setSelectedType(condition.type)}
+                        onSelect={() => onSelect(condition.type)}
                       >
                         <span
                           className="mr-2 size-3 rounded-sm border"
