@@ -19,7 +19,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -75,7 +75,11 @@ export function DentalPlanStudio(props: DentalPlanStudioProps) {
     });
   }, [incomingPlanId, repository]);
   if (!plan) return <PlannerSkeleton />;
-  return <PlannerShell plan={plan} setPlan={setPlan} repository={repository} {...props} />;
+  return (
+    <TooltipProvider>
+      <PlannerShell plan={plan} setPlan={setPlan} repository={repository} {...props} />
+    </TooltipProvider>
+  );
 }
 function PlannerShell({
   plan,

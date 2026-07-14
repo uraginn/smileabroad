@@ -18,6 +18,7 @@ export function useHistoryState<T>(initial: T, limit = 100): HistoryApi<T> {
     (next: T | ((prev: T) => T)) => {
       setState((prev) => {
         const value = typeof next === "function" ? (next as (previous: T) => T)(prev) : next;
+        if (Object.is(value, prev)) return prev;
         past.current.push(prev);
         if (past.current.length > limit) past.current.shift();
         future.current = [];

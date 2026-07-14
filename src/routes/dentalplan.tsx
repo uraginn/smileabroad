@@ -148,17 +148,17 @@ function DentalPlanRoute() {
   );
   const importedAssessment = useMemo(
     () => ({
-      medicalConditions: assessment?.medical.conditions ?? [],
-      medications: assessment?.medical.medications,
-      allergies: assessment?.medical.allergies,
-      destinationCountry: assessment?.travel.destination_country,
-      preferredCities: assessment?.travel.preferred_cities ?? [],
-      preferredTimeline: assessment?.travel.treatment_timeline,
-      treatmentInterest: assessment?.dental.treatment_interest,
-      smoking: assessment?.medical.smoking,
-      pregnancy: assessment?.medical.pregnancy,
-      panoramicAvailable: assessment?.uploads.uploaded_panoramic,
-      dentalPhotosAvailable: assessment?.uploads.uploaded_dental_photos,
+      medicalConditions: assessment?.medical?.conditions ?? [],
+      medications: assessment?.medical?.medications,
+      allergies: assessment?.medical?.allergies,
+      destinationCountry: assessment?.travel?.destination_country,
+      preferredCities: assessment?.travel?.preferred_cities ?? [],
+      preferredTimeline: assessment?.travel?.treatment_timeline,
+      treatmentInterest: assessment?.dental?.treatment_interest,
+      smoking: assessment?.medical?.smoking,
+      pregnancy: assessment?.medical?.pregnancy,
+      panoramicAvailable: assessment?.uploads?.uploaded_panoramic,
+      dentalPhotosAvailable: assessment?.uploads?.uploaded_dental_photos,
     }),
     [assessment],
   );
@@ -174,7 +174,10 @@ function DentalPlanRoute() {
       patients.find(
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user?.clinic_id,
       );
-    const embedded = existingPlan?.dental_plan_data as DentalPlanData | undefined;
+    const embedded =
+      existingPlan?.dental_plan_data && typeof existingPlan.dental_plan_data === "object"
+        ? createDentalPlan(existingPlan.dental_plan_data as Partial<DentalPlanData>)
+        : undefined;
     const importedCommercial = existingPlan?.currency
       ? {
           currency: existingPlan.currency,
@@ -214,7 +217,7 @@ function DentalPlanRoute() {
           commercialNotes: existingPlan.patient_message,
         }
       : undefined;
-    if (embedded?.currentConditions)
+    if (embedded)
       return createDentalPlan({
         ...embedded,
         patient: {
@@ -222,24 +225,26 @@ function DentalPlanRoute() {
           patientId: linkedPatient?.id,
           firstName:
             linkedPatient?.first_name ??
-            assessment?.personal.first_name ??
+            assessment?.personal?.first_name ??
             embedded.patient.firstName,
           lastName:
-            linkedPatient?.last_name ?? assessment?.personal.last_name ?? embedded.patient.lastName,
+            linkedPatient?.last_name ??
+            assessment?.personal?.last_name ??
+            embedded.patient.lastName,
           fullName: linkedPatient
             ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
             : embedded.patient.fullName,
           country: linkedPatient?.country ?? embedded.patient.country,
-          city: linkedPatient?.city ?? assessment?.personal.city ?? embedded.patient.city,
+          city: linkedPatient?.city ?? assessment?.personal?.city ?? embedded.patient.city,
           email: linkedPatient?.email ?? embedded.patient.email,
           phone: linkedPatient?.phone ?? embedded.patient.phone,
           whatsapp:
-            linkedPatient?.whatsapp ?? assessment?.personal.whatsapp ?? embedded.patient.whatsapp,
+            linkedPatient?.whatsapp ?? assessment?.personal?.whatsapp ?? embedded.patient.whatsapp,
           preferredLanguage:
             linkedPatient?.language ??
-            assessment?.personal.preferred_language ??
+            assessment?.personal?.preferred_language ??
             embedded.patient.preferredLanguage,
-          age: assessment?.personal.age ?? embedded.patient.age,
+          age: assessment?.personal?.age ?? embedded.patient.age,
           source: lead?.source ?? linkedPatient?.source ?? embedded.patient.source,
           assessmentId: assessment?.id ?? embedded.patient.assessmentId,
           roadmapId: roadmap?.id ?? embedded.patient.roadmapId,
@@ -270,24 +275,24 @@ function DentalPlanRoute() {
       name: existingPlan?.title ?? "Dental treatment plan",
       patientName: linkedPatient
         ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
-        : `${assessment?.personal.first_name ?? ""} ${assessment?.personal.last_name ?? ""}`.trim(),
+        : `${assessment?.personal?.first_name ?? ""} ${assessment?.personal?.last_name ?? ""}`.trim(),
       patient: {
         patientId: linkedPatient?.id,
-        firstName: linkedPatient?.first_name ?? assessment?.personal.first_name ?? "",
-        lastName: linkedPatient?.last_name ?? assessment?.personal.last_name ?? "",
+        firstName: linkedPatient?.first_name ?? assessment?.personal?.first_name ?? "",
+        lastName: linkedPatient?.last_name ?? assessment?.personal?.last_name ?? "",
         fullName: linkedPatient
           ? `${linkedPatient.first_name} ${linkedPatient.last_name}`
-          : `${assessment?.personal.first_name ?? ""} ${assessment?.personal.last_name ?? ""}`.trim(),
+          : `${assessment?.personal?.first_name ?? ""} ${assessment?.personal?.last_name ?? ""}`.trim(),
         dateOfBirth: linkedPatient?.date_of_birth,
-        age: assessment?.personal.age,
-        country: linkedPatient?.country ?? assessment?.personal.country,
-        city: linkedPatient?.city ?? assessment?.personal.city,
-        email: linkedPatient?.email ?? assessment?.personal.email,
-        phone: linkedPatient?.phone ?? assessment?.personal.phone,
-        whatsapp: linkedPatient?.whatsapp ?? assessment?.personal.whatsapp,
-        preferredLanguage: linkedPatient?.language ?? assessment?.personal.preferred_language,
+        age: assessment?.personal?.age,
+        country: linkedPatient?.country ?? assessment?.personal?.country,
+        city: linkedPatient?.city ?? assessment?.personal?.city,
+        email: linkedPatient?.email ?? assessment?.personal?.email,
+        phone: linkedPatient?.phone ?? assessment?.personal?.phone,
+        whatsapp: linkedPatient?.whatsapp ?? assessment?.personal?.whatsapp,
+        preferredLanguage: linkedPatient?.language ?? assessment?.personal?.preferred_language,
         treatmentInterest:
-          linkedPatient?.treatment_interest ?? assessment?.dental.treatment_interest,
+          linkedPatient?.treatment_interest ?? assessment?.dental?.treatment_interest,
         source: lead?.source ?? linkedPatient?.source ?? "manual",
         assessmentId: assessment?.id,
         roadmapId: roadmap?.id,
@@ -339,6 +344,88 @@ function DentalPlanRoute() {
     templateMode,
     activeTemplate,
   ]);
+  const plannerClinicUsers = useMemo(
+    () =>
+      users
+        .filter(
+          (member) =>
+            member.clinic_id === user?.clinic_id &&
+            (member.active !== false ||
+              member.id === initial?.patient.dentistId ||
+              member.id === initial?.patient.coordinatorId),
+        )
+        .map(({ id, name, role, title, specialty }) => ({
+          id,
+          name: [name, title, specialty].filter(Boolean).join(" Â· "),
+          role,
+        })),
+    [users, user?.clinic_id, initial?.patient.dentistId, initial?.patient.coordinatorId],
+  );
+  const plannerTreatmentDefaults = useMemo(
+    () =>
+      treatmentDefinitions
+        .filter((item) => item.clinic_id === user?.clinic_id)
+        .map((item) => ({
+          id: item.id,
+          treatmentKey: item.treatment_key,
+          displayName: item.display_name,
+          active: item.active !== false,
+          system: item.system,
+          category: item.category,
+          baseTreatmentKey: item.base_treatment_key as TreatmentType,
+          visualKey: item.visual_key as TreatmentType,
+          perTooth: item.unit_type === "tooth",
+          prices: item.prices ?? {},
+        })),
+    [treatmentDefinitions, user?.clinic_id],
+  );
+  const plannerHotels = useMemo(
+    () =>
+      hotels
+        .filter(
+          (item) =>
+            item.clinic_id === user?.clinic_id &&
+            (item.active !== false || item.id === initial?.travel.selectedHotelId),
+        )
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          categories: Array.isArray(item.categories) ? item.categories : [],
+          website: item.website,
+          description: item.description,
+          roomTypes: Array.isArray(item.room_types) ? item.room_types : [],
+          boardTypes: Array.isArray(item.board_types) ? item.board_types : [],
+          defaultNights: Number.isFinite(item.default_nights) ? item.default_nights : 0,
+          pricePerNight: Number.isFinite(item.price_per_night) ? item.price_per_night : 0,
+          currency: ["GBP", "EUR", "USD", "TRY"].includes(item.currency) ? item.currency : "EUR",
+          companionPolicy: item.companion_policy,
+          isDefault: !!item.is_default,
+          images: (Array.isArray(item.images) ? item.images : [])
+            .filter((image) => image && typeof image === "object")
+            .map((image) => ({
+              id: image.id,
+              name: image.name,
+              dataUrl: image.data_url,
+            })),
+        })),
+    [hotels, user?.clinic_id, initial?.travel.selectedHotelId],
+  );
+  const preliminarySuggestions = useMemo(
+    () =>
+      (Array.isArray(roadmap?.treatment_estimates) ? roadmap.treatment_estimates : []).map(
+        (item) => ({
+          key: item.treatment_key,
+          label: item.label,
+          quantity: item.estimated_quantity,
+        }),
+      ),
+    [roadmap?.treatment_estimates],
+  );
+  const plannerServiceOptions = Array.isArray(clinic?.planner_included_services)
+    ? clinic.planner_included_services.filter(
+        (service): service is string => typeof service === "string",
+      )
+    : DEFAULT_CLINICAL_SERVICES;
   if (!hydrated || !authHydrated) return <PageLoading label="Loading Treatment Plan" />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === "platform_admin" || !user.clinic_id)
@@ -721,11 +808,7 @@ function DentalPlanRoute() {
             }
           : undefined
       }
-      preliminarySuggestions={(roadmap?.treatment_estimates ?? []).map((item) => ({
-        key: item.treatment_key,
-        label: item.label,
-        quantity: item.estimated_quantity,
-      }))}
+      preliminarySuggestions={preliminarySuggestions}
       shareSection={
         existingPlan ? (
           <UnifiedPlanShareSection
@@ -738,59 +821,10 @@ function DentalPlanRoute() {
           />
         ) : undefined
       }
-      clinicUsers={users
-        .filter(
-          (member) =>
-            member.clinic_id === user?.clinic_id &&
-            (member.active !== false ||
-              member.id === initial?.patient.dentistId ||
-              member.id === initial?.patient.coordinatorId),
-        )
-        .map(({ id, name, role, title, specialty }) => ({
-          id,
-          name: [name, title, specialty].filter(Boolean).join(" Â· "),
-          role,
-        }))}
-      treatmentDefaults={treatmentDefinitions
-        .filter((item) => item.clinic_id === user?.clinic_id)
-        .map((item) => ({
-          id: item.id,
-          treatmentKey: item.treatment_key,
-          displayName: item.display_name,
-          active: item.active,
-          system: item.system,
-          category: item.category,
-          baseTreatmentKey: item.base_treatment_key as TreatmentType,
-          visualKey: item.visual_key as TreatmentType,
-          perTooth: item.unit_type === "tooth",
-          prices: item.prices,
-        }))}
-      hotels={hotels
-        .filter(
-          (item) =>
-            item.clinic_id === user?.clinic_id &&
-            (item.active || item.id === initial?.travel.selectedHotelId),
-        )
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          categories: item.categories,
-          website: item.website,
-          description: item.description,
-          roomTypes: item.room_types,
-          boardTypes: item.board_types,
-          defaultNights: item.default_nights,
-          pricePerNight: item.price_per_night,
-          currency: item.currency,
-          companionPolicy: item.companion_policy,
-          isDefault: item.is_default,
-          images: item.images.map((image) => ({
-            id: image.id,
-            name: image.name,
-            dataUrl: image.data_url,
-          })),
-        }))}
-      serviceOptions={clinic?.planner_included_services ?? DEFAULT_CLINICAL_SERVICES}
+      clinicUsers={plannerClinicUsers}
+      treatmentDefaults={plannerTreatmentDefaults}
+      hotels={plannerHotels}
+      serviceOptions={plannerServiceOptions}
       onFinalize={finalize}
       onChange={crmMode ? saveDraft : undefined}
       onSave={

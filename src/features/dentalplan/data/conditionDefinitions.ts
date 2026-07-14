@@ -26,4 +26,5 @@ export const CONDITION_DEFINITIONS: ConditionDefinition[] = [
     ({ type, label, short, color, supported }) as ConditionDefinition,
 );
 export const conditionByType = (type: ConditionType) =>
-  CONDITION_DEFINITIONS.find((item) => item.type === type)!;
+  CONDITION_DEFINITIONS.find((item) => item.type === type) ??
+  CONDITION_DEFINITIONS.find((item) => item.type === "other")!;

@@ -85,7 +85,8 @@ export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
   }),
 );
 export const treatmentByType = (type: TreatmentType) =>
-  TREATMENT_DEFINITIONS.find((item) => item.type === type)!;
+  TREATMENT_DEFINITIONS.find((item) => item.type === type) ??
+  TREATMENT_DEFINITIONS.find((item) => item.type === "other")!;
 
 const CONVENTIONAL_CROWNS: TreatmentType[] = [
   "zirconium-crown",

@@ -1,9 +1,21 @@
-import type { DentalPlan } from "../types/dental-plan.types";
+import type {
+  DentalPlan,
+  DentalPlanningPreferences,
+  PlanningPreference,
+  ToothCondition,
+  ToothNumber,
+  ToothTreatment,
+} from "../types/dental-plan.types";
+
+const CURRENCIES = ["GBP", "EUR", "USD", "TRY"] as const;
+const defaultPreference = (value: string): PlanningPreference => ({ mode: "automatic", value });
+
 export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPlan {
   const now = new Date().toISOString();
   const importedAssessment = overrides.importedAssessment;
   const commercial = overrides.commercial;
   const legacyTravel = overrides.travel;
+  const patient = overrides.patient;
   const airportTransfer = !!(
     legacyTravel?.airportTransfer ||
     legacyTravel?.airportPickup ||
@@ -12,49 +24,59 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
   const hotelTransfer = !!legacyTravel?.localTransfer;
   const flightIncluded = !!legacyTravel?.flightIncluded;
   const includedServices = new Set(
-    (Array.isArray(legacyTravel?.includedServices) ? legacyTravel.includedServices : []).map(
-      (service) =>
-        service === "Airport transfer"
-          ? "Airport Transfer"
-          : service === "Local clinic and hotel transfer"
-            ? "Hotel Transfer"
-            : service,
+    stringArray(legacyTravel?.includedServices).map((service) =>
+      service === "Airport transfer"
+        ? "Airport Transfer"
+        : service === "Local clinic and hotel transfer"
+          ? "Hotel Transfer"
+          : service,
     ),
   );
   if (airportTransfer) includedServices.add("Airport Transfer");
   if (hotelTransfer) includedServices.add("Hotel Transfer");
   if (flightIncluded) includedServices.add("Flight Included");
+
   return {
-    id: overrides.id ?? crypto.randomUUID(),
-    name: overrides.name ?? "Untitled Plan",
-    patientName: overrides.patientName ?? "",
-    currentConditions:
-      overrides.currentConditions && typeof overrides.currentConditions === "object"
-        ? overrides.currentConditions
-        : {},
-    proposedTreatments: Array.isArray(overrides.proposedTreatments)
-      ? overrides.proposedTreatments
+    id: text(overrides.id) || crypto.randomUUID(),
+    name: text(overrides.name) || "Untitled Plan",
+    patientName: text(overrides.patientName),
+    currentConditions: normalizeConditions(overrides.currentConditions),
+    proposedTreatments: normalizeTreatments(overrides.proposedTreatments),
+    treatmentGroups: Array.isArray(overrides.treatmentGroups)
+      ? overrides.treatmentGroups.map((group, index) => ({
+          ...group,
+          id: text(group?.id) || `legacy-group-${index}`,
+          type: group?.type ?? "implant-restoration",
+          arch: group?.arch === "lower" ? "lower" : "upper",
+          affectedTeeth: numberArray(group?.affectedTeeth) as ToothNumber[],
+          generatedTreatmentIds: stringArray(group?.generatedTreatmentIds),
+          abutments: numberArray(group?.abutments) as ToothNumber[],
+          pontics: numberArray(group?.pontics) as ToothNumber[],
+          implantPositions: numberArray(group?.implantPositions) as ToothNumber[],
+        }))
       : [],
-    treatmentGroups: Array.isArray(overrides.treatmentGroups) ? overrides.treatmentGroups : [],
     patient: {
-      firstName: "",
-      lastName: "",
-      fullName: overrides.patientName ?? "",
-      planTitle: overrides.name ?? "Untitled Plan",
-      preparationDate: now.slice(0, 10),
-      currency: "EUR",
-      ...(overrides.patient ?? {}),
-      uploadedFiles: Array.isArray(overrides.patient?.uploadedFiles)
-        ? overrides.patient.uploadedFiles
+      ...(patient ?? {}),
+      firstName: text(patient?.firstName),
+      lastName: text(patient?.lastName),
+      fullName: text(patient?.fullName) || text(overrides.patientName),
+      planTitle: text(patient?.planTitle) || text(overrides.name) || "Untitled Plan",
+      preparationDate: validDate(patient?.preparationDate, now.slice(0, 10)),
+      currency: currency(patient?.currency),
+      uploadedFiles: Array.isArray(patient?.uploadedFiles)
+        ? patient.uploadedFiles
+            .filter((file) => file && typeof file === "object")
+            .map((file) => ({ kind: text(file.kind), name: text(file.name) }))
+            .filter((file) => file.kind || file.name)
         : [],
     },
     travel: {
-      visits: 1,
-      healingWeeks: 0,
-      hotelRequired: false,
-      hotelIncluded: false,
-      hotelNights: 0,
-      ...(overrides.travel ?? {}),
+      ...(legacyTravel ?? {}),
+      visits: finite(legacyTravel?.visits, 1),
+      healingWeeks: finite(legacyTravel?.healingWeeks),
+      hotelRequired: !!legacyTravel?.hotelRequired,
+      hotelIncluded: !!legacyTravel?.hotelIncluded,
+      hotelNights: finite(legacyTravel?.hotelNights),
       airportTransfer,
       airportPickup: airportTransfer,
       airportDropoff: airportTransfer,
@@ -62,39 +84,123 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
       flightIncluded,
       transferIncluded: airportTransfer || hotelTransfer,
       includedServices: [...includedServices],
-      guarantees: Array.isArray(overrides.travel?.guarantees) ? overrides.travel.guarantees : [],
+      guarantees: stringArray(legacyTravel?.guarantees),
     },
-    draftStep: overrides.draftStep ?? 0,
-    finalized: overrides.finalized ?? false,
+    draftStep: Math.max(0, Math.min(4, finite(overrides.draftStep))),
+    finalized: !!overrides.finalized,
     importedAssessment: {
-      ...importedAssessment,
-      medicalConditions: Array.isArray(importedAssessment?.medicalConditions)
-        ? importedAssessment.medicalConditions
-        : [],
-      preferredCities: Array.isArray(importedAssessment?.preferredCities)
-        ? importedAssessment.preferredCities
-        : [],
+      ...(importedAssessment ?? {}),
+      medicalConditions: stringArray(importedAssessment?.medicalConditions),
+      preferredCities: stringArray(importedAssessment?.preferredCities),
     },
-    planningPreferences: {
-      visits: { mode: "automatic", value: "1" },
-      visitDuration: { mode: "automatic", value: "Suggested from selected treatments" },
-      healingPeriod: { mode: "automatic", value: "No staged healing interval suggested" },
-      estimatedStay: { mode: "automatic", value: "Confirm after clinical review" },
-      ...(overrides.planningPreferences ?? {}),
-    },
+    planningPreferences: normalizePreferences(overrides.planningPreferences),
     commercial: {
-      currency: commercial?.currency ?? overrides.patient?.currency ?? "EUR",
-      items: Array.isArray(commercial?.items) ? commercial.items : [],
-      hotelTotal: Math.max(0, commercial?.hotelTotal ?? 0),
-      transferTotal: Math.max(0, commercial?.transferTotal ?? 0),
-      otherServiceTotal: Math.max(0, commercial?.otherServiceTotal ?? 0),
-      discountType: commercial?.discountType ?? "none",
-      discountValue: Math.max(0, commercial?.discountValue ?? 0),
-      paymentSchedule: Array.isArray(commercial?.paymentSchedule) ? commercial.paymentSchedule : [],
-      validUntil: commercial?.validUntil,
-      commercialNotes: commercial?.commercialNotes,
+      ...(commercial ?? {}),
+      currency: currency(commercial?.currency ?? patient?.currency),
+      items: Array.isArray(commercial?.items)
+        ? commercial.items.map((item, index) => ({
+            ...item,
+            treatmentId: text(item?.treatmentId) || `legacy-price-${index}`,
+            label: text(item?.label) || "Treatment",
+            qty: Math.max(0, finite(item?.qty, 1)),
+            unitPrice: Math.max(0, finite(item?.unitPrice)),
+            priceOverridden: !!item?.priceOverridden,
+          }))
+        : [],
+      hotelTotal: Math.max(0, finite(commercial?.hotelTotal)),
+      transferTotal: Math.max(0, finite(commercial?.transferTotal)),
+      otherServiceTotal: Math.max(0, finite(commercial?.otherServiceTotal)),
+      discountType: ["fixed", "percentage"].includes(commercial?.discountType ?? "")
+        ? commercial!.discountType
+        : "none",
+      discountValue: Math.max(0, finite(commercial?.discountValue)),
+      paymentSchedule: Array.isArray(commercial?.paymentSchedule)
+        ? commercial.paymentSchedule.map((payment, index) => ({
+            id: text(payment?.id) || `legacy-payment-${index}`,
+            label: text(payment?.label) || `Visit ${index + 1}`,
+            amount: Math.max(0, finite(payment?.amount)),
+            due: text(payment?.due),
+          }))
+        : [],
     },
-    createdAt: overrides.createdAt ?? now,
-    updatedAt: overrides.updatedAt ?? now,
+    createdAt: validDate(overrides.createdAt, now),
+    updatedAt: validDate(overrides.updatedAt, now),
   };
+}
+
+function normalizeConditions(value: DentalPlan["currentConditions"] | undefined) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, condition]) => condition && typeof condition === "object")
+      .map(([tooth, condition]) => [
+        tooth,
+        {
+          ...condition,
+          toothNumber: finite(condition?.toothNumber, Number(tooth)) as ToothNumber,
+          conditions: stringArray(condition?.conditions) as ToothCondition["conditions"],
+        } satisfies ToothCondition,
+      ]),
+  ) as DentalPlan["currentConditions"];
+}
+
+function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map(
+      (item, index) =>
+        ({
+          ...item,
+          id: text(item.id) || `legacy-treatment-${index}`,
+          toothNumbers: numberArray(item.toothNumbers) as ToothNumber[],
+          treatmentType: item.treatmentType ?? "other",
+        }) satisfies ToothTreatment,
+    );
+}
+
+function normalizePreferences(
+  value?: Partial<DentalPlanningPreferences>,
+): DentalPlanningPreferences {
+  return {
+    visits: preference(value?.visits, "1"),
+    visitDuration: preference(value?.visitDuration, "Suggested from selected treatments"),
+    healingPeriod: preference(value?.healingPeriod, "No staged healing interval suggested"),
+    estimatedStay: preference(value?.estimatedStay, "Confirm after clinical review"),
+  };
+}
+
+function preference(value: PlanningPreference | undefined, fallback: string): PlanningPreference {
+  if (!value || typeof value !== "object") return defaultPreference(fallback);
+  return { mode: value.mode === "custom" ? "custom" : "automatic", value: text(value.value) };
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function finite(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function numberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+    : [];
+}
+
+function currency(value: unknown): DentalPlan["commercial"]["currency"] {
+  return CURRENCIES.includes(value as (typeof CURRENCIES)[number])
+    ? (value as DentalPlan["commercial"]["currency"])
+    : "EUR";
+}
+
+function validDate(value: unknown, fallback: string) {
+  return typeof value === "string" && !Number.isNaN(new Date(value).getTime()) ? value : fallback;
 }

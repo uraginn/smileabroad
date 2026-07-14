@@ -521,6 +521,7 @@ export function TreatmentPlanner({
       ...previous,
       currentConditions: {},
       proposedTreatments: [],
+      treatmentGroups: [],
       updatedAt: new Date().toISOString(),
     }));
     currentSelection.clear();
