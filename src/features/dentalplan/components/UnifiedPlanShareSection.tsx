@@ -34,6 +34,7 @@ export function UnifiedPlanShareSection({
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
   const markSent = useMockStore((state) => state.markTreatmentPlanSent);
   const ensureToken = useMockStore((state) => state.ensureTreatmentPlanShareToken);
+  const status = plan.status ?? "draft";
   const canApprove = ["dentist", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const publicLinkReady = Boolean(plan.share_token && isTreatmentPlanPubliclyViewable(plan.status));
   const preview = () => {
@@ -57,18 +58,18 @@ export function UnifiedPlanShareSection({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Share Treatment Plan</CardTitle>
+          <CardTitle>Share & delivery</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">Current document status</p>
-              <StatusBadge status={plan.status ?? "draft"} />
+              <p className="text-sm text-muted-foreground">Current status</p>
+              <StatusBadge status={status} />
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                {shareGuidance(status, canApprove)}
+              </p>
             </div>
-            <Button
-              variant={(plan.status ?? "draft") === "draft" ? "default" : "outline"}
-              onClick={preview}
-            >
+            <Button variant={status === "draft" ? "default" : "outline"} onClick={preview}>
               Preview Patient View
             </Button>
           </div>
@@ -80,7 +81,7 @@ export function UnifiedPlanShareSection({
           </Alert>
           <Separator />
           <div className="flex flex-wrap gap-2">
-            {(plan.status ?? "draft") === "draft" && (
+            {status === "draft" && (
               <Button
                 variant="outline"
                 onClick={() => updateStatus(plan.id, plan.clinic_id, "doctor_review", actorId)}
@@ -88,7 +89,7 @@ export function UnifiedPlanShareSection({
                 Send for Doctor Review
               </Button>
             )}
-            {(plan.status ?? "draft") === "doctor_review" && canApprove && (
+            {status === "doctor_review" && canApprove && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button>Approve Treatment Plan</Button>
@@ -107,7 +108,7 @@ export function UnifiedPlanShareSection({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {(plan.status ?? "draft") === "approved" && (
+            {status === "approved" && (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -125,10 +126,12 @@ export function UnifiedPlanShareSection({
             >
               Copy Patient Link
             </Button>
-            {["approved", "sent", "viewed"].includes(plan.status ?? "") && (
+            {["approved", "sent", "viewed"].includes(status) && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive">Revoke Public Access</Button>
+                  <Button variant="ghost" className="text-destructive hover:text-destructive">
+                    Revoke public access
+                  </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -185,4 +188,18 @@ function formatDate(value?: string) {
   if (!value) return "Not available";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
+}
+
+function shareGuidance(status: string, canApprove: boolean) {
+  if (status === "draft") return "Preview the patient document, then send it for clinical review.";
+  if (status === "doctor_review")
+    return canApprove
+      ? "Review the complete plan and approve it when clinically ready."
+      : "Waiting for a dentist or clinic administrator to approve the plan.";
+  if (status === "approved")
+    return "The patient link is ready. Copy it, then mark the plan as sent.";
+  if (["sent", "viewed"].includes(status))
+    return "The patient link is active. Status timestamps update as the patient engages.";
+  if (status === "accepted") return "The patient has accepted this Treatment Plan.";
+  return "Public access is unavailable. Private preview remains available.";
 }

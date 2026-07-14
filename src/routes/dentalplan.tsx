@@ -76,6 +76,7 @@ function DentalPlanRoute() {
   const addPatient = useMockStore((state) => state.addPatient);
   const updatePatient = useMockStore((state) => state.updatePatient);
   const saveTemplate = useMockStore((state) => state.saveDentalPlanTemplate);
+  const ensureShareToken = useMockStore((state) => state.ensureTreatmentPlanShareToken);
   const templateMode = search.mode === "template";
   const activeTemplate = templates.find(
     (item) => item.id === search.templateId && item.clinic_id === user?.clinic_id,
@@ -629,6 +630,20 @@ function DentalPlanRoute() {
         treatmentPlanId: existingPlan?.id,
       }}
       initialValue={initial}
+      documentStatus={existingPlan?.status}
+      onPreview={
+        existingPlan
+          ? () => {
+              const token = ensureShareToken(existingPlan.id, existingPlan.clinic_id);
+              if (token)
+                window.open(
+                  `/shared/treatment-plan/${token}?preview=true`,
+                  "_blank",
+                  "noopener,noreferrer",
+                );
+            }
+          : undefined
+      }
       preliminarySuggestions={(roadmap?.treatment_estimates ?? []).map((item) => ({
         key: item.treatment_key,
         label: item.label,

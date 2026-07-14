@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,8 @@ function PlannerShell({
   templates = [],
   preliminarySuggestions = [],
   shareSection,
+  documentStatus,
+  onPreview,
 }: {
   plan: DentalPlan;
   setPlan: (plan: DentalPlan) => void;
@@ -134,6 +136,7 @@ function PlannerShell({
   const [pendingTemplateId, setPendingTemplateId] = useState<string>();
   const [templateNameOpen, setTemplateNameOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const assignedDentist = clinicUsers.find((user) => user.id === plan.patient.dentistId);
   const change = (patch: Partial<DentalPlan>) =>
     setPlan({ ...plan, ...patch, updatedAt: new Date().toISOString() });
   const onChangeRef = useRef(onChange);
@@ -192,31 +195,37 @@ function PlannerShell({
   };
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
+          <div className="min-w-0">
             <Button asChild variant="ghost" size="sm" className="mb-1 -ml-3">
               <Link to="/pro/treatment-plans">Back to Treatment Plans</Link>
             </Button>
-            <h1 className="text-xl font-semibold">
-              {plan.patient.fullName || "Dental Treatment Planner"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {context?.mode === "crm"
-                ? `Treatment Plan · ${plan.patient.dentistId ? "Dentist assigned" : "Dentist not assigned"}`
-                : context?.mode === "template"
-                  ? "Clinic template editor · patient data excluded"
-                  : "Standalone development workflow"}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold">
+                {plan.patient.fullName || "Dental Treatment Planner"}
+              </h1>
+              <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
+            </div>
+            <p className="truncate text-sm text-muted-foreground">
+              {context?.mode === "template"
+                ? "Clinic template editor · patient data excluded"
+                : assignedDentist?.name || "Dentist unassigned"}
             </p>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="font-normal">
               {saving
                 ? "Saving…"
                 : lastSavedAt
                   ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
                   : "Not saved"}
-            </span>
+            </Badge>
+            {onPreview && (
+              <Button variant="ghost" size="sm" onClick={onPreview}>
+                <Eye className="size-4" /> Preview
+              </Button>
+            )}
             <Button variant="outline" onClick={save} disabled={readOnly}>
               Save draft
             </Button>
@@ -241,11 +250,15 @@ function PlannerShell({
             value={String(step)}
             onValueChange={(value) => change({ draftStep: Number(value) })}
           >
-            <TabsList className="h-auto w-full justify-start overflow-x-auto">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-6">
               {STEPS.map((label, index) => (
-                <TabsTrigger key={label} value={String(index)} className="min-w-44">
-                  <span className="mr-2 font-semibold">{index + 1}</span>
-                  {label}
+                <TabsTrigger
+                  key={label}
+                  value={String(index)}
+                  className="min-h-11 min-w-0 justify-start whitespace-normal px-2 text-left"
+                >
+                  <span className="mr-1.5 font-semibold">{index + 1}</span>
+                  <span className="truncate">{label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -392,6 +405,7 @@ function PlannerShell({
           <FinalReviewStep
             plan={plan}
             hotels={hotels}
+            clinicUsers={clinicUsers}
             onNavigate={(draftStep) => change({ draftStep })}
           />
         )}

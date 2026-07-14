@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 
@@ -98,26 +99,24 @@ export function TravelServicesStep({
   };
   return (
     <div className="space-y-4">
-      <Card className="bg-muted/30">
-        <CardContent className="space-y-2 p-4 text-sm">
-          <p>
-            This plan is currently expected to require <b>{defaults.recommendedVisits} visit(s)</b>{" "}
-            with <b>{defaults.healingPeriodSummary.toLowerCase()}</b>.
+      <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
+        <p>
+          This plan is currently expected to require <b>{defaults.recommendedVisits} visit(s)</b>{" "}
+          with <b>{defaults.healingPeriodSummary.toLowerCase()}</b>.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Generated from the selected treatments and linked groups; confirm clinically.
+        </p>
+        {defaults.warnings.map((warning) => (
+          <p key={warning} className="text-xs text-warning-foreground">
+            {warning}
           </p>
-          <p className="text-xs text-muted-foreground">
-            Generated from the selected treatments and linked groups; confirm clinically.
-          </p>
-          {defaults.warnings.map((warning) => (
-            <p key={warning} className="text-xs text-warning-foreground">
-              {warning}
-            </p>
-          ))}
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Hotel</CardTitle>
+          <CardTitle>Accommodation</CardTitle>
           <label className="flex items-center gap-2 text-sm">
             <Switch
               checked={plan.travel.hotelIncluded}
@@ -210,101 +209,103 @@ export function TravelServicesStep({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Transfers and flight</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          <ServiceSwitch
-            label="Airport Transfer"
-            description="Airport pickup and drop-off"
-            checked={plan.travel.includedServices.includes("Airport Transfer")}
-            onChange={(checked) => setService("Airport Transfer", checked)}
-          />
-          <ServiceSwitch
-            label="Hotel Transfer"
-            description="Hotel and clinic transfers"
-            checked={plan.travel.includedServices.includes("Hotel Transfer")}
-            onChange={(checked) => setService("Hotel Transfer", checked)}
-          />
-          <ServiceSwitch
-            label="Flight Included"
-            description="Flight cost included in package"
-            checked={plan.travel.includedServices.includes("Flight Included")}
-            onChange={(checked) => setService("Flight Included", checked)}
-          />
-        </CardContent>
-      </Card>
+        <CardContent className="space-y-6 p-4 sm:p-6">
+          <section aria-labelledby="travel-logistics-heading">
+            <h3 id="travel-logistics-heading" className="mb-3 font-semibold">
+              Travel logistics
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <ServiceSwitch
+                label="Airport Transfer"
+                description="Airport pickup and drop-off"
+                checked={plan.travel.includedServices.includes("Airport Transfer")}
+                onChange={(checked) => setService("Airport Transfer", checked)}
+              />
+              <ServiceSwitch
+                label="Hotel Transfer"
+                description="Hotel and clinic transfers"
+                checked={plan.travel.includedServices.includes("Hotel Transfer")}
+                onChange={(checked) => setService("Hotel Transfer", checked)}
+              />
+              <ServiceSwitch
+                label="Flight Included"
+                description="Flight cost included in package"
+                checked={plan.travel.includedServices.includes("Flight Included")}
+                onChange={(checked) => setService("Flight Included", checked)}
+              />
+            </div>
+          </section>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Included services</CardTitle>
-          <Badge variant="secondary">{plan.travel.includedServices.length} selected</Badge>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ServiceGroup
-            title="Clinical"
-            services={CLINICAL_SERVICES}
-            selected={plan.travel.includedServices}
-            onChange={setService}
-          />
-          <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
-            Travel selections are controlled above and included automatically in this summary.
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={custom}
-              onChange={(event) => setCustom(event.target.value)}
-              placeholder="Custom included service"
+          <Separator />
+          <section aria-labelledby="included-services-heading" className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 id="included-services-heading" className="font-semibold">
+                Included services
+              </h3>
+              <Badge variant="secondary">{plan.travel.includedServices.length} selected</Badge>
+            </div>
+            <ServiceGroup
+              title="Clinical"
+              services={CLINICAL_SERVICES}
+              selected={plan.travel.includedServices}
+              onChange={setService}
             />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                const value = custom.trim();
-                if (!value) return;
-                setService(value, true);
-                setCustom("");
-              }}
-            >
-              <Plus className="size-4" /> Add
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {plan.travel.includedServices
-              .filter((item) => !KNOWN_SERVICES.includes(item))
-              .map((item) => (
-                <Button
-                  key={item}
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setService(item, false)}
-                >
-                  {item}
-                  <Trash2 className="size-3" />
-                </Button>
-              ))}
-          </div>
-        </CardContent>
-      </Card>
+            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+              Travel selections are controlled above and included automatically in this summary.
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={custom}
+                onChange={(event) => setCustom(event.target.value)}
+                placeholder="Custom included service"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const value = custom.trim();
+                  if (!value) return;
+                  setService(value, true);
+                  setCustom("");
+                }}
+              >
+                <Plus className="size-4" /> Add
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {plan.travel.includedServices
+                .filter((item) => !KNOWN_SERVICES.includes(item))
+                .map((item) => (
+                  <Button
+                    key={item}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setService(item, false)}
+                  >
+                    {item}
+                    <Trash2 className="size-3" />
+                  </Button>
+                ))}
+            </div>
+          </section>
 
-      <Card className="border-warning/40">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <LockKeyhole className="size-4" />
-            Internal clinic notes
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={plan.travel.internalNotes ?? ""}
-            onChange={(event) => update({ internalNotes: event.target.value })}
-            rows={3}
-          />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Private clinic-only information. Never shown in the Patient View or preliminary
-            roadmaps.
-          </p>
+          <Separator />
+          <section aria-labelledby="clinic-notes-heading">
+            <h3 id="clinic-notes-heading" className="mb-3 flex items-center gap-2 font-semibold">
+              <LockKeyhole className="size-4" />
+              Clinic-only notes
+            </h3>
+            <Textarea
+              value={plan.travel.internalNotes ?? ""}
+              onChange={(event) => update({ internalNotes: event.target.value })}
+              rows={3}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Private clinic-only information. Never shown in the Patient View or preliminary
+              roadmaps.
+            </p>
+          </section>
         </CardContent>
       </Card>
     </div>

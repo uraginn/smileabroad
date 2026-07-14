@@ -240,6 +240,8 @@ export interface DentalPlanStudioProps {
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
   preliminarySuggestions?: Array<{ key: string; label: string; quantity?: number }>;
   shareSection?: ReactNode;
+  documentStatus?: string;
+  onPreview?: () => void;
   treatmentDefaults?: Array<{
     id?: string;
     treatmentKey: string;

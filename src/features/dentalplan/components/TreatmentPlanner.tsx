@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type {
   BridgeUnitRole,
   ConditionType,
@@ -473,13 +476,30 @@ export function TreatmentPlanner({
           <ToolButton onClick={history.redo} disabled={!history.canRedo || readOnly}>
             Redo
           </ToolButton>
-          <ToolButton onClick={resetPlan} disabled={readOnly}>
-            Reset Plan
-          </ToolButton>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button type="button" size="sm" variant="ghost" disabled={readOnly}>
+                Reset clinical plan
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset the clinical plan?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes all recorded conditions and proposed treatments. Patient, travel and
+                  pricing information will remain unchanged.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={resetPlan}>Reset clinical plan</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
       <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
-        <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
           <TabsTrigger value="current">Current Dental Condition</TabsTrigger>
           <TabsTrigger value="proposed">Proposed Treatment Plan</TabsTrigger>
         </TabsList>
@@ -498,7 +518,7 @@ export function TreatmentPlanner({
           {message}
         </div>
       )}
-      <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
+      <div className="z-20 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur sm:sticky sm:top-28">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Badge variant="secondary">{selection.selected.length} selected</Badge>
           {selection.selected.slice(0, 6).map((tooth) => (
@@ -572,7 +592,17 @@ export function TreatmentPlanner({
               onConfirm={confirmBridge}
             />
           )}
-          <TreatmentLegend />
+          <Collapsible className="rounded-lg border bg-card px-4">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" className="w-full justify-between px-0">
+                Visual legend
+                <ChevronDown className="size-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pb-4 [&>div]:border-0 [&>div]:p-0">
+              <TreatmentLegend showTitle={false} />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -598,7 +628,10 @@ function MedicalSafetyPanel({ plan }: { plan: DentalPlan }) {
     medical.medications ||
     medical.allergies ||
     medical.smoking ||
-    medical.pregnancy;
+    medical.pregnancy ||
+    medical.panoramicAvailable ||
+    medical.dentalPhotosAvailable;
+  if (!hasDetails) return null;
   return (
     <div
       className={`rounded-lg border p-4 ${hasDetails ? "border-warning/50 bg-warning/10" : "bg-card"}`}
@@ -612,25 +645,17 @@ function MedicalSafetyPanel({ plan }: { plan: DentalPlan }) {
           )}
         </div>
       </div>
-      {hasDetails ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {medical.medicalConditions.map((item) => (
-            <Badge key={item} variant="secondary">
-              {item}
-            </Badge>
-          ))}
-          {medical.medications && (
-            <Badge variant="outline">Medications: {medical.medications}</Badge>
-          )}
-          {medical.allergies && <Badge variant="outline">Allergies: {medical.allergies}</Badge>}
-          {medical.smoking && <Badge variant="destructive">Smoking reported</Badge>}
-          {medical.pregnancy && <Badge variant="outline">Pregnancy reported</Badge>}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-muted-foreground">
-          No assessment medical details are available.
-        </p>
-      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {medical.medicalConditions.map((item) => (
+          <Badge key={item} variant="secondary">
+            {item}
+          </Badge>
+        ))}
+        {medical.medications && <Badge variant="outline">Medications: {medical.medications}</Badge>}
+        {medical.allergies && <Badge variant="outline">Allergies: {medical.allergies}</Badge>}
+        {medical.smoking && <Badge variant="destructive">Smoking reported</Badge>}
+        {medical.pregnancy && <Badge variant="outline">Pregnancy reported</Badge>}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -60,6 +61,17 @@ export function PricingStep({
     // Initialize once when a plan has no persisted payment schedule.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commercial.paymentSchedule.length, recommendedVisits]);
+  const scheduleLabels = commercial.paymentSchedule.map((item) => item.label).join("|");
+  useEffect(() => {
+    const normalized = commercial.paymentSchedule.map((item, index) => ({
+      ...item,
+      label: index === 0 ? "1st Visit" : index === 1 ? "2nd Visit" : item.label,
+    }));
+    if (normalized.some((item, index) => item.label !== commercial.paymentSchedule[index]?.label))
+      update({ paymentSchedule: normalized });
+    // Normalize the two patient-facing visit labels without recreating persisted rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleLabels]);
   const billableCommercial = {
     ...commercial,
     hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
@@ -154,129 +166,135 @@ export function PricingStep({
         </CardContent>
       </Card>
       <Card>
-        <CardHeader>
-          <CardTitle>Travel and service totals</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Money
-            label="Hotel total"
-            value={commercial.hotelTotal}
-            onChange={(hotelTotal) => update({ hotelTotal })}
-          />
-          <Money
-            label="Transfer total"
-            value={commercial.transferTotal}
-            onChange={(transferTotal) => update({ transferTotal })}
-          />
-          <Money
-            label="Other service total"
-            value={commercial.otherServiceTotal}
-            onChange={(otherServiceTotal) => update({ otherServiceTotal })}
-          />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Discount</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Discount type</Label>
-            <Select
-              value={commercial.discountType}
-              onValueChange={(discountType) =>
-                update({
-                  discountType: discountType as typeof commercial.discountType,
-                  discountValue: 0,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No discount</SelectItem>
-                <SelectItem value="fixed">Fixed amount</SelectItem>
-                <SelectItem value="percentage">Percentage</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {commercial.discountType !== "none" && (
-            <Money
-              label={
-                commercial.discountType === "percentage" ? "Discount percentage" : "Discount amount"
-              }
-              value={commercial.discountValue}
-              max={commercial.discountType === "percentage" ? 100 : undefined}
-              onChange={(discountValue) => update({ discountValue })}
-            />
-          )}
-          <div className="space-y-1 text-sm sm:col-span-2">
+        <CardContent className="space-y-6 p-4 sm:p-6">
+          <section aria-labelledby="service-costs-heading">
+            <h3 id="service-costs-heading" className="mb-4 font-semibold">
+              Travel and service costs
+            </h3>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Money
+                label="Hotel total"
+                value={commercial.hotelTotal}
+                onChange={(hotelTotal) => update({ hotelTotal })}
+              />
+              <Money
+                label="Transfer total"
+                value={commercial.transferTotal}
+                onChange={(transferTotal) => update({ transferTotal })}
+              />
+              <Money
+                label="Other service total"
+                value={commercial.otherServiceTotal}
+                onChange={(otherServiceTotal) => update({ otherServiceTotal })}
+              />
+            </div>
+          </section>
+          <Separator />
+          <section aria-labelledby="discount-heading" className="grid gap-4 sm:grid-cols-2">
+            <h3 id="discount-heading" className="font-semibold sm:col-span-2">
+              Discount
+            </h3>
+            <div className="space-y-1.5">
+              <Label>Discount type</Label>
+              <Select
+                value={commercial.discountType}
+                onValueChange={(discountType) =>
+                  update({
+                    discountType: discountType as typeof commercial.discountType,
+                    discountValue: 0,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No discount</SelectItem>
+                  <SelectItem value="fixed">Fixed amount</SelectItem>
+                  <SelectItem value="percentage">Percentage</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {commercial.discountType !== "none" && (
+              <Money
+                label={
+                  commercial.discountType === "percentage"
+                    ? "Discount percentage"
+                    : "Discount amount"
+                }
+                value={commercial.discountValue}
+                max={commercial.discountType === "percentage" ? 100 : undefined}
+                onChange={(discountValue) => update({ discountValue })}
+              />
+            )}
+            <div className="space-y-1 text-sm sm:col-span-2">
+              <Row
+                label="Calculated discount"
+                value={formatQuoteMoney(totals.discount, commercial.currency)}
+              />
+              <Row
+                label="Total after discount"
+                value={formatQuoteMoney(totals.total, commercial.currency)}
+                strong
+              />
+            </div>
+          </section>
+          <Separator />
+          <section aria-labelledby="total-summary-heading" className="space-y-2 text-sm">
+            <h3 id="total-summary-heading" className="mb-4 font-semibold">
+              Total
+            </h3>
             <Row
-              label="Calculated discount"
-              value={formatQuoteMoney(totals.discount, commercial.currency)}
+              label="Treatment subtotal"
+              value={formatQuoteMoney(totals.subtotal, commercial.currency)}
             />
             <Row
-              label="Total after discount"
+              label="Hotel"
+              value={formatQuoteMoney(billableCommercial.hotelTotal, commercial.currency)}
+            />
+            <Row
+              label="Transfer and services"
+              value={formatQuoteMoney(
+                billableCommercial.transferTotal + commercial.otherServiceTotal,
+                commercial.currency,
+              )}
+            />
+            <Row label="Discount" value={formatQuoteMoney(totals.discount, commercial.currency)} />
+            <Row
+              label="Final total"
               value={formatQuoteMoney(totals.total, commercial.currency)}
               strong
             />
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Total summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <Row
-            label="Treatment subtotal"
-            value={formatQuoteMoney(totals.subtotal, commercial.currency)}
-          />
-          <Row
-            label="Hotel"
-            value={formatQuoteMoney(billableCommercial.hotelTotal, commercial.currency)}
-          />
-          <Row
-            label="Transfer and services"
-            value={formatQuoteMoney(
-              billableCommercial.transferTotal + commercial.otherServiceTotal,
-              commercial.currency,
-            )}
-          />
-          <Row label="Discount" value={formatQuoteMoney(totals.discount, commercial.currency)} />
-          <Row
-            label="Final total"
-            value={formatQuoteMoney(totals.total, commercial.currency)}
-            strong
-          />
+          </section>
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Payment schedule</CardTitle>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                update({
-                  paymentSchedule: [
-                    ...commercial.paymentSchedule,
-                    {
-                      id: crypto.randomUUID(),
-                      label: `${ordinal(commercial.paymentSchedule.length + 1)} Visit`,
-                      amount: 0,
-                      due: "",
-                    },
-                  ],
-                })
-              }
-            >
-              <Plus />
-              Add stage
-            </Button>
+            {commercial.paymentSchedule.length < 2 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  update({
+                    paymentSchedule: [
+                      ...commercial.paymentSchedule,
+                      {
+                        id: crypto.randomUUID(),
+                        label: commercial.paymentSchedule.length === 0 ? "1st Visit" : "2nd Visit",
+                        amount: 0,
+                        due: "",
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus />
+                Add {commercial.paymentSchedule.length === 0 ? "1st" : "2nd"} Visit
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -285,13 +303,7 @@ export function PricingStep({
               key={payment.id}
               className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_160px_1fr_auto]"
             >
-              <Input
-                aria-label="Payment label"
-                value={payment.label}
-                onChange={(e) =>
-                  updatePayment(commercial, payment.id, { label: e.target.value }, update)
-                }
-              />
+              <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
               <Input
                 aria-label="Payment amount"
                 type="number"
@@ -350,12 +362,6 @@ export function PricingStep({
       </Card>
     </div>
   );
-}
-function ordinal(value: number) {
-  if (value === 1) return "1st";
-  if (value === 2) return "2nd";
-  if (value === 3) return "3rd";
-  return `${value}th`;
 }
 function Money({
   label,
