@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Combobox } from "@/components/ui/combobox";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -25,7 +24,6 @@ import { TravelServicesStep } from "./TravelServicesStep";
 import { PricingStep } from "./PricingStep";
 import { FinalReviewStep } from "./FinalReviewStep";
 import { TreatmentPlanner } from "./TreatmentPlanner";
-import { DentalChart } from "./DentalChart";
 import type {
   DentalPlan,
   DentalPlanStudioProps,
@@ -48,14 +46,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-const STEPS = [
-  "Patient & Assignment",
-  "Clinical Plan",
-  "Travel & Services",
-  "Pricing",
-  "Review",
-  "Share",
-];
+const STEPS = ["Patient & Case", "Clinical Planning", "Package", "Commercial", "Review & Share"];
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
   const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
   const [plan, setPlan] = useState<DentalPlan | null>(null);
@@ -131,13 +122,13 @@ function PlannerShell({
   }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
-  const assignedDentist = clinicUsers.find((user) => user.id === plan.patient.dentistId);
+  const [reviewShareTab, setReviewShareTab] = useState(plan.draftStep >= 5 ? "share" : "review");
   const change = (patch: Partial<DentalPlan>) =>
     setPlan({ ...plan, ...patch, updatedAt: new Date().toISOString() });
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
-  const step = Math.max(0, Math.min(5, plan.draftStep));
+  const step = Math.max(0, Math.min(4, plan.draftStep));
   const save = () => {
     if (readOnly) return;
     repository.savePlan(plan);
@@ -152,8 +143,14 @@ function PlannerShell({
       return;
     }
     if (context?.mode !== "crm" || !onFinalize) {
-      const finalizedPlan = { ...plan, finalized: true, updatedAt: new Date().toISOString() };
+      const finalizedPlan = {
+        ...plan,
+        finalized: true,
+        draftStep: 4,
+        updatedAt: new Date().toISOString(),
+      };
       setPlan(finalizedPlan);
+      setReviewShareTab("share");
       repository.savePlan(finalizedPlan);
       onSave?.(finalizedPlan);
       setResult("Standalone review finalized locally. No CRM record was created.");
@@ -162,7 +159,8 @@ function PlannerShell({
     setFinalizing(true);
     try {
       const ids = await onFinalize({ ...plan, finalized: true });
-      change({ finalized: true, draftStep: 5 });
+      change({ finalized: true, draftStep: 4 });
+      setReviewShareTab("share");
       toast.success("Treatment plan finalized");
       setResult(`Treatment plan ${ids.treatmentPlanId} saved.`);
     } catch (error) {
@@ -174,22 +172,22 @@ function PlannerShell({
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div className="min-w-0">
-            <Button asChild variant="ghost" size="sm" className="mb-1 -ml-3">
-              <Link to="/pro/treatment-plans">Back to Treatment Plans</Link>
-            </Button>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="truncate text-xl font-semibold">
-                {plan.patient.fullName || "Dental Treatment Planner"}
-              </h1>
-              <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar className="size-10 border">
+              <AvatarFallback>{patientInitials(plan.patient.fullName)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
+                <Link to="/pro/treatment-plans">Treatment Plans</Link>
+              </Button>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="truncate text-lg font-semibold">
+                  {plan.patient.fullName || "New treatment case"}
+                </h1>
+                <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
+              </div>
             </div>
-            <p className="truncate text-sm text-muted-foreground">
-              {context?.mode === "template"
-                ? "Clinic template editor · patient data excluded"
-                : assignedDentist?.name || "Dentist unassigned"}
-            </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary" className="font-normal">
@@ -204,8 +202,8 @@ function PlannerShell({
                 <Eye className="size-4" /> Preview
               </Button>
             )}
-            <Button variant="outline" onClick={save} disabled={readOnly}>
-              Save draft
+            <Button variant="outline" size="sm" onClick={save} disabled={readOnly}>
+              Save
             </Button>
           </div>
         </div>
@@ -223,7 +221,7 @@ function PlannerShell({
             value={String(step)}
             onValueChange={(value) => change({ draftStep: Number(value) })}
           >
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-6">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
               {STEPS.map((label, index) => (
                 <TabsTrigger
                   key={label}
@@ -305,21 +303,32 @@ function PlannerShell({
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
         )}
         {step === 4 && (
-          <FinalReviewStep
-            plan={plan}
-            hotels={hotels}
-            clinicUsers={clinicUsers}
-            onNavigate={(draftStep) => change({ draftStep })}
-          />
+          <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2 sm:w-80">
+              <TabsTrigger value="review">Review</TabsTrigger>
+              <TabsTrigger value="share" disabled={context?.mode === "template"}>
+                Share
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="review">
+              <FinalReviewStep
+                plan={plan}
+                hotels={hotels}
+                clinicUsers={clinicUsers}
+                onNavigate={(draftStep) => change({ draftStep })}
+              />
+            </TabsContent>
+            <TabsContent value="share">
+              {shareSection ?? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-muted-foreground">
+                    Save this Treatment Plan before sharing.
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
         )}
-        {step === 5 &&
-          (shareSection ?? (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                Save this Treatment Plan before sharing.
-              </CardContent>
-            </Card>
-          ))}
         <div className="flex justify-between">
           <Button
             variant="outline"
@@ -330,7 +339,7 @@ function PlannerShell({
           </Button>
           {step < 4 ? (
             <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
-          ) : step === 5 ? null : context?.mode === "template" ? (
+          ) : reviewShareTab === "share" ? null : context?.mode === "template" ? (
             <Button onClick={save}>Save template</Button>
           ) : (
             <AlertDialog>
@@ -349,9 +358,7 @@ function PlannerShell({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={finalize}>
-                    Save and continue to Share
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={finalize}>Save and open Share</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -386,8 +393,16 @@ function PatientStep({
   );
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Patient & Assignment</CardTitle>
+      <CardHeader className="flex-row items-center gap-3">
+        <Avatar className="size-12 border">
+          <AvatarFallback>{patientInitials(plan.patient.fullName)}</AvatarFallback>
+        </Avatar>
+        <div>
+          <CardTitle>Patient & Case</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Identify the patient and assign clinical responsibility.
+          </p>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <section aria-labelledby="patient-information-heading">
@@ -409,31 +424,41 @@ function PatientStep({
                 }}
               />
             </Field>
-            <Field label="Email (optional)">
-              <Input
-                type="email"
-                value={plan.patient.email ?? ""}
-                onChange={(e) => update({ email: e.target.value })}
-              />
-            </Field>
             <Field label="Country">
               <CountryCombobox
                 value={plan.patient.country ?? ""}
                 onChange={(country) => update({ country })}
               />
             </Field>
-            <Field label="Preferred language (optional)">
-              <Input
-                value={plan.patient.preferredLanguage ?? ""}
-                onChange={(e) => update({ preferredLanguage: e.target.value })}
-              />
-            </Field>
           </div>
+          <Collapsible className="mt-4 rounded-lg border px-3">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" className="w-full justify-between px-0">
+                Additional patient details
+                <ChevronDown className="size-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="grid gap-4 pb-4 md:grid-cols-2">
+              <Field label="Email (optional)">
+                <Input
+                  type="email"
+                  value={plan.patient.email ?? ""}
+                  onChange={(e) => update({ email: e.target.value })}
+                />
+              </Field>
+              <Field label="Preferred language (optional)">
+                <Input
+                  value={plan.patient.preferredLanguage ?? ""}
+                  onChange={(e) => update({ preferredLanguage: e.target.value })}
+                />
+              </Field>
+            </CollapsibleContent>
+          </Collapsible>
         </section>
         <Separator />
         <section aria-labelledby="assignment-heading">
           <h3 id="assignment-heading" className="mb-4 text-sm font-semibold">
-            Clinical ownership
+            Assignment
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Assigned dentist">
@@ -539,172 +564,6 @@ function TeamSelect({
     />
   );
 }
-function TravelStep({
-  plan,
-  change,
-}: {
-  plan: DentalPlan;
-  change: (patch: Partial<DentalPlan>) => void;
-}) {
-  const update = (patch: Partial<DentalPlan["travel"]>) =>
-    change({ travel: { ...plan.travel, ...patch } });
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Travel and services</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Field label="Expected visits">
-          <Input
-            type="number"
-            min={1}
-            value={plan.travel.visits}
-            onChange={(e) => update({ visits: Number(e.target.value) || 1 })}
-          />
-        </Field>
-        <Field label="Visit duration">
-          <Input
-            value={plan.travel.visitDuration ?? ""}
-            onChange={(e) => update({ visitDuration: e.target.value })}
-          />
-        </Field>
-        <Field label="Healing period (weeks)">
-          <Input
-            type="number"
-            min={0}
-            value={plan.travel.healingWeeks}
-            onChange={(e) => update({ healingWeeks: Number(e.target.value) || 0 })}
-          />
-        </Field>
-        <Check
-          label="Hotel required"
-          checked={plan.travel.hotelRequired}
-          onChange={(value) => update({ hotelRequired: value })}
-        />
-        <Field label="Hotel name">
-          <Input
-            value={plan.travel.hotelName ?? ""}
-            onChange={(e) => update({ hotelName: e.target.value })}
-          />
-        </Field>
-        <Field label="Hotel nights">
-          <Input
-            type="number"
-            min={0}
-            value={plan.travel.hotelNights}
-            onChange={(e) => update({ hotelNights: Number(e.target.value) || 0 })}
-          />
-        </Field>
-        <Check
-          label="Airport transfer"
-          checked={plan.travel.airportTransfer}
-          onChange={(value) => update({ airportTransfer: value })}
-        />
-        <Check
-          label="Local transfer"
-          checked={plan.travel.localTransfer}
-          onChange={(value) => update({ localTransfer: value })}
-        />
-        <Field label="Estimated dates">
-          <Input
-            value={plan.travel.treatmentDates ?? ""}
-            onChange={(e) => update({ treatmentDates: e.target.value })}
-          />
-        </Field>
-        <Field label="Included services">
-          <Textarea
-            value={plan.travel.includedServices.join("\n")}
-            onChange={(e) => update({ includedServices: lines(e.target.value) })}
-          />
-        </Field>
-        <Field label="Patient-facing notes">
-          <Textarea
-            value={plan.travel.patientFacingNotes ?? ""}
-            onChange={(e) => update({ patientFacingNotes: e.target.value })}
-          />
-        </Field>
-        <Field label="Internal clinic notes">
-          <Textarea
-            value={plan.travel.internalNotes ?? ""}
-            onChange={(e) => update({ internalNotes: e.target.value })}
-          />
-        </Field>
-      </CardContent>
-    </Card>
-  );
-}
-function ReviewStep({ plan }: { plan: DentalPlan }) {
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{plan.patient.planTitle}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm md:grid-cols-3">
-          <p>
-            <b>Patient:</b> {plan.patient.fullName || "Not provided"}
-          </p>
-          <p>
-            <b>Country:</b> {plan.patient.country || "Not provided"}
-          </p>
-          <p>
-            <b>Visits:</b> {plan.travel.visits}
-          </p>
-          <p>
-            <b>Treatments:</b> {plan.proposedTreatments.length}
-          </p>
-          <p>
-            <b>Linked groups:</b> {plan.treatmentGroups.length}
-          </p>
-          <p>
-            <b>Healing:</b> {plan.travel.healingWeeks} weeks
-          </p>
-        </CardContent>
-      </Card>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <DentalChart
-          title="Current Dental Condition"
-          mode="current"
-          currentConditions={plan.currentConditions}
-          proposedTreatments={plan.proposedTreatments}
-          selected={[]}
-          readOnly
-          onSelect={() => {}}
-        />
-        <DentalChart
-          title="Proposed Treatment Plan"
-          mode="proposed"
-          currentConditions={plan.currentConditions}
-          proposedTreatments={plan.proposedTreatments}
-          selected={[]}
-          readOnly
-          onSelect={() => {}}
-        />
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Clinical and travel summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            {plan.proposedTreatments
-              .map((item) => `${item.treatmentType}: ${item.toothNumbers.join(", ")}`)
-              .join(" · ") || "No proposed treatment"}
-          </p>
-          <p>
-            <b>Included services:</b> {plan.travel.includedServices.join(", ") || "None"}
-          </p>
-          <p>
-            <b>Patient notes:</b> {plan.travel.patientFacingNotes || "None"}
-          </p>
-          <p className="rounded bg-muted p-2">
-            <b>Internal notes:</b> {plan.travel.internalNotes || "None"}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
@@ -713,24 +572,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-function Check({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2 pt-7 text-sm">
-      <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-      {label}
-    </label>
-  );
+
+function patientInitials(name: string) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  return initials || "TP";
 }
-const lines = (value: string) =>
-  value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);

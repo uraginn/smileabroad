@@ -569,36 +569,6 @@ export function TreatmentPlanner({
           {message}
         </div>
       )}
-      <div className="z-20 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur sm:sticky sm:top-28">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Badge variant="secondary">{selection.selected.length} selected</Badge>
-          {selection.selected.slice(0, 6).map((tooth) => (
-            <Badge key={tooth} variant="outline">
-              {tooth}
-            </Badge>
-          ))}
-          {selection.selected.length > 6 && (
-            <Badge variant="outline">+{selection.selected.length - 6}</Badge>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Button type="button" size="sm" variant="outline" onClick={selection.selectAllUpper}>
-            Upper arch
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={selection.selectAllLower}>
-            Lower arch
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={!selection.selected.length}
-            onClick={selection.clear}
-          >
-            Clear
-          </Button>
-        </div>
-      </div>
       <div className="space-y-4">
         <DentalChart
           title={mode === "current" ? "Current Dental Condition" : "Proposed Treatment Plan"}
@@ -618,7 +588,27 @@ export function TreatmentPlanner({
           onDragEnd={selection.endDrag}
           onBoxSelect={selection.selectBox}
         />
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2">
+          <Badge variant="secondary">{selection.selected.length} teeth selected</Badge>
+          <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" variant="outline" onClick={selection.selectAllUpper}>
+              Upper
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={selection.selectAllLower}>
+              Lower
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={!selection.selected.length}
+              onClick={selection.clear}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-3">
           <div className="rounded-lg border bg-card p-4">
             {mode === "current" ? (
               <ConditionSelector
@@ -635,7 +625,7 @@ export function TreatmentPlanner({
             )}
           </div>
           {bridgeTeeth && (
-            <div className="md:col-span-2">
+            <div>
               <BridgeConfigurator
                 teeth={bridgeTeeth}
                 onCancel={() => {
@@ -659,19 +649,20 @@ export function TreatmentPlanner({
           </Collapsible>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {mode === "current" ? (
         <ConditionSummary
           conditions={history.state.currentConditions}
           onRemove={(tooth, condition) =>
             !readOnly && removeConditionFromTooth(tooth, condition as ConditionType)
           }
         />
+      ) : (
         <TreatmentSummary
           treatments={history.state.proposedTreatments}
           onDelete={(id) => !readOnly && deleteTreatment(id)}
           onHighlight={highlightTeeth}
         />
-      </div>
+      )}
       <Collapsible className="rounded-lg border bg-card px-4">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="w-full justify-between px-0">

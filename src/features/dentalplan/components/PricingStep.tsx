@@ -64,12 +64,12 @@ export function PricingStep({
           : [
               {
                 id: crypto.randomUUID(),
-                label: "1st Visit",
+                label: "Visit 1",
                 amount: 0,
                 due: "Due at first visit",
               },
             ]),
-        { id: crypto.randomUUID(), label: "2nd Visit", amount: 0, due: "Due at second visit" },
+        { id: crypto.randomUUID(), label: "Visit 2", amount: 0, due: "Due at second visit" },
       ],
     });
     // Initialize once when a plan has no persisted payment schedule.
@@ -79,7 +79,7 @@ export function PricingStep({
   useEffect(() => {
     const normalized = commercial.paymentSchedule.map((item, index) => ({
       ...item,
-      label: index === 0 ? "1st Visit" : index === 1 ? "2nd Visit" : item.label,
+      label: index === 0 ? "Visit 1" : index === 1 ? "Visit 2" : item.label,
     }));
     if (normalized.some((item, index) => item.label !== commercial.paymentSchedule[index]?.label))
       update({ paymentSchedule: normalized });
@@ -108,7 +108,7 @@ export function PricingStep({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Currency and treatment pricing</CardTitle>
+          <CardTitle>Treatment pricing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -188,12 +188,12 @@ export function PricingStep({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Payment and package total</CardTitle>
+          <CardTitle>Commercial summary & payment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 p-4 sm:p-6">
           <section aria-labelledby="service-costs-heading">
             <h3 id="service-costs-heading" className="mb-4 font-semibold">
-              Travel and service costs
+              Package costs
             </h3>
             <div className="grid gap-4 md:grid-cols-3">
               <Money

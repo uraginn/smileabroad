@@ -1,9 +1,31 @@
 import { useState, type ReactNode } from "react";
+import { Check, ChevronsUpDown, ExternalLink } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -12,7 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { DEFAULT_CLINICAL_SERVICES, TRAVEL_SERVICES } from "../data/serviceDefinitions";
@@ -30,21 +51,9 @@ export function TravelServicesStep({
   hotels?: HotelOption[];
   serviceOptions?: string[];
 }) {
-  const [hotelQuery, setHotelQuery] = useState("");
   const defaults = derivePlanDefaults(plan);
   const selectedHotel = hotels.find((hotel) => hotel.id === plan.travel.selectedHotelId);
   const defaultHotel = hotels.find((hotel) => hotel.isDefault) ?? hotels[0];
-  const normalizedHotelQuery = hotelQuery.trim().toLocaleLowerCase();
-  const filteredHotels = normalizedHotelQuery
-    ? hotels.filter((hotel) =>
-        `${hotel.name} ${hotel.categories.join(" ")}`
-          .toLocaleLowerCase()
-          .includes(normalizedHotelQuery),
-      )
-    : hotels;
-  const legacyConfiguredServices = plan.travel.includedServices.filter(
-    (service) => ![...serviceOptions, ...TRAVEL_SERVICES].includes(service),
-  );
   const update = (patch: Partial<DentalPlan["travel"]>) =>
     change({ travel: { ...plan.travel, ...patch } });
   const setService = (service: string, checked: boolean) => {
@@ -75,12 +84,8 @@ export function TravelServicesStep({
         hotelName: hotel.name,
         hotelDescription: hotel.description,
         hotelNights,
-        roomType: hotel.roomTypes.includes(plan.travel.roomType ?? "")
-          ? plan.travel.roomType
-          : hotel.roomTypes[0],
-        boardType: hotel.boardTypes.includes(plan.travel.boardType ?? "")
-          ? plan.travel.boardType
-          : hotel.boardTypes[0],
+        roomType: hotel.roomTypes[0],
+        boardType: hotel.boardTypes[0],
       },
       commercial: {
         ...plan.commercial,
@@ -89,248 +94,252 @@ export function TravelServicesStep({
       },
     });
   };
+  const legacyServices = plan.travel.includedServices.filter(
+    (service) => ![...serviceOptions, ...TRAVEL_SERVICES].includes(service),
+  );
+  const selectableServices = [...new Set([...serviceOptions, ...legacyServices])];
+
   return (
     <div className="space-y-4">
-      <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
-        <p>
-          This plan is currently expected to require <b>{defaults.recommendedVisits} visit(s)</b>{" "}
-          with <b>{defaults.healingPeriodSummary.toLowerCase()}</b>.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Generated from the selected treatments and linked groups; confirm clinically.
-        </p>
-        {defaults.warnings.map((warning) => (
-          <p key={warning} className="text-xs text-warning-foreground">
-            {warning}
-          </p>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+        <span>
+          Suggested package: <b>{defaults.recommendedVisits} visit(s)</b> ·{" "}
+          {defaults.healingPeriodSummary.toLowerCase()}
+        </span>
+        <Badge variant="outline">Confirm clinically</Badge>
       </div>
-
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Accommodation</CardTitle>
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={plan.travel.hotelIncluded}
-              onCheckedChange={(hotelIncluded) => {
-                if (hotelIncluded && !selectedHotel && defaultHotel)
-                  chooseHotel(defaultHotel.id, { hotelIncluded, hotelRequired: hotelIncluded });
-                else update({ hotelIncluded, hotelRequired: hotelIncluded });
-              }}
-            />
-            Included
-          </label>
-        </CardHeader>
-        {plan.travel.hotelIncluded && (
-          <CardContent className="space-y-4">
-            {hotels.length ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Filter hotels">
-                  <Input
-                    value={hotelQuery}
-                    onChange={(event) => setHotelQuery(event.target.value)}
-                    placeholder="Name or category"
-                  />
-                </Field>
-                <Field label="Configured hotel">
-                  <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select hotel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredHotels.map((hotel) => (
-                        <SelectItem key={hotel.id} value={hotel.id}>
-                          {hotel.name} · {hotel.categories.join(", ")}
-                          {hotel.isDefault ? " · Default" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Nights">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={plan.travel.hotelNights}
-                    onChange={(event) => {
-                      const hotelNights = Math.max(0, Number(event.target.value));
-                      change({
-                        travel: { ...plan.travel, hotelNights },
-                        commercial: {
-                          ...plan.commercial,
-                          hotelTotal: (selectedHotel?.pricePerNight ?? 0) * hotelNights,
-                        },
-                      });
+        <CardContent className="p-3 sm:p-5">
+          <Accordion type="multiple" defaultValue={["accommodation"]}>
+            <AccordionItem value="accommodation">
+              <AccordionTrigger>
+                <SectionTitle
+                  title="Accommodation"
+                  detail={
+                    plan.travel.hotelIncluded ? plan.travel.hotelName || "Included" : "Not included"
+                  }
+                />
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 pt-2">
+                <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                  <span>
+                    <span className="block font-medium">Include accommodation</span>
+                    <span className="text-xs text-muted-foreground">
+                      Add a clinic-configured hotel to this package.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={plan.travel.hotelIncluded}
+                    onCheckedChange={(hotelIncluded) => {
+                      if (hotelIncluded && !selectedHotel && defaultHotel)
+                        chooseHotel(defaultHotel.id, { hotelIncluded, hotelRequired: true });
+                      else update({ hotelIncluded, hotelRequired: hotelIncluded });
                     }}
                   />
-                </Field>
-                <Field label="Room type">
-                  <OptionSelect
-                    value={plan.travel.roomType}
-                    options={selectedHotel?.roomTypes ?? legacyOption(plan.travel.roomType)}
-                    placeholder="Select room"
-                    onChange={(roomType) => update({ roomType })}
-                  />
-                </Field>
-                <Field label="Board type">
-                  <OptionSelect
-                    value={plan.travel.boardType}
-                    options={selectedHotel?.boardTypes ?? legacyOption(plan.travel.boardType)}
-                    placeholder="Select board"
-                    onChange={(boardType) => update({ boardType })}
-                  />
-                </Field>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {plan.travel.hotelName
-                  ? `Legacy hotel: ${plan.travel.hotelName}`
-                  : "No active hotels are configured. Add one in CRM Settings."}
-              </p>
-            )}
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={!!plan.travel.companionIncluded}
-                onCheckedChange={(value) => update({ companionIncluded: value === true })}
-              />
-              Companion included
-            </label>
-            {selectedHotel && <HotelPreview hotel={selectedHotel} />}
-          </CardContent>
-        )}
-      </Card>
-
-      <Card>
-        <CardContent className="space-y-6 p-4 sm:p-6">
-          <section aria-labelledby="travel-logistics-heading">
-            <h3 id="travel-logistics-heading" className="mb-3 font-semibold">
-              Travel logistics
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <ServiceSwitch
-                label="Airport Transfer"
-                description="Airport pickup and drop-off"
-                checked={plan.travel.includedServices.includes("Airport Transfer")}
-                onChange={(checked) => setService("Airport Transfer", checked)}
-              />
-              <ServiceSwitch
-                label="Hotel Transfer"
-                description="Hotel and clinic transfers"
-                checked={plan.travel.includedServices.includes("Hotel Transfer")}
-                onChange={(checked) => setService("Hotel Transfer", checked)}
-              />
-              <ServiceSwitch
-                label="Flight Included"
-                description="Flight cost included in package"
-                checked={plan.travel.includedServices.includes("Flight Included")}
-                onChange={(checked) => setService("Flight Included", checked)}
-              />
-            </div>
-          </section>
-
-          <Separator />
-          <section aria-labelledby="included-services-heading" className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 id="included-services-heading" className="font-semibold">
-                Included services
-              </h3>
-              <Badge variant="secondary">{plan.travel.includedServices.length} selected</Badge>
-            </div>
-            <ServiceGroup
-              title="Clinical"
-              services={[...new Set([...serviceOptions, ...legacyConfiguredServices])]}
-              selected={plan.travel.includedServices}
-              onChange={setService}
-            />
-            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
-              Travel selections are controlled above and included automatically in this summary.
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Service choices are configured by the clinic. The planner only selects what is
-              included for this patient.
-            </p>
-          </section>
+                </label>
+                {plan.travel.hotelIncluded && (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                      <Field label="Hotel">
+                        {hotels.length ? (
+                          <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select hotel" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {hotels.map((hotel) => (
+                                <SelectItem key={hotel.id} value={hotel.id}>
+                                  {hotel.name}
+                                  {hotel.isDefault ? " · Default" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="rounded-md border p-2 text-sm text-muted-foreground">
+                            {plan.travel.hotelName || "No hotels configured in CRM Settings."}
+                          </p>
+                        )}
+                      </Field>
+                      <Field label="Nights">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={plan.travel.hotelNights}
+                          onChange={(event) => {
+                            const hotelNights = Math.max(0, Number(event.target.value));
+                            change({
+                              travel: { ...plan.travel, hotelNights },
+                              commercial: {
+                                ...plan.commercial,
+                                hotelTotal: (selectedHotel?.pricePerNight ?? 0) * hotelNights,
+                              },
+                            });
+                          }}
+                        />
+                      </Field>
+                    </div>
+                    {selectedHotel && <HotelPreview hotel={selectedHotel} />}
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="transfers">
+              <AccordionTrigger>
+                <SectionTitle title="Transfers" detail={transferSummary(plan)} />
+              </AccordionTrigger>
+              <AccordionContent className="grid gap-3 pt-2 sm:grid-cols-3">
+                <ServiceSwitch
+                  label="Airport"
+                  description="Pickup and drop-off"
+                  checked={plan.travel.includedServices.includes("Airport Transfer")}
+                  onChange={(checked) => setService("Airport Transfer", checked)}
+                />
+                <ServiceSwitch
+                  label="Hotel"
+                  description="Hotel and clinic travel"
+                  checked={plan.travel.includedServices.includes("Hotel Transfer")}
+                  onChange={(checked) => setService("Hotel Transfer", checked)}
+                />
+                <ServiceSwitch
+                  label="Flight"
+                  description="Flight cost included"
+                  checked={plan.travel.includedServices.includes("Flight Included")}
+                  onChange={(checked) => setService("Flight Included", checked)}
+                />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="services">
+              <AccordionTrigger>
+                <SectionTitle
+                  title="Included Services"
+                  detail={`${plan.travel.includedServices.filter((item) => !TRAVEL_SERVICES.includes(item)).length} selected`}
+                />
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 pt-2">
+                <ServiceMultiSelect
+                  options={selectableServices}
+                  selected={plan.travel.includedServices}
+                  onChange={setService}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Service options are managed in Dental Planner Settings.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function HotelPreview({ hotel }: { hotel: HotelOption }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <div className="flex flex-wrap gap-3">
-        <div className="min-w-48 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">{hotel.name}</p>
-            {hotel.categories.map((category) => (
-              <Badge key={category} variant="outline">
-                {category}
-              </Badge>
-            ))}
-          </div>
-          <p className="text-sm">
-            {hotel.pricePerNight} {hotel.currency} / night
-          </p>
-          {hotel.website && (
-            <a
-              href={hotel.website}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-block text-sm text-primary underline"
-            >
-              Visit hotel website
-            </a>
-          )}
-        </div>
-        {hotel.images
-          .slice(0, 4)
-          .map(
-            (image) =>
-              image.dataUrl && (
-                <img
-                  key={image.id}
-                  src={image.dataUrl}
-                  alt={image.name}
-                  className="h-20 w-28 rounded-md border object-cover"
-                />
-              ),
-          )}
-      </div>
-    </div>
-  );
-}
-function ServiceGroup({
-  title,
-  services,
+function ServiceMultiSelect({
+  options,
   selected,
   onChange,
 }: {
-  title: string;
-  services: string[];
+  options: string[];
   selected: string[];
   onChange: (service: string, checked: boolean) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const selectedOptions = options.filter((option) => selected.includes(option));
   return (
-    <div>
-      <p className="mb-2 text-sm font-medium">{title}</p>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {services.map((service) => (
-          <label
+    <div className="space-y-3">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-between sm:w-96">
+            {selectedOptions.length
+              ? `${selectedOptions.length} services selected`
+              : "Select included services"}
+            <ChevronsUpDown className="size-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search services..." />
+            <CommandList className="max-h-72">
+              <CommandEmpty>No services found</CommandEmpty>
+              {options.map((service) => (
+                <CommandItem
+                  key={service}
+                  value={service}
+                  onSelect={() => onChange(service, !selected.includes(service))}
+                >
+                  <Check
+                    className={`mr-2 size-4 ${selected.includes(service) ? "opacity-100" : "opacity-0"}`}
+                  />
+                  {service}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <div className="flex flex-wrap gap-2">
+        {selectedOptions.map((service) => (
+          <Badge
             key={service}
-            className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm"
+            variant="secondary"
+            className="cursor-pointer"
+            onClick={() => onChange(service, false)}
           >
-            <Checkbox
-              checked={selected.includes(service)}
-              onCheckedChange={(value) => onChange(service, value === true)}
-            />
-            {service}
-          </label>
+            {service} ×
+          </Badge>
         ))}
       </div>
     </div>
   );
 }
+
+function HotelPreview({ hotel }: { hotel: HotelOption }) {
+  return (
+    <div className="grid gap-4 rounded-lg border p-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium">{hotel.name}</p>
+          {hotel.categories.map((category) => (
+            <Badge key={category} variant="outline">
+              {category}
+            </Badge>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {hotel.pricePerNight} {hotel.currency} / night
+        </p>
+        {hotel.description && <p className="mt-3 text-sm">{hotel.description}</p>}
+        {hotel.website && (
+          <Button asChild variant="link" className="mt-2 h-auto p-0">
+            <a href={hotel.website} target="_blank" rel="noopener noreferrer">
+              Website <ExternalLink className="size-3" />
+            </a>
+          </Button>
+        )}
+      </div>
+      {hotel.images.some((image) => image.dataUrl) && (
+        <Carousel className="mx-10">
+          <CarouselContent>
+            {hotel.images
+              .filter((image) => image.dataUrl)
+              .map((image) => (
+                <CarouselItem key={image.id}>
+                  <img
+                    src={image.dataUrl}
+                    alt={image.name}
+                    className="h-40 w-full rounded-md object-cover"
+                  />
+                </CarouselItem>
+              ))}
+          </CarouselContent>
+          <CarouselPrevious />
+          <CarouselNext />
+        </Carousel>
+      )}
+    </div>
+  );
+}
+
 function ServiceSwitch({
   label,
   description,
@@ -343,7 +352,7 @@ function ServiceSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex min-h-20 items-center justify-between gap-3 rounded-lg border p-3">
+    <label className="flex items-center justify-between gap-3 rounded-lg border p-3">
       <span>
         <span className="block text-sm font-medium">{label}</span>
         <span className="text-xs text-muted-foreground">{description}</span>
@@ -352,32 +361,18 @@ function ServiceSwitch({
     </label>
   );
 }
-function OptionSelect({
-  value,
-  options,
-  placeholder,
-  onChange,
-}: {
-  value?: string;
-  options: string[];
-  placeholder: string;
-  onChange: (value: string) => void;
-}) {
+
+function SectionTitle({ title, detail }: { title: string; detail: string }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option} value={option}>
-            {option}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <span className="flex min-w-0 items-center gap-3">
+      <span>{title}</span>
+      <Badge variant="outline" className="font-normal">
+        {detail}
+      </Badge>
+    </span>
   );
 }
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
@@ -386,6 +381,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     </div>
   );
 }
-function legacyOption(value?: string) {
-  return value ? [value] : [];
+
+function transferSummary(plan: DentalPlan) {
+  const count = TRAVEL_SERVICES.filter((service) =>
+    plan.travel.includedServices.includes(service),
+  ).length;
+  return count ? `${count} included` : "None";
 }
