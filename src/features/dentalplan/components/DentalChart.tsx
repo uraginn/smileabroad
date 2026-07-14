@@ -1,3 +1,4 @@
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   PlannerMode,
   ToothCondition,
@@ -46,7 +47,7 @@ export function DentalChart({
 }: Props) {
   return (
     <div
-      className={`rounded-lg border bg-card p-4 ${readOnly ? "opacity-90" : ""}`}
+      className={`rounded-xl bg-muted/20 px-2 py-4 sm:p-6 ${readOnly ? "opacity-90" : ""}`}
       aria-label={title}
     >
       <div className="mb-3 flex items-center justify-between">
@@ -64,7 +65,7 @@ export function DentalChart({
           </div>
         ) : null}
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overscroll-x-contain">
         <SelectionSurface
           enabled={!readOnly && !!onBoxSelect}
           onBoxSelect={onBoxSelect}
@@ -132,9 +133,15 @@ function SelectionSurface({
   children: React.ReactNode;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const intersectingTeeth = useRef<ToothNumber[]>([]);
   const [selectionRect, setSelectionRect] = useState<SelectionRect>();
   const pointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!enabled || (event.target as HTMLElement).closest("button")) return;
+    if (
+      !enabled ||
+      event.pointerType === "touch" ||
+      (event.target as HTMLElement).closest("button")
+    )
+      return;
     const bounds = event.currentTarget.getBoundingClientRect();
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -148,6 +155,7 @@ function SelectionSurface({
       currentY: event.clientY - bounds.top,
       additive: event.metaKey || event.ctrlKey,
     });
+    intersectingTeeth.current = [];
   };
   const pointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!selectionRect || !surfaceRef.current) return;
@@ -166,12 +174,15 @@ function SelectionSurface({
       top: bounds.top + Math.min(next.startY, next.currentY),
       bottom: bounds.top + Math.max(next.startY, next.currentY),
     };
-    const teeth = [...surfaceRef.current.querySelectorAll<HTMLElement>("[data-tooth-number]")]
+    intersectingTeeth.current = [
+      ...surfaceRef.current.querySelectorAll<HTMLElement>("[data-tooth-number]"),
+    ]
       .filter((element) => intersects(selectionBounds, element.getBoundingClientRect()))
       .map((element) => Number(element.dataset.toothNumber) as ToothNumber);
-    onBoxSelect?.(teeth, next.additive);
   };
   const endSelection = () => {
+    if (selectionRect) onBoxSelect?.(intersectingTeeth.current, selectionRect.additive);
+    intersectingTeeth.current = [];
     setSelectionRect(undefined);
     onPointerEnd?.();
   };
@@ -256,4 +267,3 @@ function Arch(props: {
     </div>
   );
 }
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";

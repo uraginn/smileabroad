@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Check } from "lucide-react";
 import {
   Accordion,
@@ -12,7 +13,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
+import {
+  TREATMENT_CATEGORIES,
+  TREATMENT_DEFINITIONS,
+  treatmentRelationship,
+} from "../data/treatmentDefinitions";
 import type { EffectiveTreatmentDefinition } from "../types/dental-plan.types";
 
 export function TreatmentSelector({
@@ -24,10 +29,27 @@ export function TreatmentSelector({
   selectedId?: string;
   onSelect: (treatmentId: string) => void;
 }) {
-  const grouped = [...new Set(definitions.map((item) => item.category))].map((category) => ({
-    label: category,
-    definitions: definitions.filter((item) => item.category === category),
-  }));
+  const grouped = useMemo(
+    () =>
+      TREATMENT_CATEGORIES.map((category) => ({
+        label: category,
+        definitions: definitions.filter(
+          (item) =>
+            item.category === category ||
+            (category === "Other" &&
+              !TREATMENT_CATEGORIES.includes(
+                item.category as (typeof TREATMENT_CATEGORIES)[number],
+              )),
+        ),
+      })).filter((group) => group.definitions.length),
+    [definitions],
+  );
+  if (!grouped.length)
+    return (
+      <p className="rounded-lg bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+        No active treatments are available. Review the clinic treatment settings.
+      </p>
+    );
   return (
     <div className="space-y-3">
       <div>
@@ -36,7 +58,7 @@ export function TreatmentSelector({
           Choose a category and search the treatment registry.
         </p>
       </div>
-      <Accordion type="single" collapsible className="rounded-lg border px-3">
+      <Accordion type="single" collapsible className="border-y px-1">
         {grouped.map((group) => (
           <AccordionItem key={group.label} value={group.label}>
             <AccordionTrigger>
@@ -56,17 +78,37 @@ export function TreatmentSelector({
                     const visual = TREATMENT_DEFINITIONS.find(
                       (item) => item.type === treatment.visualKey,
                     );
+                    const relationship = treatmentRelationship(treatment.baseTreatmentKey);
+                    const displayName =
+                      treatment.baseTreatmentKey === "implant-crown"
+                        ? "Implant + Final Crown"
+                        : treatment.displayName;
+                    const subtitle =
+                      treatment.baseTreatmentKey === "implant-crown"
+                        ? "Completes the implant site and adds the implant when needed"
+                        : relationship.role.replace(/-/g, " ");
                     return (
                       <CommandItem
                         key={treatment.id}
-                        value={`${treatment.displayName} ${group.label}`}
+                        value={`${displayName} ${treatment.displayName} ${group.label} ${subtitle}`}
                         onSelect={() => onSelect(treatment.id)}
                       >
                         <span
-                          className="mr-2 size-3 rounded-sm border"
-                          style={{ background: visual?.color }}
-                        />
-                        <span className="min-w-0 flex-1 truncate">{treatment.displayName}</span>
+                          className="mr-3 flex size-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold"
+                          style={{
+                            borderColor: visual?.color,
+                            color: visual?.color,
+                            backgroundColor: `${visual?.color ?? "#64748b"}18`,
+                          }}
+                        >
+                          {visual?.short ?? "?"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{displayName}</span>
+                          <span className="block truncate text-xs capitalize text-muted-foreground">
+                            {subtitle}
+                          </span>
+                        </span>
                         {selectedId === treatment.id && <Check className="size-4" />}
                       </CommandItem>
                     );

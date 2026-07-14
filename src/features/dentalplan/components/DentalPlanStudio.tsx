@@ -39,7 +39,7 @@ import type {
   DentalPlanStudioProps,
   EffectiveTreatmentDefinition,
 } from "../types/dental-plan.types";
-import { TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
+import { TREATMENT_CATEGORIES, TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
 import { createDentalPlan } from "../utils/createDentalPlan";
 import { LocalStorageDentalPlanRepository } from "../adapters/LocalStorageDentalPlanRepository";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -112,7 +112,11 @@ function PlannerShell({
           id: override?.id ?? `system_${base.type}`,
           treatmentKey: override?.treatmentKey ?? base.type,
           displayName: override?.displayName ?? base.label,
-          category: override?.category ?? base.category,
+          category: TREATMENT_CATEGORIES.includes(
+            override?.category as (typeof TREATMENT_CATEGORIES)[number],
+          )
+            ? override!.category!
+            : base.category,
           baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
           visualKey: override?.visualKey ?? base.type,
           perTooth: override?.perTooth ?? base.perTooth,
@@ -127,7 +131,11 @@ function PlannerShell({
         id: item.id ?? item.treatmentKey,
         treatmentKey: item.treatmentKey,
         displayName: item.displayName,
-        category: item.category ?? "Clinic custom",
+        category: TREATMENT_CATEGORIES.includes(
+          item.category as (typeof TREATMENT_CATEGORIES)[number],
+        )
+          ? item.category!
+          : "Other",
         baseTreatmentKey: item.baseTreatmentKey ?? "other",
         visualKey: item.visualKey ?? item.baseTreatmentKey ?? "other",
         perTooth: item.perTooth ?? true,

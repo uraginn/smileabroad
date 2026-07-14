@@ -8,7 +8,8 @@ export type TreatmentDefinition = {
   perTooth: boolean;
   category: string;
 };
-export type TreatmentRole = "procedure" | "restoration" | "support" | "global" | "group";
+export type TreatmentRole =
+  "procedure" | "restoration" | "support-procedure" | "cosmetic" | "full-arch" | "global";
 export type TreatmentTarget = "natural-tooth" | "implant-site" | "arch" | "tooth-site";
 export type TreatmentRelationship = {
   role: TreatmentRole;
@@ -43,8 +44,8 @@ const definitions: Array<[TreatmentType, string, string, string, boolean, boolea
 export const TREATMENT_CATEGORY_BY_TYPE: Record<TreatmentType, string> = {
   "dental-implant": "Implant",
   "implant-crown": "Implant",
-  "all-on-4": "Full Arch",
-  "all-on-6": "Full Arch",
+  "all-on-4": "Implant",
+  "all-on-6": "Implant",
   extraction: "Surgical",
   "sinus-lift": "Surgical",
   "bone-graft": "Supporting",
@@ -63,6 +64,15 @@ export const TREATMENT_CATEGORY_BY_TYPE: Record<TreatmentType, string> = {
   denture: "Other",
   other: "Other",
 };
+export const TREATMENT_CATEGORIES = [
+  "Implant",
+  "Restorative",
+  "Cosmetic",
+  "Endodontic",
+  "Surgical",
+  "Supporting",
+  "Other",
+] as const;
 export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
   ([type, label, short, color, supported, perTooth]) => ({
     type,
@@ -95,8 +105,21 @@ const DEFAULT_RELATIONSHIP: TreatmentRelationship = {
 };
 
 export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRelationship>> = {
-  extraction: { role: "procedure", target: "natural-tooth" },
-  "dental-implant": { role: "procedure", target: "implant-site" },
+  extraction: {
+    role: "procedure",
+    target: "natural-tooth",
+    conflictsWith: [
+      ...CONVENTIONAL_CROWNS,
+      ...CONSERVATIVE_RESTORATIONS,
+      "implant-crown",
+      "root-canal-treatment",
+    ],
+  },
+  "dental-implant": {
+    role: "procedure",
+    target: "implant-site",
+    conflictsWith: [...CONVENTIONAL_CROWNS, ...CONSERVATIVE_RESTORATIONS, "root-canal-treatment"],
+  },
   "implant-crown": {
     role: "restoration",
     target: "implant-site",
@@ -114,12 +137,12 @@ export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRel
     ]),
   ),
   veneer: {
-    role: "restoration",
+    role: "cosmetic",
     target: "natural-tooth",
     conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown", "composite-bonding"],
   },
   "composite-bonding": {
-    role: "restoration",
+    role: "cosmetic",
     target: "natural-tooth",
     conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown", "veneer"],
   },
@@ -134,18 +157,22 @@ export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRel
     conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown"],
   },
   "root-canal-treatment": { role: "procedure", target: "natural-tooth" },
-  bridge: { role: "group", target: "tooth-site" },
+  bridge: { role: "restoration", target: "tooth-site" },
   pontic: { role: "restoration", target: "tooth-site" },
   whitening: { role: "global", target: "arch" },
-  "bone-graft": { role: "support", target: "implant-site", requiresContext: "implant" },
+  "bone-graft": {
+    role: "support-procedure",
+    target: "implant-site",
+    requiresContext: "implant",
+  },
   "sinus-lift": {
-    role: "support",
+    role: "support-procedure",
     target: "implant-site",
     requiresContext: "posterior-maxilla",
   },
-  "all-on-4": { role: "group", target: "arch" },
-  "all-on-6": { role: "group", target: "arch" },
-  denture: { role: "group", target: "arch" },
+  "all-on-4": { role: "full-arch", target: "arch" },
+  "all-on-6": { role: "full-arch", target: "arch" },
+  denture: { role: "full-arch", target: "arch" },
 };
 
 export function treatmentRelationship(type: TreatmentType): TreatmentRelationship {

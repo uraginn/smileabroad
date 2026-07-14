@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,106 +9,108 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { treatmentByType } from "../data/treatmentDefinitions";
-import { formatQuoteMoney } from "@/lib/quote";
-import type {
-  DentalPricingItem,
-  DentalPlannerCommercial,
-  ToothTreatment,
-} from "../types/dental-plan.types";
+import type { ToothTreatment } from "../types/dental-plan.types";
 
 type TreatmentGroup = ReturnType<typeof groupTreatments>[number];
 
 export function TreatmentSummary({
   treatments,
-  pricingItems = [],
-  currency = "EUR",
   readOnly,
   onDelete,
   onEdit,
   onHighlight,
 }: {
   treatments: ToothTreatment[];
-  pricingItems?: DentalPricingItem[];
-  currency?: DentalPlannerCommercial["currency"];
   readOnly?: boolean;
   onDelete: (ids: string[]) => void;
   onEdit: (ids: string[], notes: string) => void;
   onHighlight: (teeth: number[]) => void;
 }) {
-  const groups = groupTreatments(treatments);
+  const groups = useMemo(() => groupTreatments(treatments), [treatments]);
   const [editing, setEditing] = useState<TreatmentGroup>();
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="border-t pt-4">
+    <section className="border-t pt-4" aria-labelledby="applied-treatments-heading">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">Applied treatments</p>
-        <Badge variant="secondary">{treatments.length} items</Badge>
+        <h3 id="applied-treatments-heading" className="font-semibold">
+          Applied treatments
+        </h3>
+        <Badge variant="secondary">{groups.length} types</Badge>
       </div>
       {groups.length ? (
-        <div className="space-y-2">
-          {groups.map((group) => (
-            <div
-              key={group.key}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium">
-                  {group.label} <span className="text-muted-foreground">×{group.quantity}</span>
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {group.teeth.length > 6
-                    ? `${group.teeth.length} teeth`
-                    : `Teeth ${group.teeth.join(", ")}`}
-                </p>
-                <p className="mt-1 text-xs font-medium">
-                  {formatQuoteMoney(
-                    group.quantity *
-                      (pricingItems.find((item) => item.treatmentId === group.key)?.unitPrice ?? 0),
-                    currency,
-                  )}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onHighlight(group.teeth)}
-                >
-                  Highlight
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={readOnly}
-                  onClick={() => {
-                    setEditing(group);
-                    setNotes(group.notes);
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  disabled={readOnly}
-                  onClick={() => onDelete(group.ids)}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <Table className="min-w-[680px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Treatment</TableHead>
+                <TableHead>Affected teeth</TableHead>
+                <TableHead className="w-20">Units</TableHead>
+                <TableHead className="w-64 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {groups.map((group) => (
+                <TableRow key={group.key}>
+                  <TableCell className="font-medium">{group.label}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {group.teeth.length > 8
+                      ? `${group.teeth.length} teeth`
+                      : group.teeth.join(", ")}
+                  </TableCell>
+                  <TableCell>{group.quantity}</TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onHighlight(group.teeth)}
+                      >
+                        Highlight
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={readOnly}
+                        onClick={() => {
+                          setEditing(group);
+                          setNotes(group.notes);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={readOnly}
+                        onClick={() => onDelete(group.ids)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          Select teeth, choose a treatment, then apply it to build the case.
+        <p className="rounded-lg bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          No treatments applied yet. Select teeth, choose a treatment, then apply it.
         </p>
       )}
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(undefined)}>
@@ -116,7 +118,7 @@ export function TreatmentSummary({
           <DialogHeader>
             <DialogTitle>Edit {editing?.label}</DialogTitle>
             <DialogDescription>
-              Add a concise clinical note to the selected treatment group.
+              Add a concise clinical note to this treatment group.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -140,24 +142,18 @@ export function TreatmentSummary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </section>
   );
 }
 
 function groupTreatments(treatments: ToothTreatment[]) {
   const groups = new Map<
     string,
-    {
-      key: string;
-      label: string;
-      ids: string[];
-      teeth: number[];
-      quantity: number;
-      notes: string;
-    }
+    { key: string; label: string; ids: string[]; teeth: number[]; quantity: number; notes: string }
   >();
   treatments.forEach((treatment) => {
-    const key = treatment.treatmentDefinitionId ?? treatment.treatmentType;
+    const key =
+      treatment.treatmentDefinitionId ?? treatment.treatmentKey ?? treatment.treatmentType;
     const current = groups.get(key) ?? {
       key,
       label: treatment.displayName ?? treatmentByType(treatment.treatmentType).label,

@@ -12,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -546,25 +547,24 @@ export function TreatmentPlanner({
         </AlertDialogContent>
       </AlertDialog>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-        <div>
-          <h2 className="font-semibold">Clinical Planning</h2>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <Badge variant="outline">
-              {mode === "current" ? "Current condition" : "Proposed treatment"}
-            </Badge>
-            {!!selection.selected.length && (
-              <Badge variant="secondary">{selection.selected.length} selected</Badge>
-            )}
-          </div>
-        </div>
+        <h2 className="font-semibold">Clinical Planning</h2>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={mode} onValueChange={(value) => setMode(value as PlannerMode)}>
-          <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
-            <TabsTrigger value="current">Current</TabsTrigger>
-            <TabsTrigger value="proposed">Proposed</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <ToggleGroup
+          type="single"
+          value={mode}
+          onValueChange={(value) => value && setMode(value as PlannerMode)}
+          variant="outline"
+          className="rounded-lg bg-muted/50 p-1"
+          aria-label="Clinical planning mode"
+        >
+          <ToggleGroupItem value="current" className="px-4">
+            Current condition
+          </ToggleGroupItem>
+          <ToggleGroupItem value="proposed" className="px-4">
+            Proposed treatment
+          </ToggleGroupItem>
+        </ToggleGroup>
         <div className="flex items-center gap-2">
           <ToolButton onClick={history.undo} disabled={!history.canUndo || readOnly}>
             Undo
@@ -613,18 +613,47 @@ export function TreatmentPlanner({
           onDragEnd={selection.endDrag}
           onBoxSelect={selection.selectBox}
         />
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 p-2.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary">{selection.selected.length} teeth selected</Badge>
-            {selection.selected.length > 0 && selection.selected.length <= 6
+            <Badge variant="secondary">
+              {selection.selected.length
+                ? `${selection.selected.length} teeth selected`
+                : "No teeth selected"}
+            </Badge>
+            {selection.selected.length > 0 && selection.selected.length <= 5
               ? selection.selected.map((tooth) => (
                   <Badge key={tooth} variant="outline">
                     {tooth}
                   </Badge>
                 ))
               : null}
+            {selection.selected.length > 5 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" size="sm" variant="ghost">
+                    View teeth
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64">
+                  <p className="mb-2 text-sm font-medium">Selected teeth</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selection.selected.map((tooth) => (
+                      <Badge key={tooth} variant="outline">
+                        {tooth}
+                      </Badge>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" variant="ghost" onClick={selection.selectAllUpper}>
+              Upper
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={selection.selectAllLower}>
+              Lower
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -703,8 +732,6 @@ export function TreatmentPlanner({
         <>
           <TreatmentSummary
             treatments={history.state.proposedTreatments}
-            pricingItems={history.state.commercial.items}
-            currency={history.state.commercial.currency}
             readOnly={readOnly}
             onDelete={(ids) => !readOnly && deleteTreatments(ids)}
             onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}

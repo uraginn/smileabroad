@@ -15,9 +15,11 @@ export function ConditionSummary({
   );
   const count = entries.reduce((sum, item) => sum + item.conditions.length, 0);
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <section className="border-t pt-4" aria-labelledby="recorded-conditions-heading">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">Recorded conditions</p>
+        <h3 id="recorded-conditions-heading" className="font-semibold">
+          Recorded conditions
+        </h3>
         <Badge variant="secondary">{count} findings</Badge>
       </div>
       {entries.length ? (
@@ -45,10 +47,10 @@ export function ConditionSummary({
           )}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
+        <p className="rounded-lg bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           Select teeth, then record the current clinical condition.
         </p>
       )}
-    </div>
+    </section>
   );
 }
