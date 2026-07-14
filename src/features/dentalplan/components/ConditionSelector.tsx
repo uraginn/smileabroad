@@ -1,10 +1,20 @@
+import { useState } from "react";
+import { ChevronsUpDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CONDITION_DEFINITIONS } from "../data/conditionDefinitions";
 import type { ConditionType } from "../types/dental-plan.types";
+
 const GROUPS: Array<{ label: string; types: ConditionType[] }> = [
-  {
-    label: "Missing / Extracted",
-    types: ["missing", "extraction-required"],
-  },
+  { label: "Missing / Extracted", types: ["missing", "extraction-required"] },
   {
     label: "Existing restorations",
     types: ["existing-filling", "existing-crown", "existing-bridge", "existing-implant"],
@@ -13,15 +23,10 @@ const GROUPS: Array<{ label: string; types: ConditionType[] }> = [
     label: "Tooth conditions",
     types: ["healthy", "decay", "fractured", "mobility", "periodontal-problem"],
   },
-  {
-    label: "Endodontic",
-    types: ["root-canal-treated"],
-  },
-  {
-    label: "Other findings",
-    types: ["impacted", "other"],
-  },
+  { label: "Endodontic", types: ["root-canal-treated"] },
+  { label: "Other findings", types: ["impacted", "other"] },
 ];
+
 export function ConditionSelector({
   disabled,
   onApply,
@@ -29,42 +34,60 @@ export function ConditionSelector({
   disabled: boolean;
   onApply: (condition: ConditionType) => void;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="space-y-2">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">
         Apply current condition
       </div>
-      <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-        {GROUPS.map((group) => (
-          <section key={group.label}>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{group.label}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {group.types
-                .map((type) => CONDITION_DEFINITIONS.find((item) => item.type === type))
-                .filter(Boolean)
-                .map(
-                  (condition) =>
-                    condition && (
-                      <button
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            className="w-full justify-between"
+          >
+            <span className="truncate">
+              {disabled ? "Select teeth first" : "Choose a clinical finding"}
+            </span>
+            <ChevronsUpDown className="size-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search conditions..." />
+            <CommandList className="max-h-80">
+              <CommandEmpty>No conditions found</CommandEmpty>
+              {GROUPS.map((group) => (
+                <CommandGroup key={group.label} heading={group.label}>
+                  {group.types.map((type) => {
+                    const condition = CONDITION_DEFINITIONS.find((item) => item.type === type);
+                    if (!condition) return null;
+                    return (
+                      <CommandItem
                         key={condition.type}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onApply(condition.type)}
-                        className="flex items-center gap-2 rounded border px-2 py-1.5 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                        title={`${condition.label}${condition.supported ? "" : " (placeholder visual)"}`}
+                        value={`${condition.label} ${group.label}`}
+                        onSelect={() => {
+                          onApply(condition.type);
+                          setOpen(false);
+                        }}
                       >
                         <span
-                          className="size-3 rounded-sm border"
+                          className="mr-2 size-3 rounded-sm border"
                           style={{ background: condition.color }}
                         />
-                        <span className="truncate">{condition.label}</span>
-                      </button>
-                    ),
-                )}
-            </div>
-          </section>
-        ))}
-      </div>
+                        {condition.label}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <p className="text-xs text-muted-foreground">Selecting a finding applies it immediately.</p>
     </div>
   );
 }

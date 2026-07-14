@@ -46,6 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TREATMENT_DEFINITIONS } from "@/features/dentalplan/data/treatmentDefinitions";
+import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
 import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import { Tooth } from "@/features/dentalplan/components/Tooth";
 import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
@@ -79,6 +80,7 @@ function DentalPlannerSettings() {
   const definitions = useMockStore((state) => state.clinicTreatmentDefinitions);
   const templates = useMockStore((state) => state.dentalPlanTemplates);
   const hotels = useMockStore((state) => state.clinicHotels);
+  const clinic = useMockStore((state) => state.clinics.find((item) => item.id === clinicId));
   const users = useMockStore((state) => state.users);
   const plans = useMockStore((state) => state.treatmentPlans);
   const saveDefinition = useMockStore((state) => state.saveClinicTreatmentDefinition);
@@ -90,6 +92,7 @@ function DentalPlannerSettings() {
   const addDentist = useMockStore((state) => state.addClinicDentist);
   const updateDentist = useMockStore((state) => state.updateClinicDentist);
   const deleteDentist = useMockStore((state) => state.deleteClinicDentist);
+  const updateClinic = useMockStore((state) => state.updateClinic);
   const [treatment, setTreatment] = useState<ClinicTreatmentDefinition | null>(null);
   const [dentist, setDentist] = useState<Partial<User> | null>(null);
   const [dentistToDelete, setDentistToDelete] = useState<User | null>(null);
@@ -101,6 +104,7 @@ function DentalPlannerSettings() {
   const [treatmentKind, setTreatmentKind] = useState("all");
   const [hotelSearch, setHotelSearch] = useState("");
   const [hotelStatus, setHotelStatus] = useState("all");
+  const [serviceName, setServiceName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{
     title: string;
     description: string;
@@ -156,16 +160,18 @@ function DentalPlannerSettings() {
   const availableHotelCategories = [
     ...new Set([...HOTEL_CATEGORY_DEFAULTS, ...clinicHotels.flatMap((item) => item.categories)]),
   ];
+  const configuredServices = clinic?.planner_included_services ?? DEFAULT_CLINICAL_SERVICES;
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <PageHeader
         title="Dental Planner"
-        description="Configure reusable clinic treatments, dentists and hotels."
+        description="Configure reusable clinic treatments, dentists, services and hotels."
       />
       <Tabs defaultValue="treatments">
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="treatments">Treatments</TabsTrigger>
           <TabsTrigger value="dentists">Dentists</TabsTrigger>
+          <TabsTrigger value="services">Included Services</TabsTrigger>
           <TabsTrigger value="hotels">Hotels</TabsTrigger>
         </TabsList>
         <TabsContent value="treatments">
@@ -355,6 +361,80 @@ function DentalPlannerSettings() {
               />
             ))}
           </Section>
+        </TabsContent>
+        <TabsContent value="services">
+          <Card>
+            <CardHeader>
+              <CardTitle>Included services</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Configure the clinical services coordinators can select in the planner. Patient
+                plans keep their existing selections if a service is removed here.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  value={serviceName}
+                  onChange={(event) => setServiceName(event.target.value)}
+                  placeholder="Add an included service"
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    const value = serviceName.trim();
+                    if (!value || configuredServices.includes(value)) return;
+                    updateClinic(
+                      clinicId,
+                      { planner_included_services: [...configuredServices, value] },
+                      user.id,
+                    );
+                    setServiceName("");
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const value = serviceName.trim();
+                    if (!value || configuredServices.includes(value)) return;
+                    updateClinic(
+                      clinicId,
+                      { planner_included_services: [...configuredServices, value] },
+                      user.id,
+                    );
+                    setServiceName("");
+                    toast.success("Service added");
+                  }}
+                >
+                  <Plus className="size-4" /> Add
+                </Button>
+              </div>
+              <div className="divide-y rounded-lg border">
+                {configuredServices.map((service) => (
+                  <div key={service} className="flex items-center justify-between gap-3 p-3">
+                    <span className="text-sm font-medium">{service}</span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Remove ${service}`}
+                      onClick={() =>
+                        updateClinic(
+                          clinicId,
+                          {
+                            planner_included_services: configuredServices.filter(
+                              (item) => item !== service,
+                            ),
+                          },
+                          user.id,
+                        )
+                      }
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="hotels">
           <Section

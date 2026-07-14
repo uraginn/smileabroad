@@ -9,6 +9,7 @@ import { treatmentLabel } from "@/lib/dental";
 import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
 import { calculateCommercial } from "@/features/dentalplan/utils/commercial";
 import { UnifiedPlanShareSection } from "@/features/dentalplan/components/UnifiedPlanShareSection";
+import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
 
 type Search = {
@@ -688,15 +689,6 @@ function DentalPlanRoute() {
           perTooth: item.unit_type === "tooth",
           prices: item.prices,
         }))}
-      templates={templates
-        .filter((item) => item.clinic_id === user?.clinic_id && item.active)
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          category: item.category,
-          planData: createDentalPlan(item.plan_data as Partial<DentalPlanData>),
-        }))}
       hotels={hotels
         .filter(
           (item) =>
@@ -722,24 +714,9 @@ function DentalPlanRoute() {
             dataUrl: image.data_url,
           })),
         }))}
+      serviceOptions={clinic?.planner_included_services ?? DEFAULT_CLINICAL_SERVICES}
       onFinalize={finalize}
       onChange={crmMode ? saveDraft : undefined}
-      onSaveAsTemplate={(value, name) => {
-        if (!user?.clinic_id) return;
-        saveTemplate(
-          {
-            id: crypto.randomUUID(),
-            clinic_id: user.clinic_id,
-            name,
-            description: "Saved from a clinic treatment plan",
-            category: "Custom",
-            active: true,
-            default_dentist_id: value.patient.dentistId,
-            plan_data: sanitizeTemplatePlan(value),
-          },
-          user.id,
-        );
-      }}
       onSave={
         templateMode && activeTemplate
           ? (value) =>

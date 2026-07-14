@@ -53,8 +53,6 @@ export function TreatmentSelector({
   definitions: EffectiveTreatmentDefinition[];
 }) {
   const [open, setOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string>();
-  const selected = definitions.find((item) => item.id === selectedId);
   const customGroups = [
     ...new Set(definitions.filter((item) => !item.system).map((item) => item.category)),
   ].map((category) => ({
@@ -83,7 +81,7 @@ export function TreatmentSelector({
             disabled={disabled}
             className="w-full justify-between"
           >
-            <span className="truncate">{selected?.displayName ?? "Choose treatment"}</span>
+            <span className="truncate">{canApply ? "Choose treatment" : "Select teeth first"}</span>
             <ChevronsUpDown className="size-4 opacity-50" />
           </Button>
         </PopoverTrigger>
@@ -103,7 +101,7 @@ export function TreatmentSelector({
                         key={treatment.id}
                         value={`${treatment.displayName} ${group.label}`}
                         onSelect={() => {
-                          setSelectedId(treatment.id);
+                          onApply(treatment);
                           setOpen(false);
                         }}
                       >
@@ -121,18 +119,7 @@ export function TreatmentSelector({
           </Command>
         </PopoverContent>
       </Popover>
-      <Button
-        type="button"
-        className="w-full"
-        disabled={disabled || !canApply || !selected}
-        onClick={() => {
-          if (!selected) return;
-          onApply(selected);
-          setSelectedId(undefined);
-        }}
-      >
-        {canApply ? "Apply selected treatment" : "Select teeth to apply"}
-      </Button>
+      <p className="text-xs text-muted-foreground">Selecting a treatment applies it immediately.</p>
     </div>
   );
 }

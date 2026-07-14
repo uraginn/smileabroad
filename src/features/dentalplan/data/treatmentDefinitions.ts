@@ -7,6 +7,15 @@ export type TreatmentDefinition = {
   supported: boolean;
   perTooth: boolean;
 };
+export type TreatmentRole = "procedure" | "restoration" | "support" | "global" | "group";
+export type TreatmentTarget = "natural-tooth" | "implant-site" | "arch" | "tooth-site";
+export type TreatmentRelationship = {
+  role: TreatmentRole;
+  target: TreatmentTarget;
+  conflictsWith?: TreatmentType[];
+  composition?: TreatmentType[];
+  requiresContext?: "implant" | "posterior-maxilla";
+};
 const definitions: Array<[TreatmentType, string, string, string, boolean, boolean]> = [
   ["extraction", "Extraction", "Ex", "#ef4444", true, true],
   ["dental-implant", "Dental Implant", "Im", "#4f46e5", true, true],
@@ -42,6 +51,95 @@ export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
 );
 export const treatmentByType = (type: TreatmentType) =>
   TREATMENT_DEFINITIONS.find((item) => item.type === type)!;
+
+const CONVENTIONAL_CROWNS: TreatmentType[] = [
+  "zirconium-crown",
+  "emax-crown",
+  "porcelain-crown",
+  "temporary-crown",
+];
+const CONSERVATIVE_RESTORATIONS: TreatmentType[] = [
+  "veneer",
+  "composite-bonding",
+  "composite-filling",
+  "inlay-onlay",
+];
+const DEFAULT_RELATIONSHIP: TreatmentRelationship = {
+  role: "procedure",
+  target: "tooth-site",
+};
+
+export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRelationship>> = {
+  extraction: { role: "procedure", target: "natural-tooth" },
+  "dental-implant": { role: "procedure", target: "implant-site" },
+  "implant-crown": {
+    role: "restoration",
+    target: "implant-site",
+    composition: ["dental-implant", "implant-crown"],
+    conflictsWith: [...CONVENTIONAL_CROWNS, ...CONSERVATIVE_RESTORATIONS],
+  },
+  ...Object.fromEntries(
+    CONVENTIONAL_CROWNS.map((type) => [
+      type,
+      {
+        role: "restoration" as const,
+        target: "natural-tooth" as const,
+        conflictsWith: ["implant-crown", "veneer", "composite-bonding"],
+      },
+    ]),
+  ),
+  veneer: {
+    role: "restoration",
+    target: "natural-tooth",
+    conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown", "composite-bonding"],
+  },
+  "composite-bonding": {
+    role: "restoration",
+    target: "natural-tooth",
+    conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown", "veneer"],
+  },
+  "composite-filling": {
+    role: "restoration",
+    target: "natural-tooth",
+    conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown"],
+  },
+  "inlay-onlay": {
+    role: "restoration",
+    target: "natural-tooth",
+    conflictsWith: [...CONVENTIONAL_CROWNS, "implant-crown"],
+  },
+  "root-canal-treatment": { role: "procedure", target: "natural-tooth" },
+  bridge: { role: "group", target: "tooth-site" },
+  pontic: { role: "restoration", target: "tooth-site" },
+  whitening: { role: "global", target: "arch" },
+  "bone-graft": { role: "support", target: "implant-site", requiresContext: "implant" },
+  "sinus-lift": {
+    role: "support",
+    target: "implant-site",
+    requiresContext: "posterior-maxilla",
+  },
+  "all-on-4": { role: "group", target: "arch" },
+  "all-on-6": { role: "group", target: "arch" },
+  denture: { role: "group", target: "arch" },
+};
+
+export function treatmentRelationship(type: TreatmentType): TreatmentRelationship {
+  return TREATMENT_RELATIONSHIPS[type] ?? DEFAULT_RELATIONSHIP;
+}
+
+export function treatmentComposition(type: TreatmentType): TreatmentType[] {
+  return treatmentRelationship(type).composition ?? [type];
+}
+
+export function targetsNaturalTooth(type: TreatmentType) {
+  return treatmentRelationship(type).target === "natural-tooth";
+}
+
+export function conflictsWithTreatment(candidate: TreatmentType, existing: TreatmentType) {
+  const candidateConflicts = treatmentRelationship(candidate).conflictsWith ?? [];
+  const existingConflicts = treatmentRelationship(existing).conflictsWith ?? [];
+  return candidateConflicts.includes(existing) || existingConflicts.includes(candidate);
+}
 
 export function patientTreatmentCategory(type: TreatmentType): string {
   if (["dental-implant", "implant-crown"].includes(type)) return "Implant Treatment";

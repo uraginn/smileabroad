@@ -92,7 +92,7 @@ export type ToothTreatment = {
 };
 export type DentalTreatmentGroup = {
   id: string;
-  type: "bridge" | "all-on-4" | "full-arch";
+  type: "bridge" | "all-on-4" | "full-arch" | "implant-restoration";
   arch: "upper" | "lower";
   affectedTeeth: ToothNumber[];
   generatedTreatmentIds: string[];
@@ -276,6 +276,7 @@ export interface DentalPlanStudioProps {
     isDefault: boolean;
     images: Array<{ id: string; name: string; dataUrl?: string }>;
   }>;
+  serviceOptions?: string[];
 }
 export interface DentalPlannerContext {
   mode: "standalone" | "crm" | "template";

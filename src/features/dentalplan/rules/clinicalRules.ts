@@ -6,6 +6,12 @@ import {
   UPPER_TEETH,
   LOWER_TEETH,
 } from "../utils/toothNumbers";
+import {
+  conflictsWithTreatment,
+  targetsNaturalTooth,
+  treatmentComposition,
+  treatmentRelationship,
+} from "../data/treatmentDefinitions";
 export type DentalRuleResult = {
   allowed: boolean;
   severity: "block" | "warning";
@@ -14,19 +20,6 @@ export type DentalRuleResult = {
   affectedTeeth?: number[];
   conflictingTreatmentIds?: string[];
 };
-const surfaceTreatments: TreatmentType[] = [
-  "composite-bonding",
-  "veneer",
-  "composite-filling",
-  "root-canal-treatment",
-  "whitening",
-];
-const crowns: TreatmentType[] = [
-  "zirconium-crown",
-  "emax-crown",
-  "porcelain-crown",
-  "temporary-crown",
-];
 export const ALL_ON_4_PRESETS = {
   upper: { implantPositions: [15, 12, 22, 25] as ToothNumber[], prostheticRange: UPPER_TEETH },
   lower: { implantPositions: [45, 42, 32, 35] as ToothNumber[], prostheticRange: LOWER_TEETH },
@@ -37,6 +30,8 @@ export function validateClinicalTreatment(
   teeth: ToothNumber[],
 ): DentalRuleResult[] {
   const results: DentalRuleResult[] = [];
+  const composition = treatmentComposition(treatment);
+  const relationship = treatmentRelationship(treatment);
   for (const tooth of teeth) {
     const current = plan.currentConditions[tooth]?.conditions ?? [];
     const existing = plan.proposedTreatments.filter((item) => item.toothNumbers.includes(tooth));
@@ -44,40 +39,28 @@ export function validateClinicalTreatment(
     const missing = current.includes("missing");
     const extracted = current.includes("extraction-required") || types.includes("extraction");
     const implant = current.includes("existing-implant") || types.includes("dental-implant");
-    if ((missing || extracted || implant) && surfaceTreatments.includes(treatment))
+    if ((missing || extracted || implant) && composition.some(targetsNaturalTooth))
       results.push(
-        block(
-          "invalid_surface",
-          `${treatment} cannot be applied to a missing, extracted or implant position.`,
-          tooth,
-        ),
-      );
-    if ((missing || extracted) && crowns.includes(treatment))
-      results.push(
-        block(
-          "crown_without_tooth",
-          "A conventional crown requires a retained natural tooth.",
-          tooth,
-        ),
+        block("natural_tooth_required", "This treatment requires a retained natural tooth.", tooth),
       );
     if (
-      implant &&
-      [...surfaceTreatments, ...crowns].includes(treatment) &&
-      treatment !== "implant-crown"
+      composition.includes("dental-implant") &&
+      !missing &&
+      !extracted &&
+      !implant &&
+      current.length > 0
     )
       results.push(
-        block(
-          "implant_surface",
-          "Use the implant-supported restoration workflow for this position.",
-          tooth,
+        warning(
+          "implant_site_context",
+          "The selected position is not recorded as missing or extraction-indicated. Confirm the implant site clinically.",
+          [tooth],
         ),
       );
-    const conflict =
-      (crowns.includes(treatment) &&
-        types.some((type) => type === "veneer" || type === "composite-bonding")) ||
-      ((treatment === "veneer" || treatment === "composite-bonding") &&
-        types.some((type) => crowns.includes(type) || type === "implant-crown"));
-    if (conflict)
+    const conflictingTypes = types.filter((type) =>
+      composition.some((candidate) => conflictsWithTreatment(candidate, type)),
+    );
+    if (conflictingTypes.length)
       results.push({
         allowed: false,
         severity: "block",
@@ -86,11 +69,7 @@ export function validateClinicalTreatment(
           "The existing restoration conflicts with the selected treatment. Remove or replace it first.",
         affectedTeeth: [tooth],
         conflictingTreatmentIds: existing
-          .filter(
-            (item) =>
-              crowns.includes(item.treatmentType) ||
-              ["veneer", "composite-bonding", "implant-crown"].includes(item.treatmentType),
-          )
+          .filter((item) => conflictingTypes.includes(item.treatmentType))
           .map((item) => item.id),
       });
   }
@@ -102,7 +81,7 @@ export function validateClinicalTreatment(
       message: "A bridge requires contiguous positions in one arch.",
       affectedTeeth: teeth,
     });
-  if (treatment === "bone-graft" && !hasImplantContext(plan, teeth))
+  if (relationship.requiresContext === "implant" && !hasImplantContext(plan, teeth))
     results.push(
       warning(
         "graft_context",
@@ -110,7 +89,7 @@ export function validateClinicalTreatment(
         teeth,
       ),
     );
-  if (treatment === "sinus-lift") {
+  if (relationship.requiresContext === "posterior-maxilla") {
     if (!teeth.every((tooth) => [14, 15, 16, 17, 18, 24, 25, 26, 27, 28].includes(tooth)))
       results.push(
         warning("sinus_region", "Sinus lift is normally planned in the posterior maxilla.", teeth),
@@ -147,22 +126,12 @@ export const archForSelection = (teeth: ToothNumber[]) =>
   teeth.length ? getArch(teeth[0]) : "upper";
 export function validatePlanForFinalize(plan: DentalPlan): string[] {
   const errors: string[] = [];
-  const naturalOnly = new Set([
-    "composite-bonding",
-    "veneer",
-    "composite-filling",
-    "root-canal-treatment",
-    "zirconium-crown",
-    "emax-crown",
-    "porcelain-crown",
-    "temporary-crown",
-  ]);
   for (const treatment of plan.proposedTreatments)
     for (const tooth of treatment.toothNumbers) {
       const current = plan.currentConditions[tooth]?.conditions ?? [];
       if (
         (current.includes("missing") || current.includes("extraction-required")) &&
-        naturalOnly.has(treatment.treatmentType)
+        targetsNaturalTooth(treatment.treatmentType)
       )
         errors.push(
           `Tooth ${tooth}: ${treatment.treatmentType} conflicts with a missing or extraction-indicated position.`,
@@ -175,16 +144,15 @@ export function validatePlanForFinalize(plan: DentalPlan): string[] {
         .filter((item) => item.toothNumbers.includes(tooth))
         .map((item) => item.treatmentType),
     );
-    const hasAny = (values: TreatmentType[]) => values.some((value) => types.has(value));
-    const hasImplant = types.has("dental-implant") || types.has("implant-crown");
-    if (hasImplant && hasAny([...surfaceTreatments, ...crowns]))
-      errors.push(`Tooth ${tooth}: implant treatment conflicts with a natural-tooth restoration.`);
-    if (types.has("extraction") && hasAny([...surfaceTreatments, ...crowns]))
+    const list = [...types];
+    if (types.has("extraction") && list.some(targetsNaturalTooth))
       errors.push(`Tooth ${tooth}: extraction conflicts with a natural-tooth restoration.`);
-    if (hasAny(crowns) && hasAny(["veneer", "composite-bonding"]))
-      errors.push(`Tooth ${tooth}: crown conflicts with veneer or composite bonding.`);
-    if (types.has("pontic") && hasAny(["composite-filling", "root-canal-treatment"]))
-      errors.push(`Tooth ${tooth}: pontic conflicts with filling or root canal treatment.`);
+    if (
+      list.some((candidate, index) =>
+        list.slice(index + 1).some((existing) => conflictsWithTreatment(candidate, existing)),
+      )
+    )
+      errors.push(`Tooth ${tooth}: incompatible restorations are planned together.`);
   }
   for (const group of plan.treatmentGroups)
     if (

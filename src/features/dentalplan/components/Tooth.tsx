@@ -47,6 +47,7 @@ export function Tooth({
   const label = buildAriaLabel(toothNumber, visual.currentConditions, visual.proposedTreatments);
   return (
     <button
+      data-tooth-number={toothNumber}
       type="button"
       onClick={(event) =>
         (!readOnly || allowReadOnlySelection) &&

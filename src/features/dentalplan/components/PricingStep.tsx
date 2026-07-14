@@ -1,6 +1,4 @@
-import { useEffect } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +21,6 @@ import {
 import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan } from "../types/dental-plan.types";
 import { calculateCommercial, syncPricingItems } from "../utils/commercial";
-import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 export function PricingStep({
   plan,
   change,
@@ -39,28 +36,45 @@ export function PricingStep({
   }>;
 }) {
   const commercial = plan.commercial;
-  const recommendedVisits = derivePlanDefaults(plan).recommendedVisits;
   const update = (patch: Partial<typeof commercial>) =>
     change({ commercial: { ...commercial, ...patch } });
   const synced = syncPricingItems(plan, treatmentDefaults);
+  const billableCommercial = {
+    ...commercial,
+    hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
+    transferTotal:
+      plan.travel.includedServices.includes("Airport Transfer") ||
+      plan.travel.includedServices.includes("Hotel Transfer")
+        ? commercial.transferTotal
+        : 0,
+  };
+  const totals = calculateCommercial(billableCommercial);
+  const previousTotal = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (JSON.stringify(synced) !== JSON.stringify(commercial.items)) update({ items: synced });
     // Sync only when dental treatment structure changes; prices are retained by treatment ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.proposedTreatments, commercial.currency, treatmentDefaults]);
   useEffect(() => {
-    if (commercial.paymentSchedule.length) return;
+    if (commercial.paymentSchedule.length >= 2) return;
     update({
       paymentSchedule: [
-        { id: crypto.randomUUID(), label: "1st Visit", amount: 0, due: "Due at first visit" },
-        ...(recommendedVisits > 1
-          ? [{ id: crypto.randomUUID(), label: "2nd Visit", amount: 0, due: "Due at second visit" }]
-          : []),
+        ...(commercial.paymentSchedule.length
+          ? commercial.paymentSchedule
+          : [
+              {
+                id: crypto.randomUUID(),
+                label: "1st Visit",
+                amount: 0,
+                due: "Due at first visit",
+              },
+            ]),
+        { id: crypto.randomUUID(), label: "2nd Visit", amount: 0, due: "Due at second visit" },
       ],
     });
     // Initialize once when a plan has no persisted payment schedule.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commercial.paymentSchedule.length, recommendedVisits]);
+  }, [commercial.paymentSchedule.length]);
   const scheduleLabels = commercial.paymentSchedule.map((item) => item.label).join("|");
   useEffect(() => {
     const normalized = commercial.paymentSchedule.map((item, index) => ({
@@ -72,17 +86,24 @@ export function PricingStep({
     // Normalize the two patient-facing visit labels without recreating persisted rows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleLabels]);
-  const billableCommercial = {
-    ...commercial,
-    hotelTotal: plan.travel.hotelIncluded ? commercial.hotelTotal : 0,
-    transferTotal:
-      plan.travel.includedServices.includes("Airport Transfer") ||
-      plan.travel.includedServices.includes("Hotel Transfer")
-        ? commercial.transferTotal
-        : 0,
-  };
-  const totals = calculateCommercial(billableCommercial);
   const scheduled = commercial.paymentSchedule.reduce((sum, item) => sum + item.amount, 0);
+  useEffect(() => {
+    const previous = previousTotal.current;
+    const canAutoBalance = scheduled === 0 || (previous !== undefined && scheduled === previous);
+    previousTotal.current = totals.total;
+    if (!totals.total || !canAutoBalance || commercial.paymentSchedule.length < 2) return;
+    const firstVisit = Math.round(totals.total / 2);
+    const balanced = commercial.paymentSchedule.map((item, index) =>
+      index === 0
+        ? { ...item, amount: firstVisit }
+        : index === 1
+          ? { ...item, amount: totals.total - firstVisit }
+          : item,
+    );
+    update({ paymentSchedule: balanced });
+    // Keep a balanced schedule synchronized; manually adjusted schedules are never overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totals.total, commercial.paymentSchedule.length]);
   return (
     <div className="space-y-4">
       <Card>
@@ -166,6 +187,9 @@ export function PricingStep({
         </CardContent>
       </Card>
       <Card>
+        <CardHeader>
+          <CardTitle>Payment and package total</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-6 p-4 sm:p-6">
           <section aria-labelledby="service-costs-heading">
             <h3 id="service-costs-heading" className="mb-4 font-semibold">
@@ -266,98 +290,68 @@ export function PricingStep({
               strong
             />
           </section>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Payment schedule</CardTitle>
-            {commercial.paymentSchedule.length < 2 && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  update({
-                    paymentSchedule: [
-                      ...commercial.paymentSchedule,
-                      {
-                        id: crypto.randomUUID(),
-                        label: commercial.paymentSchedule.length === 0 ? "1st Visit" : "2nd Visit",
-                        amount: 0,
-                        due: "",
-                      },
-                    ],
-                  })
-                }
-              >
-                <Plus />
-                Add {commercial.paymentSchedule.length === 0 ? "1st" : "2nd"} Visit
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {commercial.paymentSchedule.map((payment) => (
-            <div
-              key={payment.id}
-              className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_160px_1fr_auto]"
-            >
-              <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
-              <Input
-                aria-label="Payment amount"
-                type="number"
-                min={0}
-                value={payment.amount}
-                onChange={(e) =>
-                  updatePayment(
-                    commercial,
-                    payment.id,
-                    { amount: Math.max(0, Number(e.target.value)) },
-                    update,
-                  )
-                }
-              />
-              <Input
-                aria-label="Payment due description"
-                value={payment.due}
-                onChange={(e) =>
-                  updatePayment(commercial, payment.id, { due: e.target.value }, update)
-                }
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label="Remove payment"
-                onClick={() =>
-                  update({
-                    paymentSchedule: commercial.paymentSchedule.filter(
-                      (item) => item.id !== payment.id,
-                    ),
-                  })
-                }
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
-          {scheduled > totals.total && (
-            <p className="rounded bg-warning/15 p-2 text-sm">
-              Scheduled payments exceed the current plan total.
-            </p>
-          )}
-          {scheduled <= totals.total && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2 text-sm">
-              <span>Remaining amount</span>
-              <span className="font-medium">
-                {formatQuoteMoney(Math.max(0, totals.total - scheduled), commercial.currency)}
+          <Separator />
+          <section aria-labelledby="payment-schedule-heading" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 id="payment-schedule-heading" className="font-semibold">
+                Payment schedule
+              </h3>
+              <span className="text-sm font-medium">
+                Total {formatQuoteMoney(totals.total, commercial.currency)}
               </span>
-              {totals.total > 0 && scheduled === totals.total && (
-                <span className="text-success">Payment schedule matches the final total.</span>
-              )}
             </div>
-          )}
+            {commercial.paymentSchedule.slice(0, 2).map((payment) => (
+              <div
+                key={payment.id}
+                className="grid gap-2 rounded-lg border p-3 md:grid-cols-[120px_160px_1fr]"
+              >
+                <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
+                <Input
+                  aria-label="Payment amount"
+                  type="number"
+                  min={0}
+                  value={payment.amount}
+                  onChange={(e) =>
+                    updatePayment(
+                      commercial,
+                      payment.id,
+                      { amount: Math.max(0, Number(e.target.value)) },
+                      update,
+                    )
+                  }
+                />
+                <Input
+                  aria-label="Payment due description"
+                  value={payment.due}
+                  onChange={(e) =>
+                    updatePayment(commercial, payment.id, { due: e.target.value }, update)
+                  }
+                />
+              </div>
+            ))}
+            {commercial.paymentSchedule.length > 2 && (
+              <p className="text-xs text-muted-foreground">
+                Legacy additional payment entries are preserved in the plan but are not part of the
+                standard two-visit schedule.
+              </p>
+            )}
+            {scheduled > totals.total && (
+              <p className="rounded bg-warning/15 p-2 text-sm">
+                Scheduled payments exceed the current plan total.
+              </p>
+            )}
+            {scheduled <= totals.total && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2 text-sm">
+                <span>Remaining amount</span>
+                <span className="font-medium">
+                  {formatQuoteMoney(Math.max(0, totals.total - scheduled), commercial.currency)}
+                </span>
+                {totals.total > 0 && scheduled === totals.total && (
+                  <span className="text-success">Payment schedule matches the final total.</span>
+                )}
+              </div>
+            )}
+          </section>
         </CardContent>
       </Card>
     </div>

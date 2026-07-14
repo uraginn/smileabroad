@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -36,7 +37,7 @@ import {
   archForSelection,
   validateClinicalTreatment,
 } from "../rules/clinicalRules";
-import { treatmentByType } from "../data/treatmentDefinitions";
+import { treatmentComposition } from "../data/treatmentDefinitions";
 import { DentalChart } from "./DentalChart";
 import { ConditionSelector } from "./ConditionSelector";
 import { TreatmentSelector } from "./TreatmentSelector";
@@ -173,7 +174,6 @@ export function TreatmentPlanner({
         setMessage("Select at least one tooth first.");
         return;
       }
-      const definition = treatmentByType(treatment);
       const ruleResults = validateClinicalTreatment(history.state, treatment, selection.selected);
       const blocked = ruleResults.find((result) => !result.allowed && result.severity === "block");
       if (blocked) {
@@ -293,6 +293,57 @@ export function TreatmentPlanner({
         setBridgeDefinition(selectedDefinition);
         return;
       }
+      const composition = treatmentComposition(treatment);
+      if (composition.length > 1) {
+        const generatedGroups: DentalPlan["treatmentGroups"] = [];
+        const generatedTreatments: DentalPlan["proposedTreatments"] = [];
+        for (const tooth of selection.selected) {
+          const existingTypes = history.state.proposedTreatments
+            .filter((item) => item.toothNumbers.includes(tooth))
+            .map((item) => item.treatmentType);
+          const missingComponents = composition.filter((type) => !existingTypes.includes(type));
+          if (!missingComponents.length) continue;
+          const groupId = missingComponents.length > 1 ? crypto.randomUUID() : undefined;
+          const items = missingComponents.map((component) => {
+            const componentDefinition =
+              definitions.find((item) => item.baseTreatmentKey === component && item.system) ??
+              selectedDefinition;
+            return {
+              id: crypto.randomUUID(),
+              toothNumbers: [tooth],
+              treatmentType: component,
+              treatmentDefinitionId: componentDefinition.id,
+              treatmentKey: componentDefinition.treatmentKey,
+              visualKey: componentDefinition.visualKey,
+              displayName: componentDefinition.displayName,
+              treatmentGroupId: groupId,
+            };
+          });
+          generatedTreatments.push(...items);
+          if (groupId)
+            generatedGroups.push({
+              id: groupId,
+              type: "implant-restoration",
+              arch: archForSelection([tooth]),
+              affectedTeeth: [tooth],
+              generatedTreatmentIds: items.map((item) => item.id),
+              implantPositions: [tooth],
+              supportType: "implant",
+            });
+        }
+        if (!generatedTreatments.length) {
+          setMessage(`${selectedDefinition.displayName} is already included for the selection.`);
+          return;
+        }
+        history.commit((previous) => ({
+          ...previous,
+          proposedTreatments: [...previous.proposedTreatments, ...generatedTreatments],
+          treatmentGroups: [...previous.treatmentGroups, ...generatedGroups],
+          updatedAt: new Date().toISOString(),
+        }));
+        setMessage("Implant and implant-supported crown added as one linked treatment.");
+        return;
+      }
       const duplicateTreatment = history.state.proposedTreatments.find(
         (item) =>
           (item.treatmentDefinitionId
@@ -318,7 +369,7 @@ export function TreatmentPlanner({
       }
       history.commit((previous) => {
         const next = { ...previous, proposedTreatments: [...previous.proposedTreatments] };
-        if (definition.perTooth)
+        if (selectedDefinition.perTooth)
           for (const tooth of selection.selected)
             next.proposedTreatments.push({
               id: crypto.randomUUID(),
@@ -344,7 +395,7 @@ export function TreatmentPlanner({
       });
       setMessage(null);
     },
-    [history, selection.selected],
+    [definitions, history, selection.selected],
   );
   const confirmBridge = useCallback(
     (roles: Partial<Record<ToothNumber, BridgeUnitRole>>) => {
@@ -548,7 +599,7 @@ export function TreatmentPlanner({
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+      <div className="space-y-4">
         <DentalChart
           title={mode === "current" ? "Current Dental Condition" : "Proposed Treatment Plan"}
           mode={mode}
@@ -565,8 +616,9 @@ export function TreatmentPlanner({
           onDragStart={selection.beginDrag}
           onDragEnter={selection.enterDrag}
           onDragEnd={selection.endDrag}
+          onBoxSelect={selection.selectBox}
         />
-        <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
           <div className="rounded-lg border bg-card p-4">
             {mode === "current" ? (
               <ConditionSelector
@@ -583,14 +635,16 @@ export function TreatmentPlanner({
             )}
           </div>
           {bridgeTeeth && (
-            <BridgeConfigurator
-              teeth={bridgeTeeth}
-              onCancel={() => {
-                setBridgeTeeth(null);
-                setBridgeDefinition(null);
-              }}
-              onConfirm={confirmBridge}
-            />
+            <div className="md:col-span-2">
+              <BridgeConfigurator
+                teeth={bridgeTeeth}
+                onCancel={() => {
+                  setBridgeTeeth(null);
+                  setBridgeDefinition(null);
+                }}
+                onConfirm={confirmBridge}
+              />
+            </div>
           )}
           <Collapsible className="rounded-lg border bg-card px-4">
             <CollapsibleTrigger asChild>
@@ -618,6 +672,37 @@ export function TreatmentPlanner({
           onHighlight={highlightTeeth}
         />
       </div>
+      <Collapsible className="rounded-lg border bg-card px-4">
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" className="w-full justify-between px-0">
+            <span className="flex items-center gap-2">
+              <LockKeyhole className="size-4" /> Clinic-only clinical notes
+            </span>
+            <ChevronDown className="size-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pb-4">
+          <Textarea
+            aria-label="Clinic-only clinical notes"
+            value={history.state.travel.internalNotes ?? ""}
+            onChange={(event) =>
+              history.set(
+                (current) => ({
+                  ...current,
+                  travel: { ...current.travel, internalNotes: event.target.value },
+                  updatedAt: new Date().toISOString(),
+                }),
+                { commit: false },
+              )
+            }
+            rows={3}
+            placeholder="Clinical rationale, internal cautions or coordinator instructions"
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Internal clinic information. Never shown in the patient view.
+          </p>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

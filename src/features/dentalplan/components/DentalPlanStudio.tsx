@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -79,13 +78,12 @@ function PlannerShell({
   onChange,
   onSave,
   onFinalize,
-  onSaveAsTemplate,
   readOnly,
   context,
   clinicUsers = [],
   treatmentDefaults = [],
   hotels = [],
-  templates = [],
+  serviceOptions,
   preliminarySuggestions = [],
   shareSection,
   documentStatus,
@@ -133,9 +131,6 @@ function PlannerShell({
   }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
-  const [pendingTemplateId, setPendingTemplateId] = useState<string>();
-  const [templateNameOpen, setTemplateNameOpen] = useState(false);
-  const [templateName, setTemplateName] = useState("");
   const assignedDentist = clinicUsers.find((user) => user.id === plan.patient.dentistId);
   const change = (patch: Partial<DentalPlan>) =>
     setPlan({ ...plan, ...patch, updatedAt: new Date().toISOString() });
@@ -143,23 +138,6 @@ function PlannerShell({
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
   const step = Math.max(0, Math.min(5, plan.draftStep));
-  const applyTemplate = (templateId: string) => {
-    const template = templates.find((item) => item.id === templateId);
-    if (!template) return;
-    const source = createDentalPlan(template.planData);
-    setPlan({
-      ...plan,
-      proposedTreatments: source.proposedTreatments,
-      treatmentGroups: source.treatmentGroups,
-      updatedAt: new Date().toISOString(),
-    });
-    toast.success(`${template.name} applied`);
-  };
-  const requestTemplate = (templateId: string) => {
-    const hasPlanningData = plan.proposedTreatments.length > 0;
-    if (hasPlanningData) setPendingTemplateId(templateId);
-    else applyTemplate(templateId);
-  };
   const save = () => {
     if (readOnly) return;
     repository.savePlan(plan);
@@ -229,11 +207,6 @@ function PlannerShell({
             <Button variant="outline" onClick={save} disabled={readOnly}>
               Save draft
             </Button>
-            {context?.mode === "crm" && onSaveAsTemplate && !readOnly && (
-              <Button variant="outline" onClick={() => setTemplateNameOpen(true)}>
-                Save as template
-              </Button>
-            )}
           </div>
         </div>
       </header>
@@ -269,60 +242,6 @@ function PlannerShell({
             {result}
           </div>
         )}
-        <AlertDialog
-          open={!!pendingTemplateId}
-          onOpenChange={(open) => !open && setPendingTemplateId(undefined)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Replace current planning data?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The selected template will replace proposed treatments and linked groups. Current
-                conditions, patient, assignment, travel and pricing data will stay unchanged.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  if (pendingTemplateId) applyTemplate(pendingTemplateId);
-                  setPendingTemplateId(undefined);
-                }}
-              >
-                Apply template
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-        <Dialog open={templateNameOpen} onOpenChange={setTemplateNameOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Save as template</DialogTitle>
-            </DialogHeader>
-            <Input
-              value={templateName}
-              onChange={(event) => setTemplateName(event.target.value)}
-              placeholder="Template name"
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setTemplateNameOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  const name = templateName.trim();
-                  if (!name || !onSaveAsTemplate) return;
-                  onSaveAsTemplate(plan, name);
-                  toast.success("Template saved");
-                  setTemplateName("");
-                  setTemplateNameOpen(false);
-                }}
-              >
-                Save template
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
         {step === 0 && (
           <>
             {context?.mode === "template" ? (
@@ -342,29 +261,6 @@ function PlannerShell({
         )}{" "}
         {step === 1 && (
           <div className="space-y-4">
-            {context?.mode !== "template" && templates.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">
-                    Start from template <Badge variant="outline">Optional</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-w-xl">
-                    <Combobox
-                      options={templates.map((template) => ({
-                        value: template.id,
-                        label: `${template.name} · ${template.category} · ${template.planData.proposedTreatments.length} treatments`,
-                      }))}
-                      onValueChange={requestTemplate}
-                      placeholder="Select a reusable clinical template"
-                      searchPlaceholder="Search templates..."
-                      emptyText="No templates found"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
             {preliminarySuggestions.length > 0 && (
               <Collapsible className="rounded-lg border border-primary/20 bg-card px-4">
                 <CollapsibleTrigger asChild>
@@ -397,7 +293,14 @@ function PlannerShell({
             />
           </div>
         )}{" "}
-        {step === 2 && <TravelServicesStep plan={plan} change={change} hotels={hotels} />}{" "}
+        {step === 2 && (
+          <TravelServicesStep
+            plan={plan}
+            change={change}
+            hotels={hotels}
+            serviceOptions={serviceOptions}
+          />
+        )}{" "}
         {step === 3 && (
           <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
         )}

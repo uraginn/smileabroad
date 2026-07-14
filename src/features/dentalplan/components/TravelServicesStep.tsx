@@ -1,7 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { LockKeyhole, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -14,33 +12,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
+import { DEFAULT_CLINICAL_SERVICES, TRAVEL_SERVICES } from "../data/serviceDefinitions";
 
-const CLINICAL_SERVICES = [
-  "Prescribed medications",
-  "Panoramic X-ray",
-  "3D X-ray / CBCT",
-  "Initial clinical examination",
-  "Digital dental scan",
-  "Temporary teeth where required",
-];
-const TRAVEL_SERVICES = ["Airport Transfer", "Hotel Transfer", "Flight Included"];
-const KNOWN_SERVICES = [...CLINICAL_SERVICES, ...TRAVEL_SERVICES];
 type HotelOption = NonNullable<DentalPlanStudioProps["hotels"]>[number];
 
 export function TravelServicesStep({
   plan,
   change,
   hotels = [],
+  serviceOptions = DEFAULT_CLINICAL_SERVICES,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
   hotels?: HotelOption[];
+  serviceOptions?: string[];
 }) {
-  const [custom, setCustom] = useState("");
   const [hotelQuery, setHotelQuery] = useState("");
   const defaults = derivePlanDefaults(plan);
   const selectedHotel = hotels.find((hotel) => hotel.id === plan.travel.selectedHotelId);
@@ -53,6 +42,9 @@ export function TravelServicesStep({
           .includes(normalizedHotelQuery),
       )
     : hotels;
+  const legacyConfiguredServices = plan.travel.includedServices.filter(
+    (service) => ![...serviceOptions, ...TRAVEL_SERVICES].includes(service),
+  );
   const update = (patch: Partial<DentalPlan["travel"]>) =>
     change({ travel: { ...plan.travel, ...patch } });
   const setService = (service: string, checked: boolean) => {
@@ -246,64 +238,16 @@ export function TravelServicesStep({
             </div>
             <ServiceGroup
               title="Clinical"
-              services={CLINICAL_SERVICES}
+              services={[...new Set([...serviceOptions, ...legacyConfiguredServices])]}
               selected={plan.travel.includedServices}
               onChange={setService}
             />
             <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
               Travel selections are controlled above and included automatically in this summary.
             </div>
-            <div className="flex gap-2">
-              <Input
-                value={custom}
-                onChange={(event) => setCustom(event.target.value)}
-                placeholder="Custom included service"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const value = custom.trim();
-                  if (!value) return;
-                  setService(value, true);
-                  setCustom("");
-                }}
-              >
-                <Plus className="size-4" /> Add
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {plan.travel.includedServices
-                .filter((item) => !KNOWN_SERVICES.includes(item))
-                .map((item) => (
-                  <Button
-                    key={item}
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setService(item, false)}
-                  >
-                    {item}
-                    <Trash2 className="size-3" />
-                  </Button>
-                ))}
-            </div>
-          </section>
-
-          <Separator />
-          <section aria-labelledby="clinic-notes-heading">
-            <h3 id="clinic-notes-heading" className="mb-3 flex items-center gap-2 font-semibold">
-              <LockKeyhole className="size-4" />
-              Clinic-only notes
-            </h3>
-            <Textarea
-              value={plan.travel.internalNotes ?? ""}
-              onChange={(event) => update({ internalNotes: event.target.value })}
-              rows={3}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Private clinic-only information. Never shown in the Patient View or preliminary
-              roadmaps.
+            <p className="text-xs text-muted-foreground">
+              Service choices are configured by the clinic. The planner only selects what is
+              included for this patient.
             </p>
           </section>
         </CardContent>

@@ -22,6 +22,11 @@ export function useToothSelection() {
   const selectAllUpper = useCallback(() => setSelected([...UPPER_TEETH]), []);
   const selectAllLower = useCallback(() => setSelected([...LOWER_TEETH]), []);
   const selectAll = useCallback(() => setSelected([...UPPER_TEETH, ...LOWER_TEETH]), []);
+  const selectBox = useCallback((teeth: ToothNumber[], additive: boolean) => {
+    setSelected((current) =>
+      additive ? [...new Set([...current, ...teeth])] : [...new Set(teeth)],
+    );
+  }, []);
   const beginDrag = useCallback((tooth: ToothNumber, additive: boolean) => {
     dragging.current = true;
     visited.current = new Set([tooth]);
@@ -50,6 +55,7 @@ export function useToothSelection() {
     selectAllUpper,
     selectAllLower,
     selectAll,
+    selectBox,
     beginDrag,
     enterDrag,
     endDrag,
