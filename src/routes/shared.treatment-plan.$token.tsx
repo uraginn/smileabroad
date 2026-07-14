@@ -657,15 +657,15 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
         {clinic.banner_url && (
           <img src={clinic.banner_url} alt="" className="size-full object-cover" />
         )}
-        <div className="absolute inset-0 bg-slate-950/60" />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 via-slate-950/35 to-slate-950/85" />
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/45 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-[72%] bg-gradient-to-b from-white via-white/95 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/70" />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-slate-950/55 to-transparent" />
       </div>
       <div className="relative mx-auto flex min-h-80 max-w-6xl flex-col items-center justify-end px-4 py-10 text-center sm:min-h-96 sm:px-6 sm:py-14">
         <div className="no-print absolute right-4 top-7 flex gap-2 sm:right-6">
           <Button
             size="sm"
-            className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20"
+            className="border-slate-900/10 bg-slate-950/70 text-white shadow-lg backdrop-blur-md hover:bg-slate-950/85"
             onClick={() => window.print()}
           >
             <Printer />
@@ -674,7 +674,7 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
           {clinic.website && (
             <Button
               size="sm"
-              className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20"
+              className="border-slate-900/10 bg-slate-950/70 text-white shadow-lg backdrop-blur-md hover:bg-slate-950/85"
               asChild
             >
               <a href={clinic.website} target="_blank" rel="noreferrer">
@@ -688,7 +688,8 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
           <img
             src={clinic.logo_url}
             alt={`${clinic.name} logo`}
-            className="mb-6 h-auto max-h-16 w-auto max-w-44 object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.35)] sm:max-h-20 sm:max-w-56"
+            className="mb-8 h-auto max-h-48 w-auto max-w-[min(100%,33rem)] object-contain sm:max-h-60 sm:max-w-[42rem]"
+            style={{ filter: "drop-shadow(0 2px 3px rgba(15,23,42,0.45))" }}
           />
         ) : (
           <span
