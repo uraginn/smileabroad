@@ -85,7 +85,7 @@ interface Store {
     patient: Omit<Patient, "id" | "created_at" | "updated_at" | "created_by">,
     createdBy?: string,
   ) => Patient;
-  updatePatient: (id: string, patch: Partial<Patient>) => void;
+  updatePatient: (id: string, patch: Partial<Patient>, changedBy?: string) => void;
   updatePatientAssignment: (
     id: string,
     clinicId: string,
@@ -138,7 +138,11 @@ interface Store {
     status: TreatmentPlanStatus,
     changedBy?: string,
   ) => void;
-  ensureTreatmentPlanShareToken: (id: string, clinicId: string) => string | undefined;
+  ensureTreatmentPlanShareToken: (
+    id: string,
+    clinicId: string,
+    changedBy?: string,
+  ) => string | undefined;
   markTreatmentPlanSent: (id: string, clinicId: string, changedBy?: string) => void;
   markTreatmentPlanViewed: (id: string, clinicId: string) => void;
   markTreatmentPlanAccepted: (id: string, clinicId: string) => void;
@@ -358,6 +362,14 @@ export const useMockStore = create<Store>()(
         );
         if (existing) return existing;
         const actor = get().users.find((item) => item.id === createdBy);
+        if (!actor && createdBy !== "system") throw new Error("Patient actor is unavailable.");
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          throw new Error("Patient creation is not permitted.");
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== patient.clinic_id)
           throw new Error("Patient clinic ownership mismatch.");
         const timestamp = now();
@@ -371,20 +383,51 @@ export const useMockStore = create<Store>()(
         set((s) => ({ patients: [...s.patients, rec] }));
         return rec;
       },
-      updatePatient: (id, patch) =>
-        set((s) => ({
-          patients: s.patients.map((patient) =>
-            patient.id === id
-              ? { ...patient, ...patch, id: patient.id, updated_at: now() }
-              : patient,
+      updatePatient: (id, patch, changedBy = "system") => {
+        const patient = get().patients.find((item) => item.id === id);
+        if (!patient) return;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== patient.clinic_id)
+          return;
+        set((state) => ({
+          patients: state.patients.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...patch,
+                  id: item.id,
+                  clinic_id: item.clinic_id,
+                  user_id: item.user_id,
+                  created_at: item.created_at,
+                  created_by: item.created_by,
+                  updated_at: now(),
+                }
+              : item,
           ),
-        })),
+        }));
+      },
       updatePatientAssignment: (id, clinicId, patch, changedBy = "system") => {
         const patient = get().patients.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
         if (!patient) return;
         const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
         const changes = [
           patient.coordinator_id !== patch.coordinator_id ? "coordinator" : undefined,
@@ -459,22 +502,31 @@ export const useMockStore = create<Store>()(
         contact,
       }) => {
         const state = get();
-        const assessment = state.assessments.find((a) => a.id === assessment_id);
-        const completedAssessment = assessment
-          ? {
-              ...assessment,
-              personal: {
-                ...assessment.personal,
-                first_name: contact?.first_name?.trim() || assessment.personal.first_name,
-                last_name: contact?.last_name?.trim() || assessment.personal.last_name,
-                email: contact?.email?.trim() || assessment.personal.email,
-                whatsapp: contact?.whatsapp?.trim() || assessment.personal.whatsapp,
-                preferred_contact_method:
-                  contact?.preferred_contact_method || assessment.personal.preferred_contact_method,
-              },
-              updated_at: now(),
-            }
-          : undefined;
+        const clinic = state.clinics.find((item) => item.id === clinic_id);
+        const assessment = state.assessments.find(
+          (item) => item.id === assessment_id && item.patient_user_id === patient_user_id,
+        );
+        const roadmap = state.roadmaps.find(
+          (item) =>
+            item.id === roadmap_id &&
+            item.assessment_id === assessment_id &&
+            item.patient_user_id === patient_user_id,
+        );
+        if (!clinic || !assessment || !roadmap)
+          throw new Error("Application journey context is unavailable.");
+        const completedAssessment = {
+          ...assessment,
+          personal: {
+            ...assessment.personal,
+            first_name: contact?.first_name?.trim() || assessment.personal.first_name,
+            last_name: contact?.last_name?.trim() || assessment.personal.last_name,
+            email: contact?.email?.trim() || assessment.personal.email,
+            whatsapp: contact?.whatsapp?.trim() || assessment.personal.whatsapp,
+            preferred_contact_method:
+              contact?.preferred_contact_method || assessment.personal.preferred_contact_method,
+          },
+          updated_at: now(),
+        };
         const existingPatient = state.patients.find(
           (patient) => patient.clinic_id === clinic_id && patient.user_id === patient_user_id,
         );
@@ -623,7 +675,35 @@ export const useMockStore = create<Store>()(
       },
       addLeadActivity: (activity) => {
         const actor = get().users.find((item) => item.id === activity.created_by);
-        if (actor?.role === "viewer") throw new Error("Communication logging is not permitted.");
+        if (!actor && activity.created_by !== "system")
+          throw new Error("Communication actor is unavailable.");
+        if (
+          actor &&
+          ![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role)
+        )
+          throw new Error("Communication logging is not permitted.");
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== activity.clinic_id)
+          throw new Error("Communication clinic ownership mismatch.");
+        const relatedLead = activity.lead_id
+          ? get().leads.find(
+              (item) => item.id === activity.lead_id && item.clinic_id === activity.clinic_id,
+            )
+          : undefined;
+        const relatedPatient = activity.patient_id
+          ? get().patients.find(
+              (item) => item.id === activity.patient_id && item.clinic_id === activity.clinic_id,
+            )
+          : undefined;
+        if (activity.lead_id && !relatedLead) throw new Error("Related lead is unavailable.");
+        if (activity.patient_id && !relatedPatient)
+          throw new Error("Related patient is unavailable.");
         const timestamp = now();
         const rec: LeadActivity = {
           ...activity,
@@ -643,6 +723,7 @@ export const useMockStore = create<Store>()(
       },
       updateLeadStatus: (id, status, changedBy = "system", reason) => {
         const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return;
         if (
           actor &&
           !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
@@ -652,6 +733,7 @@ export const useMockStore = create<Store>()(
           return;
         const lead = get().leads.find((item) => item.id === id);
         if (!lead || lead.status === status) return;
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== lead.clinic_id) return;
         const timestamp = now();
         const activity: LeadActivity = {
           id: makeId("activity"),
@@ -696,15 +778,27 @@ export const useMockStore = create<Store>()(
       },
       addTreatmentPlan: (tp, createdBy = "system") => {
         const actor = get().users.find((user) => user.id === createdBy);
+        if (!actor && createdBy !== "system")
+          throw new Error("Treatment Plan actor is unavailable.");
         if (
           actor &&
-          !["clinic_owner", "clinic_admin", "coordinator", "dentist", "platform_admin"].includes(
-            actor.role,
-          )
+          !["clinic_owner", "clinic_admin", "coordinator", "platform_admin"].includes(actor.role)
         )
           throw new Error("Treatment Plan creation is not permitted.");
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== tp.clinic_id) {
           throw new Error("Treatment plan clinic ownership mismatch.");
+        }
+        const clinicPatient = get().patients.find(
+          (item) =>
+            item.clinic_id === tp.clinic_id &&
+            (item.id === tp.clinic_patient_id || item.user_id === tp.patient_user_id),
+        );
+        if (!clinicPatient)
+          throw new Error("Treatment Plan patient is unavailable for this clinic.");
+        for (const assignedUserId of [tp.dentist_id, tp.coordinator_id].filter(Boolean)) {
+          const assignedUser = get().users.find((item) => item.id === assignedUserId);
+          if (!assignedUser || assignedUser.clinic_id !== tp.clinic_id)
+            throw new Error("Treatment Plan assignment is unavailable for this clinic.");
         }
         const lead = get().leads.find(
           (item) =>
@@ -713,6 +807,8 @@ export const useMockStore = create<Store>()(
               item.clinic_patient_id === tp.clinic_patient_id ||
               item.patient_user_id === tp.patient_user_id),
         );
+        if (tp.lead_id && lead?.id !== tp.lead_id)
+          throw new Error("Treatment Plan lead is unavailable for this clinic.");
         const existingPlan = get().treatmentPlans.find(
           (plan) =>
             plan.clinic_id === tp.clinic_id &&
@@ -730,9 +826,20 @@ export const useMockStore = create<Store>()(
             item.clinic_id === tp.clinic_id &&
             (item.id === tp.clinic_application_id || item.id === lead?.clinic_application_id),
         );
+        if (tp.clinic_application_id && application?.id !== tp.clinic_application_id)
+          throw new Error("Treatment Plan application is unavailable for this clinic.");
         const roadmap = get().roadmaps.find(
           (item) => item.id === (tp.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id),
         );
+        if (roadmap && roadmap.patient_user_id !== tp.patient_user_id)
+          throw new Error("Treatment Plan Roadmap identity mismatch.");
+        if (
+          tp.assessment_id &&
+          !get().assessments.some(
+            (item) => item.id === tp.assessment_id && item.patient_user_id === tp.patient_user_id,
+          )
+        )
+          throw new Error("Treatment Plan Assessment identity mismatch.");
         const rec: TreatmentPlan = {
           ...tp,
           lead_id: tp.lead_id ?? lead?.id,
@@ -746,7 +853,7 @@ export const useMockStore = create<Store>()(
           price_items: dedupeTreatmentPlanPriceItems(tp.price_items ?? []),
           included_services: tp.included_services ?? [],
           excluded_services: tp.excluded_services ?? [],
-          payment_schedule: tp.payment_schedule ?? [],
+          payment_schedule: normalizePlanPaymentSchedule(tp.payment_schedule),
           currency: tp.currency ?? "EUR",
           hotel_total: tp.hotel_total ?? 0,
           transfer_total: tp.transfer_total ?? 0,
@@ -806,6 +913,7 @@ export const useMockStore = create<Store>()(
         const plan = get().treatmentPlans.find((item) => item.id === id);
         if (!plan) return;
         const actor = get().users.find((user) => user.id === changedBy);
+        if (!actor && !["system", "patient_shared"].includes(changedBy)) return;
         if (
           actor &&
           !["clinic_owner", "clinic_admin", "coordinator", "dentist", "platform_admin"].includes(
@@ -814,6 +922,54 @@ export const useMockStore = create<Store>()(
         )
           return;
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== plan.clinic_id) return;
+        if (
+          [
+            "id",
+            "clinic_id",
+            "clinic_patient_id",
+            "patient_user_id",
+            "created_at",
+            "created_by",
+          ].some((key) => key in patch)
+        )
+          return;
+        for (const assignedUserId of [patch.dentist_id, patch.coordinator_id].filter(Boolean)) {
+          const assignedUser = get().users.find((item) => item.id === assignedUserId);
+          if (!assignedUser || assignedUser.clinic_id !== plan.clinic_id) return;
+        }
+        if (
+          actor?.role === "dentist" &&
+          [
+            "title",
+            "dentist_id",
+            "coordinator_id",
+            "currency",
+            "price_items",
+            "hotel_total",
+            "transfer_total",
+            "optional_service_total",
+            "discount_type",
+            "discount_value",
+            "calculated_discount",
+            "payment_schedule",
+            "valid_until",
+            "included_services",
+            "excluded_services",
+            "patient_facing_notes",
+            "share_token",
+            "shared_at",
+          ].some((key) => key in patch)
+        )
+          return;
+        if (
+          actor?.role === "dentist" &&
+          patch.status &&
+          !["draft", "doctor_review", "approved"].includes(
+            normalizeTreatmentPlanStatus(patch.status),
+          )
+        )
+          return;
+        if (actor?.role === "coordinator" && patch.status === "approved") return;
         const timestamp = now();
         const statusChanged = patch.status && patch.status !== (plan.status ?? "draft");
         const lead = statusChanged
@@ -881,13 +1037,22 @@ export const useMockStore = create<Store>()(
         if (!canTransitionTreatmentPlanStatus(plan.status, status)) return;
         get().updateTreatmentPlan(id, { status }, changedBy);
       },
-      ensureTreatmentPlanShareToken: (id, clinicId) => {
+      ensureTreatmentPlanShareToken: (id, clinicId, changedBy = "system") => {
         const plan = get().treatmentPlans.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
         if (!plan) return undefined;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return undefined;
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "platform_admin"].includes(actor.role)
+        )
+          return undefined;
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId)
+          return undefined;
         const token = plan.share_token ?? makeShareToken();
-        if (!plan.share_token) get().updateTreatmentPlan(id, { share_token: token });
+        if (!plan.share_token) get().updateTreatmentPlan(id, { share_token: token }, changedBy);
         return token;
       },
       markTreatmentPlanSent: (id, clinicId, changedBy = "system") => {
@@ -895,7 +1060,7 @@ export const useMockStore = create<Store>()(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
         if (!plan || !canTransitionTreatmentPlanStatus(plan.status, "sent")) return;
-        const token = get().ensureTreatmentPlanShareToken(id, clinicId);
+        const token = get().ensureTreatmentPlanShareToken(id, clinicId, changedBy);
         if (!token) return;
         const timestamp = now();
         get().updateTreatmentPlan(id, { status: "sent", shared_at: timestamp }, changedBy);
@@ -929,7 +1094,51 @@ export const useMockStore = create<Store>()(
         })),
       addTask: (task, createdBy = "system") => {
         const actor = get().users.find((item) => item.id === createdBy);
-        if (actor?.role === "viewer") throw new Error("Task creation is not permitted.");
+        if (!actor && createdBy !== "system") throw new Error("Task actor is unavailable.");
+        if (
+          actor &&
+          ![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role)
+        )
+          throw new Error("Task creation is not permitted.");
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== task.clinic_id)
+          throw new Error("Task clinic ownership mismatch.");
+        const assignedTaskUserId = task.assigned_user_id ?? task.assigned_to;
+        if (
+          assignedTaskUserId &&
+          !get().users.some(
+            (item) => item.id === assignedTaskUserId && item.clinic_id === task.clinic_id,
+          )
+        )
+          throw new Error("Task assignee is unavailable for this clinic.");
+        const taskPatientId = task.patient_id ?? task.patient_user_id;
+        if (
+          task.lead_id &&
+          !get().leads.some((item) => item.id === task.lead_id && item.clinic_id === task.clinic_id)
+        )
+          throw new Error("Task lead is unavailable for this clinic.");
+        if (
+          taskPatientId &&
+          !get().patients.some(
+            (item) =>
+              (item.id === taskPatientId || item.user_id === taskPatientId) &&
+              item.clinic_id === task.clinic_id,
+          )
+        )
+          throw new Error("Task patient is unavailable for this clinic.");
+        if (
+          task.treatment_plan_id &&
+          !get().treatmentPlans.some(
+            (item) => item.id === task.treatment_plan_id && item.clinic_id === task.clinic_id,
+          )
+        )
+          throw new Error("Task Treatment Plan is unavailable for this clinic.");
         const timestamp = now();
         const rec: Task = {
           ...task,
@@ -975,6 +1184,21 @@ export const useMockStore = create<Store>()(
       toggleTask: (id, changedBy = "system") => {
         const task = get().tasks.find((item) => item.id === id);
         if (!task) return;
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          (![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role) ||
+            (actor.role !== "platform_admin" && actor.clinic_id !== task.clinic_id))
+        )
+          return;
         const timestamp = now();
         const done = !task.done;
         const activity: LeadActivity | undefined = task.lead_id
@@ -1014,9 +1238,28 @@ export const useMockStore = create<Store>()(
       },
       updateTask: (id, clinicId, patch, changedBy = "system") => {
         const actor = get().users.find((item) => item.id === changedBy);
-        if (actor?.role === "viewer") return;
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          (![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role) ||
+            (actor.role !== "platform_admin" && actor.clinic_id !== clinicId))
+        )
+          return;
         const task = get().tasks.find((item) => item.id === id && item.clinic_id === clinicId);
         if (!task) return;
+        const assignedTaskUserId = patch.assigned_user_id ?? patch.assigned_to;
+        if (
+          assignedTaskUserId &&
+          !get().users.some((item) => item.id === assignedTaskUserId && item.clinic_id === clinicId)
+        )
+          return;
         const timestamp = now();
         const completing = patch.task_status === "completed" && task.task_status !== "completed";
         set((state) => ({
@@ -1025,6 +1268,10 @@ export const useMockStore = create<Store>()(
               ? {
                   ...item,
                   ...patch,
+                  id: item.id,
+                  clinic_id: item.clinic_id,
+                  created_at: item.created_at,
+                  created_by: item.created_by,
                   assigned_to: patch.assigned_user_id ?? patch.assigned_to ?? item.assigned_to,
                   assigned_user_id:
                     patch.assigned_user_id ?? patch.assigned_to ?? item.assigned_user_id,
@@ -1058,7 +1305,53 @@ export const useMockStore = create<Store>()(
       },
       addAppointment: (record, createdBy = "system") => {
         const actor = get().users.find((item) => item.id === createdBy);
-        if (actor?.role === "viewer") throw new Error("Appointment creation is not permitted.");
+        if (!actor && createdBy !== "system") throw new Error("Appointment actor is unavailable.");
+        if (
+          actor &&
+          ![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role)
+        )
+          throw new Error("Appointment creation is not permitted.");
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== record.clinic_id)
+          throw new Error("Appointment clinic ownership mismatch.");
+        for (const assignedUserId of [record.dentist_id, record.coordinator_id].filter(Boolean)) {
+          if (
+            !get().users.some(
+              (item) => item.id === assignedUserId && item.clinic_id === record.clinic_id,
+            )
+          )
+            throw new Error("Appointment assignee is unavailable for this clinic.");
+        }
+        const appointmentPatientId = record.patient_id ?? record.patient_user_id;
+        if (
+          record.lead_id &&
+          !get().leads.some(
+            (item) => item.id === record.lead_id && item.clinic_id === record.clinic_id,
+          )
+        )
+          throw new Error("Appointment lead is unavailable for this clinic.");
+        if (
+          appointmentPatientId &&
+          !get().patients.some(
+            (item) =>
+              (item.id === appointmentPatientId || item.user_id === appointmentPatientId) &&
+              item.clinic_id === record.clinic_id,
+          )
+        )
+          throw new Error("Appointment patient is unavailable for this clinic.");
+        if (
+          record.treatment_plan_id &&
+          !get().treatmentPlans.some(
+            (item) => item.id === record.treatment_plan_id && item.clinic_id === record.clinic_id,
+          )
+        )
+          throw new Error("Appointment Treatment Plan is unavailable for this clinic.");
         const timestamp = now();
         const rec: Appointment = {
           ...record,
@@ -1091,11 +1384,30 @@ export const useMockStore = create<Store>()(
       },
       updateAppointment: (id, clinicId, patch, changedBy = "system") => {
         const actor = get().users.find((item) => item.id === changedBy);
-        if (actor?.role === "viewer") return;
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          (![
+            "clinic_owner",
+            "clinic_admin",
+            "coordinator",
+            "dentist",
+            "sales",
+            "platform_admin",
+          ].includes(actor.role) ||
+            (actor.role !== "platform_admin" && actor.clinic_id !== clinicId))
+        )
+          return;
         const appointment = get().appointments.find(
           (item) => item.id === id && item.clinic_id === clinicId,
         );
         if (!appointment) return;
+        for (const assignedUserId of [patch.dentist_id, patch.coordinator_id].filter(Boolean)) {
+          if (
+            !get().users.some((item) => item.id === assignedUserId && item.clinic_id === clinicId)
+          )
+            return;
+        }
         const timestamp = now();
         const statusChanged =
           patch.appointment_status && patch.appointment_status !== appointment.appointment_status;
@@ -1106,6 +1418,10 @@ export const useMockStore = create<Store>()(
               ? {
                   ...item,
                   ...patch,
+                  id: item.id,
+                  clinic_id: item.clinic_id,
+                  created_at: item.created_at,
+                  created_by: item.created_by,
                   start_at: patch.starts_at ?? patch.start_at ?? item.start_at,
                   updated_at: timestamp,
                 }
@@ -1268,8 +1584,23 @@ export const useMockStore = create<Store>()(
         );
         if (!lead) throw new Error("Lead is unavailable for this clinic.");
         const actor = get().users.find((item) => item.id === createdBy);
+        if (!actor && createdBy !== "system") throw new Error("Follow-up actor is unavailable.");
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          throw new Error("Follow-up scheduling is not permitted.");
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== record.clinic_id)
           throw new Error("Follow-up clinic ownership mismatch.");
+        if (
+          record.assigned_user_id &&
+          !get().users.some(
+            (item) => item.id === record.assigned_user_id && item.clinic_id === record.clinic_id,
+          )
+        )
+          throw new Error("Follow-up assignee is unavailable for this clinic.");
         const duplicate = get().followUps.find(
           (item) =>
             item.clinic_id === record.clinic_id &&
@@ -1318,6 +1649,14 @@ export const useMockStore = create<Store>()(
         );
         if (!followUp || followUp.status !== "pending") return;
         const actor = get().users.find((item) => item.id === changedBy);
+        if (!actor && changedBy !== "system") return;
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "sales", "platform_admin"].includes(
+            actor.role,
+          )
+        )
+          return;
         if (actor && actor.role !== "platform_admin" && actor.clinic_id !== clinicId) return;
         const timestamp = now();
         const activity: LeadActivity = {
@@ -1501,7 +1840,7 @@ export const useMockStore = create<Store>()(
     }),
     {
       name: "smileabroad-mock-v1",
-      version: 20,
+      version: 21,
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1596,7 +1935,7 @@ export const useMockStore = create<Store>()(
                 }))
               : [],
             price_items: dedupeTreatmentPlanPriceItems(plan.price_items ?? []),
-            payment_schedule: Array.isArray(plan.payment_schedule) ? plan.payment_schedule : [],
+            payment_schedule: normalizePlanPaymentSchedule(plan.payment_schedule),
             included_services: Array.isArray(plan.included_services) ? plan.included_services : [],
             excluded_services: Array.isArray(plan.excluded_services) ? plan.excluded_services : [],
             currency: plan.currency ?? "EUR",
@@ -1715,16 +2054,14 @@ export const useMockStore = create<Store>()(
           })),
           users: [
             ...(state.users ?? seedUsers).map((member) => {
-              const normalized =
-                member.role === "sales" ? { ...member, role: "coordinator" as const } : member;
-              return normalized.id === "u_owner"
-                ? { ...normalized, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
-                : normalized;
+              return member.id === "u_owner"
+                ? { ...member, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
+                : member;
             }),
             ...seedUsers.filter(
               (seedUser) =>
-                ["dentist", "viewer"].includes(seedUser.role) &&
-                !(state.users ?? []).some((member) => member.id === seedUser.id),
+                ["dentist", "viewer", "sales", "clinic_admin"].includes(seedUser.role) &&
+                !(state.users ?? seedUsers).some((member) => member.id === seedUser.id),
             ),
           ],
           branding: (state.branding ?? seedBranding).map((item) => ({
@@ -1793,6 +2130,20 @@ export const useMockStore = create<Store>()(
     },
   ),
 );
+
+function normalizePlanPaymentSchedule(schedule: TreatmentPlan["payment_schedule"]) {
+  if (!Array.isArray(schedule)) return [];
+  const rows = schedule.map((item, index) => ({
+    ...item,
+    label: index === 0 ? "Visit 1" : index === 1 ? "Visit 2" : item.label,
+    amount: Number.isFinite(item.amount) ? Math.max(0, item.amount) : 0,
+  }));
+  if (rows.length <= 2) return rows;
+  const extraAmount = rows.slice(2).reduce((sum, item) => sum + item.amount, 0);
+  return rows
+    .slice(0, 2)
+    .map((item, index) => (index === 1 ? { ...item, amount: item.amount + extraAmount } : item));
+}
 
 export function useMockStoreHydrated() {
   const [hydrated, setHydrated] = useState(false);

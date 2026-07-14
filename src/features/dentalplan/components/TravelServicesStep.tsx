@@ -45,17 +45,20 @@ export function TravelServicesStep({
   change,
   hotels = [],
   serviceOptions = DEFAULT_CLINICAL_SERVICES,
+  readOnly,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
   hotels?: HotelOption[];
   serviceOptions?: string[];
+  readOnly?: boolean;
 }) {
   const defaults = derivePlanDefaults(plan);
   const selectedHotel = hotels.find((hotel) => hotel.id === plan.travel.selectedHotelId);
   const defaultHotel = hotels.find((hotel) => hotel.isDefault) ?? hotels[0];
-  const update = (patch: Partial<DentalPlan["travel"]>) =>
-    change({ travel: { ...plan.travel, ...patch } });
+  const update = (patch: Partial<DentalPlan["travel"]>) => {
+    if (!readOnly) change({ travel: { ...plan.travel, ...patch } });
+  };
   const setService = (service: string, checked: boolean) => {
     const includedServices = checked
       ? [...new Set([...plan.travel.includedServices, service])]
@@ -73,6 +76,7 @@ export function TravelServicesStep({
     });
   };
   const chooseHotel = (hotelId: string, extra: Partial<DentalPlan["travel"]> = {}) => {
+    if (readOnly) return;
     const hotel = hotels.find((item) => item.id === hotelId);
     if (!hotel) return;
     const hotelNights = plan.travel.hotelNights || hotel.defaultNights;
@@ -101,135 +105,139 @@ export function TravelServicesStep({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
-        <span>
-          Suggested package: <b>{defaults.recommendedVisits} visit(s)</b> ·{" "}
-          {defaults.healingPeriodSummary.toLowerCase()}
-        </span>
-        <Badge variant="outline">Confirm clinically</Badge>
-      </div>
-      <Card>
-        <CardContent className="p-3 sm:p-5">
-          <Accordion type="multiple" defaultValue={["accommodation"]}>
-            <AccordionItem value="accommodation">
-              <AccordionTrigger>
-                <SectionTitle
-                  title="Accommodation"
-                  detail={
-                    plan.travel.hotelIncluded ? plan.travel.hotelName || "Included" : "Not included"
-                  }
-                />
-              </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
-                <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                  <span>
-                    <span className="block font-medium">Include accommodation</span>
-                    <span className="text-xs text-muted-foreground">
-                      Add a clinic-configured hotel to this package.
-                    </span>
-                  </span>
-                  <Switch
-                    checked={plan.travel.hotelIncluded}
-                    onCheckedChange={(hotelIncluded) => {
-                      if (hotelIncluded && !selectedHotel && defaultHotel)
-                        chooseHotel(defaultHotel.id, { hotelIncluded, hotelRequired: true });
-                      else update({ hotelIncluded, hotelRequired: hotelIncluded });
-                    }}
+      <fieldset disabled={readOnly} className="contents">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+          <span>
+            Suggested package: <b>{defaults.recommendedVisits} visit(s)</b> ·{" "}
+            {defaults.healingPeriodSummary.toLowerCase()}
+          </span>
+          <Badge variant="outline">Confirm clinically</Badge>
+        </div>
+        <Card>
+          <CardContent className="p-3 sm:p-5">
+            <Accordion type="multiple" defaultValue={["accommodation"]}>
+              <AccordionItem value="accommodation">
+                <AccordionTrigger>
+                  <SectionTitle
+                    title="Accommodation"
+                    detail={
+                      plan.travel.hotelIncluded
+                        ? plan.travel.hotelName || "Included"
+                        : "Not included"
+                    }
                   />
-                </label>
-                {plan.travel.hotelIncluded && (
-                  <>
-                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                      <Field label="Hotel">
-                        {hotels.length ? (
-                          <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select hotel" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {hotels.map((hotel) => (
-                                <SelectItem key={hotel.id} value={hotel.id}>
-                                  {hotel.name}
-                                  {hotel.isDefault ? " · Default" : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <p className="rounded-md border p-2 text-sm text-muted-foreground">
-                            {plan.travel.hotelName || "No hotels configured in CRM Settings."}
-                          </p>
-                        )}
-                      </Field>
-                      <Field label="Nights">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={plan.travel.hotelNights}
-                          onChange={(event) => {
-                            const hotelNights = Math.max(0, Number(event.target.value));
-                            change({
-                              travel: { ...plan.travel, hotelNights },
-                              commercial: {
-                                ...plan.commercial,
-                                hotelTotal: (selectedHotel?.pricePerNight ?? 0) * hotelNights,
-                              },
-                            });
-                          }}
-                        />
-                      </Field>
-                    </div>
-                    {selectedHotel && <HotelPreview hotel={selectedHotel} />}
-                  </>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="transfers">
-              <AccordionTrigger>
-                <SectionTitle title="Transfers" detail={transferSummary(plan)} />
-              </AccordionTrigger>
-              <AccordionContent className="grid gap-3 pt-2 sm:grid-cols-3">
-                <ServiceSwitch
-                  label="Airport"
-                  description="Pickup and drop-off"
-                  checked={plan.travel.includedServices.includes("Airport Transfer")}
-                  onChange={(checked) => setService("Airport Transfer", checked)}
-                />
-                <ServiceSwitch
-                  label="Hotel"
-                  description="Hotel and clinic travel"
-                  checked={plan.travel.includedServices.includes("Hotel Transfer")}
-                  onChange={(checked) => setService("Hotel Transfer", checked)}
-                />
-                <ServiceSwitch
-                  label="Flight"
-                  description="Flight cost included"
-                  checked={plan.travel.includedServices.includes("Flight Included")}
-                  onChange={(checked) => setService("Flight Included", checked)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="services">
-              <AccordionTrigger>
-                <SectionTitle
-                  title="Included Services"
-                  detail={`${plan.travel.includedServices.filter((item) => !TRAVEL_SERVICES.includes(item)).length} selected`}
-                />
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 pt-2">
-                <ServiceMultiSelect
-                  options={selectableServices}
-                  selected={plan.travel.includedServices}
-                  onChange={setService}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Service options are managed in Dental Planner Settings.
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </CardContent>
-      </Card>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pt-2">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                    <span>
+                      <span className="block font-medium">Include accommodation</span>
+                      <span className="text-xs text-muted-foreground">
+                        Add a clinic-configured hotel to this package.
+                      </span>
+                    </span>
+                    <Switch
+                      checked={plan.travel.hotelIncluded}
+                      onCheckedChange={(hotelIncluded) => {
+                        if (hotelIncluded && !selectedHotel && defaultHotel)
+                          chooseHotel(defaultHotel.id, { hotelIncluded, hotelRequired: true });
+                        else update({ hotelIncluded, hotelRequired: hotelIncluded });
+                      }}
+                    />
+                  </label>
+                  {plan.travel.hotelIncluded && (
+                    <>
+                      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                        <Field label="Hotel">
+                          {hotels.length ? (
+                            <Select value={selectedHotel?.id} onValueChange={chooseHotel}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select hotel" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {hotels.map((hotel) => (
+                                  <SelectItem key={hotel.id} value={hotel.id}>
+                                    {hotel.name}
+                                    {hotel.isDefault ? " · Default" : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="rounded-md border p-2 text-sm text-muted-foreground">
+                              {plan.travel.hotelName || "No hotels configured in CRM Settings."}
+                            </p>
+                          )}
+                        </Field>
+                        <Field label="Nights">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={plan.travel.hotelNights}
+                            onChange={(event) => {
+                              const hotelNights = Math.max(0, Number(event.target.value));
+                              change({
+                                travel: { ...plan.travel, hotelNights },
+                                commercial: {
+                                  ...plan.commercial,
+                                  hotelTotal: (selectedHotel?.pricePerNight ?? 0) * hotelNights,
+                                },
+                              });
+                            }}
+                          />
+                        </Field>
+                      </div>
+                      {selectedHotel && <HotelPreview hotel={selectedHotel} />}
+                    </>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="transfers">
+                <AccordionTrigger>
+                  <SectionTitle title="Transfers" detail={transferSummary(plan)} />
+                </AccordionTrigger>
+                <AccordionContent className="grid gap-3 pt-2 sm:grid-cols-3">
+                  <ServiceSwitch
+                    label="Airport"
+                    description="Pickup and drop-off"
+                    checked={plan.travel.includedServices.includes("Airport Transfer")}
+                    onChange={(checked) => setService("Airport Transfer", checked)}
+                  />
+                  <ServiceSwitch
+                    label="Hotel"
+                    description="Hotel and clinic travel"
+                    checked={plan.travel.includedServices.includes("Hotel Transfer")}
+                    onChange={(checked) => setService("Hotel Transfer", checked)}
+                  />
+                  <ServiceSwitch
+                    label="Flight"
+                    description="Flight cost included"
+                    checked={plan.travel.includedServices.includes("Flight Included")}
+                    onChange={(checked) => setService("Flight Included", checked)}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="services">
+                <AccordionTrigger>
+                  <SectionTitle
+                    title="Included Services"
+                    detail={`${plan.travel.includedServices.filter((item) => !TRAVEL_SERVICES.includes(item)).length} selected`}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3 pt-2">
+                  <ServiceMultiSelect
+                    options={selectableServices}
+                    selected={plan.travel.includedServices}
+                    onChange={setService}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Service options are managed in Dental Planner Settings.
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+      </fieldset>
     </div>
   );
 }

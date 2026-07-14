@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ClinicCard } from "@/components/clinic-card";
+import { PageLoading } from "@/components/ui-bits";
 import {
   PlanDisclaimer,
   PlanDocumentHeader,
@@ -36,7 +37,7 @@ function RoadmapPage() {
     state.assessments.find((item) => item.id === roadmap?.assessment_id),
   );
   const treatmentContent = useMockStore((state) => state.roadmapTreatmentContent);
-  if (!hydrated) return null;
+  if (!hydrated) return <PageLoading label="Loading Roadmap" />;
   if (!roadmap || !assessment) throw notFound();
   const recommended = clinics.filter((clinic) =>
     roadmap.recommended_clinic_ids.includes(clinic.id),
@@ -386,7 +387,7 @@ function RoadmapPage() {
         )}
         <PlanSection
           title="Questions to ask your clinic"
-          description="Use these questions when comparing a confirmed plan and Quote."
+          description="Use these questions when comparing a confirmed Treatment Plan."
           className="mb-6"
         >
           <div className="grid gap-2 text-sm sm:grid-cols-2">
@@ -437,7 +438,7 @@ function RoadmapPage() {
                 <li>Prepared or approved by a dentist</li>
                 <li>Follows clinical examination and diagnostic review</li>
                 <li>May contain tooth-level procedures and materials</li>
-                <li>Includes confirmed pricing, visits and Quote details</li>
+                <li>Includes confirmed pricing, visits and package details</li>
               </ul>
             </div>
           </div>
@@ -457,7 +458,7 @@ function RoadmapPage() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Review this Roadmap, compare clinics, select a clinic, submit your information and
-              receive a dentist-reviewed treatment plan and Quote.
+              receive a dentist-reviewed Treatment Plan.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

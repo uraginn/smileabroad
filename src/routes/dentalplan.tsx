@@ -1,9 +1,9 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { DentalPlanStudio, createDentalPlan } from "@/features/dentalplan";
 import type { DentalPlanData, TreatmentType } from "@/features/dentalplan";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
-import { useAuth } from "@/lib/auth/mock-auth";
+import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { canUser } from "@/lib/auth/permissions";
 import { treatmentLabel } from "@/lib/dental";
 import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaults";
@@ -11,6 +11,7 @@ import { calculateCommercial } from "@/features/dentalplan/utils/commercial";
 import { UnifiedPlanShareSection } from "@/features/dentalplan/components/UnifiedPlanShareSection";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
+import { PageLoading } from "@/components/ui-bits";
 
 type Search = {
   patientId?: string;
@@ -56,6 +57,7 @@ function DentalPlanRoute() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
+  const authHydrated = useAuthHydrated();
   const hydrated = useMockStoreHydrated();
   const patients = useMockStore((state) => state.patients);
   const plans = useMockStore((state) => state.treatmentPlans);
@@ -124,6 +126,11 @@ function DentalPlanRoute() {
   );
   const canViewPlans = canUser(user, "treatment_plans.view");
   const canEditClinical = canUser(user, "treatment_plans.edit_clinical");
+  const canEditCommercial = canUser(user, "treatment_plans.edit_commercial");
+  const canCreatePlans = canUser(user, "treatment_plans.create");
+  const canManageTemplates = canUser(user, "settings.dental_planner");
+  const canManagePatients = canUser(user, "patients.manage");
+  const canSharePlans = canUser(user, "treatment_plans.share");
   const caseFiles = useMemo(
     () =>
       [
@@ -325,10 +332,23 @@ function DentalPlanRoute() {
     templateMode,
     activeTemplate,
   ]);
-  if (hydrated && templateMode && !activeTemplate)
+  if (!hydrated || !authHydrated) return <PageLoading label="Loading Treatment Plan" />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === "platform_admin" || !user.clinic_id)
+    return <Navigate to="/admin/dashboard" replace />;
+  if (!templateMode && !requestedCrmContext) return <Navigate to="/pro/treatment-plans" replace />;
+  if (templateMode && !canManageTemplates)
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Template access unavailable</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your clinic role does not include Dental Planner settings access.
+        </p>
+      </div>
+    );
+  if (templateMode && !activeTemplate)
     return <div className="p-8">Template unavailable for the active clinic.</div>;
-  if (!hydrated && requestedCrmContext) return <div className="p-8">Loading CRM contextâ€¦</div>;
-  if (hydrated && requestedCrmContext && user && !canViewPlans)
+  if (requestedCrmContext && !canViewPlans)
     return (
       <div className="p-8">
         <h1 className="text-lg font-semibold">Planner access unavailable</h1>
@@ -337,7 +357,7 @@ function DentalPlanRoute() {
         </p>
       </div>
     );
-  if (hydrated && requestedCrmContext && !crmMode)
+  if (requestedCrmContext && !crmMode)
     return (
       <div className="p-8">
         <h1 className="text-lg font-semibold">Planner context unavailable</h1>
@@ -348,14 +368,18 @@ function DentalPlanRoute() {
     );
   const saveDraft = (value: DentalPlanData) => {
     if (!existingPlan || !user?.clinic_id || !canEditClinical) return;
-    if (patient)
-      updatePatient(patient.id, {
-        first_name: value.patient.firstName,
-        last_name: value.patient.lastName,
-        email: value.patient.email || undefined,
-        country: value.patient.country || undefined,
-        language: value.patient.preferredLanguage || undefined,
-      });
+    if (patient && canManagePatients)
+      updatePatient(
+        patient.id,
+        {
+          first_name: value.patient.firstName,
+          last_name: value.patient.lastName,
+          email: value.patient.email || undefined,
+          country: value.patient.country || undefined,
+          language: value.patient.preferredLanguage || undefined,
+        },
+        user.id,
+      );
     const draftItems: TreatmentPlanItem[] = value.proposedTreatments.flatMap((treatment) =>
       treatment.toothNumbers.map((tooth) => ({
         id: `dpi_${treatment.id}_${tooth}`,
@@ -367,49 +391,76 @@ function DentalPlanRoute() {
       })),
     );
     const totals = calculateCommercial(value.commercial);
+    const persistedData = existingPlan.dental_plan_data as DentalPlanData | undefined;
+    const safePlanData: DentalPlanData = {
+      ...value,
+      patient: canManagePatients ? value.patient : (persistedData?.patient ?? value.patient),
+      patientName: canManagePatients
+        ? value.patientName
+        : (persistedData?.patientName ?? value.patientName),
+      commercial: canEditCommercial
+        ? value.commercial
+        : (persistedData?.commercial ?? value.commercial),
+      travel: canEditCommercial
+        ? value.travel
+        : {
+            ...(persistedData?.travel ?? value.travel),
+            internalNotes: value.travel.internalNotes,
+          },
+    };
     updatePlan(
       existingPlan.id,
       {
-        title: value.patient.planTitle,
+        ...(canManagePatients
+          ? {
+              title: value.patient.planTitle,
+              dentist_id: value.patient.dentistId,
+              coordinator_id: value.patient.coordinatorId,
+            }
+          : {}),
         items: draftItems,
-        dentist_id: value.patient.dentistId,
-        coordinator_id: value.patient.coordinatorId,
-        patient_facing_notes: value.travel.patientFacingNotes,
         internal_clinical_notes: value.travel.internalNotes,
-        dental_plan_data: value,
-        currency: value.commercial.currency,
-        price_items: value.commercial.items.map((item) => {
-          const treatment = value.proposedTreatments.find(
-            (candidate) => candidate.id === item.treatmentId,
-          );
-          return {
-            id: `price_${item.treatmentId}`,
-            label: item.label,
-            quantity: item.qty,
-            unit_price: item.unitPrice,
-            treatment_key: treatment?.treatmentType,
-            treatment_group_id: treatment?.treatmentGroupId,
-            manually_overridden: item.priceOverridden,
-          };
-        }),
-        hotel_total: value.commercial.hotelTotal,
-        transfer_total: value.commercial.transferTotal,
-        optional_service_total: value.commercial.otherServiceTotal,
-        discount_type: value.commercial.discountType,
-        discount_value: value.commercial.discountValue,
-        calculated_discount: totals.discount,
-        payment_schedule: value.commercial.paymentSchedule,
-        valid_until: value.commercial.validUntil,
-        included_services: value.travel.includedServices,
-        hotel_nights: value.travel.hotelIncluded ? value.travel.hotelNights : 0,
-        transfers_included: value.travel.airportTransfer || value.travel.localTransfer,
-        flight_included: value.travel.flightIncluded,
+        dental_plan_data: safePlanData,
+        ...(canEditCommercial
+          ? {
+              patient_facing_notes: value.travel.patientFacingNotes,
+              currency: value.commercial.currency,
+              price_items: value.commercial.items.map((item) => {
+                const treatment = value.proposedTreatments.find(
+                  (candidate) => candidate.id === item.treatmentId,
+                );
+                return {
+                  id: `price_${item.treatmentId}`,
+                  label: item.label,
+                  quantity: item.qty,
+                  unit_price: item.unitPrice,
+                  treatment_key: treatment?.treatmentType,
+                  treatment_group_id: treatment?.treatmentGroupId,
+                  manually_overridden: item.priceOverridden,
+                };
+              }),
+              hotel_total: value.commercial.hotelTotal,
+              transfer_total: value.commercial.transferTotal,
+              optional_service_total: value.commercial.otherServiceTotal,
+              discount_type: value.commercial.discountType,
+              discount_value: value.commercial.discountValue,
+              calculated_discount: totals.discount,
+              payment_schedule: value.commercial.paymentSchedule,
+              valid_until: value.commercial.validUntil,
+              included_services: value.travel.includedServices,
+              hotel_nights: value.travel.hotelIncluded ? value.travel.hotelNights : 0,
+              transfers_included: value.travel.airportTransfer || value.travel.localTransfer,
+              flight_included: value.travel.flightIncluded,
+            }
+          : {}),
       },
       user.id,
     );
   };
   const finalize = async (value: DentalPlanData) => {
     if (!canEditClinical) throw new Error("Your clinic role cannot modify Treatment Plans.");
+    if (!existingPlan && !canCreatePlans)
+      throw new Error("Your clinic role cannot create Treatment Plans.");
     if (!crmMode || !user?.clinic_id)
       throw new Error("A valid clinic patient or treatment-plan context is required.");
     let linkedPatient =
@@ -418,6 +469,8 @@ function DentalPlanRoute() {
         (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user.clinic_id,
       );
     if (!linkedPatient) {
+      if (!canManagePatients)
+        throw new Error("The linked clinic patient is unavailable for this Treatment Plan.");
       const normalizedEmail = value.patient.email?.trim().toLowerCase();
       const duplicate = patients.find(
         (item) =>
@@ -446,26 +499,48 @@ function DentalPlanRoute() {
           },
           user.id,
         );
-    } else
-      updatePatient(linkedPatient.id, {
-        first_name: value.patient.firstName,
-        last_name: value.patient.lastName,
-        email: value.patient.email ?? linkedPatient.email,
-        phone: value.patient.phone,
-        country: value.patient.country ?? linkedPatient.country,
-        city: value.patient.city,
-        date_of_birth: value.patient.dateOfBirth,
-        language: value.patient.preferredLanguage,
-        whatsapp: value.patient.whatsapp,
-      });
-    const items: TreatmentPlanItem[] = value.proposedTreatments.flatMap((treatment) =>
+    } else if (canManagePatients)
+      updatePatient(
+        linkedPatient.id,
+        {
+          first_name: value.patient.firstName,
+          last_name: value.patient.lastName,
+          email: value.patient.email ?? linkedPatient.email,
+          phone: value.patient.phone,
+          country: value.patient.country ?? linkedPatient.country,
+          city: value.patient.city,
+          date_of_birth: value.patient.dateOfBirth,
+          language: value.patient.preferredLanguage,
+          whatsapp: value.patient.whatsapp,
+        },
+        user.id,
+      );
+    const persistedData = existingPlan?.dental_plan_data as DentalPlanData | undefined;
+    const finalValue: DentalPlanData = {
+      ...value,
+      patient: canManagePatients ? value.patient : (persistedData?.patient ?? value.patient),
+      patientName: canManagePatients
+        ? value.patientName
+        : (persistedData?.patientName ?? value.patientName),
+      commercial: canEditCommercial
+        ? value.commercial
+        : (persistedData?.commercial ?? value.commercial),
+      travel: canEditCommercial
+        ? value.travel
+        : {
+            ...(persistedData?.travel ?? value.travel),
+            internalNotes: value.travel.internalNotes,
+          },
+    };
+    const items: TreatmentPlanItem[] = finalValue.proposedTreatments.flatMap((treatment) =>
       treatment.toothNumbers.map((tooth) => ({
         id: `dpi_${treatment.id}_${tooth}`,
         tooth,
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
         notes: treatment.notes,
         unit_price:
-          value.commercial.items.find((price) => price.treatmentId === treatment.id)?.unitPrice ??
+          finalValue.commercial.items.find((price) => price.treatmentId === treatment.id)
+            ?.unitPrice ??
           existingPlan?.items.find(
             (item) =>
               item.tooth === tooth &&
@@ -474,20 +549,24 @@ function DentalPlanRoute() {
           0,
       })),
     );
-    const defaults = derivePlanDefaults(value);
+    const defaults = derivePlanDefaults(finalValue);
     const patch = {
-      title: value.patient.planTitle,
-      summary: value.travel.patientFacingNotes ?? "Dental treatment plan",
+      ...(canManagePatients
+        ? {
+            title: finalValue.patient.planTitle,
+            dentist_id: finalValue.patient.dentistId,
+            coordinator_id: finalValue.patient.coordinatorId,
+          }
+        : {}),
+      summary: finalValue.travel.patientFacingNotes ?? "Dental treatment plan",
       items,
       visits: defaults.recommendedVisits,
       healing_weeks: defaults.recommendedHealingWeeks,
-      dentist_id: value.patient.dentistId,
-      coordinator_id: value.patient.coordinatorId,
-      patient_facing_notes: value.travel.patientFacingNotes,
-      internal_clinical_notes: value.travel.internalNotes,
+      ...(canEditCommercial ? { patient_facing_notes: finalValue.travel.patientFacingNotes } : {}),
+      internal_clinical_notes: finalValue.travel.internalNotes,
       treatment_timeline: `${defaults.visitDurationSummary}. ${defaults.healingPeriodSummary}.`,
-      dental_plan_data: value,
-      treatment_groups: value.treatmentGroups.map((group) => ({
+      dental_plan_data: finalValue,
+      treatment_groups: finalValue.treatmentGroups.map((group) => ({
         id: group.id,
         type: group.type,
         arch: group.arch,
@@ -502,10 +581,10 @@ function DentalPlanRoute() {
             clinic_id: user.clinic_id,
             patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
             clinic_patient_id: linkedPatient.id,
-            lead_id: value.patient.leadId,
-            clinic_application_id: value.patient.applicationId,
-            assessment_id: value.patient.assessmentId,
-            roadmap_id: value.patient.roadmapId,
+            lead_id: finalValue.patient.leadId,
+            clinic_application_id: finalValue.patient.applicationId,
+            assessment_id: finalValue.patient.assessmentId,
+            roadmap_id: finalValue.patient.roadmapId,
             status: "draft",
             clinical_findings: [],
             treatment_objectives: [],
@@ -517,11 +596,12 @@ function DentalPlanRoute() {
             treatment_stages: [],
             visit_plan: [],
             ...patch,
+            title: finalValue.patient.planTitle || "Dental treatment plan",
           },
           user.id,
         );
     const priceItems = items.map((item) => {
-      const customTreatment = value.proposedTreatments.find((treatment) =>
+      const customTreatment = finalValue.proposedTreatments.find((treatment) =>
         item.id.startsWith(`dpi_${treatment.id}_`),
       );
       return {
@@ -531,99 +611,103 @@ function DentalPlanRoute() {
         unit_price: item.unit_price,
       };
     });
-    if (value.commercial.otherServiceTotal > 0)
+    if (finalValue.commercial.otherServiceTotal > 0)
       priceItems.push({
         id: "qi_other_services",
         label: "Other services",
         qty: 1,
-        unit_price: value.commercial.otherServiceTotal,
+        unit_price: finalValue.commercial.otherServiceTotal,
       });
     const beforeDiscount =
       priceItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0) +
-      (value.travel.hotelIncluded ? value.commercial.hotelTotal : 0) +
-      (value.travel.includedServices.includes("Airport Transfer") ||
-      value.travel.includedServices.includes("Hotel Transfer")
-        ? value.commercial.transferTotal
+      (finalValue.travel.hotelIncluded ? finalValue.commercial.hotelTotal : 0) +
+      (finalValue.travel.includedServices.includes("Airport Transfer") ||
+      finalValue.travel.includedServices.includes("Hotel Transfer")
+        ? finalValue.commercial.transferTotal
         : 0) +
       0;
     const discount =
-      value.commercial.discountType === "percentage"
+      finalValue.commercial.discountType === "percentage"
         ? Math.min(
             beforeDiscount,
-            (beforeDiscount * Math.min(100, Math.max(0, value.commercial.discountValue))) / 100,
+            (beforeDiscount * Math.min(100, Math.max(0, finalValue.commercial.discountValue))) /
+              100,
           )
-        : value.commercial.discountType === "fixed"
-          ? Math.min(beforeDiscount, Math.max(0, value.commercial.discountValue))
+        : finalValue.commercial.discountType === "fixed"
+          ? Math.min(beforeDiscount, Math.max(0, finalValue.commercial.discountValue))
           : 0;
-    const hotelSummary = value.travel.hotelIncluded
-      ? `Hotel: ${value.travel.hotelName || "To be confirmed"} Â· ${value.travel.hotelNights} nights${value.travel.roomType ? ` Â· ${value.travel.roomType}` : ""}${value.travel.boardType ? ` Â· ${value.travel.boardType}` : ""}`
+    const hotelSummary = finalValue.travel.hotelIncluded
+      ? `Hotel: ${finalValue.travel.hotelName || "To be confirmed"} Â· ${finalValue.travel.hotelNights} nights${finalValue.travel.roomType ? ` Â· ${finalValue.travel.roomType}` : ""}${finalValue.travel.boardType ? ` Â· ${finalValue.travel.boardType}` : ""}`
       : undefined;
     const includedServices = [
-      ...value.travel.includedServices.filter((service) => !service.startsWith("Hotel: ")),
+      ...finalValue.travel.includedServices.filter((service) => !service.startsWith("Hotel: ")),
       ...(hotelSummary ? [hotelSummary] : []),
     ].filter((service, index, services) => services.indexOf(service) === index);
     const commercialPatch = {
       items: priceItems,
-      currency: value.commercial.currency,
-      hotel_total: value.travel.hotelIncluded ? value.commercial.hotelTotal : 0,
+      currency: finalValue.commercial.currency,
+      hotel_total: finalValue.travel.hotelIncluded ? finalValue.commercial.hotelTotal : 0,
       transfer_total:
-        value.travel.includedServices.includes("Airport Transfer") ||
-        value.travel.includedServices.includes("Hotel Transfer")
-          ? value.commercial.transferTotal
+        finalValue.travel.includedServices.includes("Airport Transfer") ||
+        finalValue.travel.includedServices.includes("Hotel Transfer")
+          ? finalValue.commercial.transferTotal
           : 0,
       discount,
-      payment_schedule: value.commercial.paymentSchedule.map(({ label, amount, due }) => ({
+      payment_schedule: finalValue.commercial.paymentSchedule.map(({ label, amount, due }) => ({
         label,
         amount,
         due,
       })),
-      valid_until: value.commercial.validUntil,
+      valid_until: finalValue.commercial.validUntil,
       included_services: includedServices,
     };
-    updatePlan(
-      plan.id,
-      {
-        currency: commercialPatch.currency,
-        price_items: value.commercial.items.map((item) => {
-          const treatment = value.proposedTreatments.find(
-            (candidate) => candidate.id === item.treatmentId,
-          );
-          return {
-            id: `price_${item.treatmentId}`,
-            label: item.label,
-            quantity: item.qty,
-            unit_price: item.unitPrice,
-            treatment_group_id: treatment?.treatmentGroupId,
-            treatment_key: treatment?.treatmentType,
-            manually_overridden: item.priceOverridden,
-          };
-        }),
-        hotel_total: commercialPatch.hotel_total,
-        transfer_total: commercialPatch.transfer_total,
-        optional_service_total: value.commercial.otherServiceTotal,
-        discount_type: value.commercial.discountType,
-        discount_value: value.commercial.discountValue,
-        calculated_discount: discount,
-        payment_schedule: commercialPatch.payment_schedule,
-        valid_until: commercialPatch.valid_until,
-        included_services: commercialPatch.included_services,
-        excluded_services: existingPlan?.excluded_services ?? [],
-        hotel_nights: value.travel.hotelIncluded ? value.travel.hotelNights : 0,
-        transfers_included:
-          value.travel.includedServices.includes("Airport Transfer") ||
-          value.travel.includedServices.includes("Hotel Transfer"),
-        flight_included: value.travel.includedServices.includes("Flight Included"),
-        prepared_at: existingPlan?.prepared_at ?? new Date().toISOString(),
-        patient_document_version: existingPlan?.patient_document_version ?? 1,
-      },
-      user.id,
-    );
+    if (canEditCommercial)
+      updatePlan(
+        plan.id,
+        {
+          currency: commercialPatch.currency,
+          price_items: finalValue.commercial.items.map((item) => {
+            const treatment = finalValue.proposedTreatments.find(
+              (candidate) => candidate.id === item.treatmentId,
+            );
+            return {
+              id: `price_${item.treatmentId}`,
+              label: item.label,
+              quantity: item.qty,
+              unit_price: item.unitPrice,
+              treatment_group_id: treatment?.treatmentGroupId,
+              treatment_key: treatment?.treatmentType,
+              manually_overridden: item.priceOverridden,
+            };
+          }),
+          hotel_total: commercialPatch.hotel_total,
+          transfer_total: commercialPatch.transfer_total,
+          optional_service_total: finalValue.commercial.otherServiceTotal,
+          discount_type: finalValue.commercial.discountType,
+          discount_value: finalValue.commercial.discountValue,
+          calculated_discount: discount,
+          payment_schedule: commercialPatch.payment_schedule,
+          valid_until: commercialPatch.valid_until,
+          included_services: commercialPatch.included_services,
+          excluded_services: existingPlan?.excluded_services ?? [],
+          hotel_nights: finalValue.travel.hotelIncluded ? finalValue.travel.hotelNights : 0,
+          transfers_included:
+            finalValue.travel.includedServices.includes("Airport Transfer") ||
+            finalValue.travel.includedServices.includes("Hotel Transfer"),
+          flight_included: finalValue.travel.includedServices.includes("Flight Included"),
+          prepared_at: existingPlan?.prepared_at ?? new Date().toISOString(),
+          patient_document_version: existingPlan?.patient_document_version ?? 1,
+        },
+        user.id,
+      );
     navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id }, replace: true });
     return { treatmentPlanId: plan.id };
   };
   return (
     <DentalPlanStudio
-      readOnly={requestedCrmContext && !canEditClinical}
+      readOnly={(requestedCrmContext && !canEditClinical) || (!existingPlan && !canCreatePlans)}
+      commercialReadOnly={!canEditCommercial}
+      caseReadOnly={!canManagePatients}
       context={{
         mode: templateMode ? "template" : crmMode ? "crm" : "standalone",
         clinicId: user?.clinic_id,
@@ -633,9 +717,11 @@ function DentalPlanRoute() {
       initialValue={initial}
       documentStatus={existingPlan?.status}
       onPreview={
-        existingPlan
+        existingPlan && (existingPlan.share_token || canSharePlans)
           ? () => {
-              const token = ensureShareToken(existingPlan.id, existingPlan.clinic_id);
+              const token =
+                existingPlan.share_token ??
+                ensureShareToken(existingPlan.id, existingPlan.clinic_id, user.id);
               if (token)
                 window.open(
                   `/shared/treatment-plan/${token}?preview=true`,

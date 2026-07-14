@@ -47,7 +47,7 @@ function Confirmation() {
           <h1 className="font-display text-3xl font-semibold mt-5">Thank you</h1>
           <p className="text-muted-foreground mt-3">
             The selected clinic has received your assessment and uploaded-file information. The
-            clinic will now review your case and prepare a detailed Treatment Plan and Quote.
+            clinic will now review your case and prepare a detailed Treatment Plan.
           </p>
           <div className="mt-6 rounded-xl bg-surface border p-4 text-sm text-left space-y-2">
             <p>

@@ -50,14 +50,18 @@ const STEPS = ["Patient & Case", "Clinical Planning", "Package", "Commercial", "
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
   const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
   const [plan, setPlan] = useState<DentalPlan | null>(null);
-  const initialRef = useRef(props.initialValue);
-  useEffect(
-    () =>
-      setPlan(
-        initialRef.current ?? repository.getPlan() ?? createDentalPlan({ name: "Demo Plan" }),
-      ),
-    [repository],
-  );
+  const incomingInitial = useRef(props.initialValue);
+  incomingInitial.current = props.initialValue;
+  const incomingPlanId = props.initialValue?.id;
+  useEffect(() => {
+    setPlan((current) => {
+      const requested = incomingInitial.current;
+      if (requested && current?.id !== requested.id) return requested;
+      return (
+        current ?? requested ?? repository.getPlan() ?? createDentalPlan({ name: "Demo Plan" })
+      );
+    });
+  }, [incomingPlanId, repository]);
   if (!plan)
     return <div className="flex min-h-screen items-center justify-center">Loading planner…</div>;
   return <PlannerShell plan={plan} setPlan={setPlan} repository={repository} {...props} />;
@@ -70,6 +74,8 @@ function PlannerShell({
   onSave,
   onFinalize,
   readOnly,
+  caseReadOnly,
+  commercialReadOnly,
   context,
   clinicUsers = [],
   treatmentDefaults = [],
@@ -253,7 +259,12 @@ function PlannerShell({
                 </CardContent>
               </Card>
             ) : (
-              <PatientStep plan={plan} change={change} clinicUsers={clinicUsers} />
+              <PatientStep
+                plan={plan}
+                change={change}
+                clinicUsers={clinicUsers}
+                readOnly={readOnly || caseReadOnly}
+              />
             )}
           </>
         )}{" "}
@@ -297,10 +308,16 @@ function PlannerShell({
             change={change}
             hotels={hotels}
             serviceOptions={serviceOptions}
+            readOnly={readOnly || commercialReadOnly}
           />
         )}{" "}
         {step === 3 && (
-          <PricingStep plan={plan} change={change} treatmentDefaults={treatmentDefaults} />
+          <PricingStep
+            plan={plan}
+            change={change}
+            treatmentDefaults={treatmentDefaults}
+            readOnly={readOnly || commercialReadOnly}
+          />
         )}
         {step === 4 && (
           <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
@@ -372,16 +389,20 @@ function PatientStep({
   plan,
   change,
   clinicUsers,
+  readOnly,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
   clinicUsers: Array<{ id: string; name: string; role: string }>;
+  readOnly?: boolean;
 }) {
-  const update = (patch: Partial<DentalPlan["patient"]>) =>
-    change({
-      patient: { ...plan.patient, ...patch },
-      patientName: patch.fullName ?? plan.patientName,
-    });
+  const update = (patch: Partial<DentalPlan["patient"]>) => {
+    if (!readOnly)
+      change({
+        patient: { ...plan.patient, ...patch },
+        patientName: patch.fullName ?? plan.patientName,
+      });
+  };
   const hasSourceContext = Boolean(
     plan.patient.leadId ||
     plan.patient.assessmentId ||
@@ -412,6 +433,7 @@ function PatientStep({
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Full name">
               <Input
+                disabled={readOnly}
                 value={plan.patient.fullName}
                 onChange={(e) => {
                   const fullName = e.target.value;
@@ -426,6 +448,7 @@ function PatientStep({
             </Field>
             <Field label="Country">
               <CountryCombobox
+                disabled={readOnly}
                 value={plan.patient.country ?? ""}
                 onChange={(country) => update({ country })}
               />
@@ -441,6 +464,7 @@ function PatientStep({
             <CollapsibleContent className="grid gap-4 pb-4 md:grid-cols-2">
               <Field label="Email (optional)">
                 <Input
+                  disabled={readOnly}
                   type="email"
                   value={plan.patient.email ?? ""}
                   onChange={(e) => update({ email: e.target.value })}
@@ -448,6 +472,7 @@ function PatientStep({
               </Field>
               <Field label="Preferred language (optional)">
                 <Input
+                  disabled={readOnly}
                   value={plan.patient.preferredLanguage ?? ""}
                   onChange={(e) => update({ preferredLanguage: e.target.value })}
                 />
@@ -466,6 +491,7 @@ function PatientStep({
                 value={plan.patient.dentistId}
                 users={clinicUsers.filter((user) => user.role === "dentist")}
                 placeholder="Select dentist"
+                disabled={readOnly}
                 onChange={(dentistId) => update({ dentistId })}
               />
             </Field>
@@ -476,6 +502,7 @@ function PatientStep({
                   ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role),
                 )}
                 placeholder="Select coordinator"
+                disabled={readOnly}
                 onChange={(coordinatorId) => update({ coordinatorId })}
               />
             </Field>
@@ -544,11 +571,13 @@ function TeamSelect({
   users,
   placeholder,
   onChange,
+  disabled,
 }: {
   value?: string;
   users: Array<{ id: string; name: string }>;
   placeholder: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <Combobox
@@ -561,6 +590,7 @@ function TeamSelect({
       placeholder={placeholder}
       searchPlaceholder={`Search ${placeholder.toLowerCase()}...`}
       emptyText="No matching clinic user"
+      disabled={disabled}
     />
   );
 }

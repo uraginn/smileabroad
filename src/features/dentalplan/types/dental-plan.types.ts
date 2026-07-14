@@ -237,6 +237,8 @@ export interface DentalPlanStudioProps {
   onFinalize?: (value: DentalPlanData) => Promise<{ treatmentPlanId: string }>;
   onSaveAsTemplate?: (value: DentalPlanData, name: string) => void;
   readOnly?: boolean;
+  caseReadOnly?: boolean;
+  commercialReadOnly?: boolean;
   clinicUsers?: Array<{ id: string; name: string; role: string }>;
   preliminarySuggestions?: Array<{ key: string; label: string; quantity?: number }>;
   shareSection?: ReactNode;

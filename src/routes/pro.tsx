@@ -49,7 +49,8 @@ function ProLayout() {
   const user = useAuth((state) => state.user);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   if (!hydrated) return <PageLoading label="Loading clinic workspace" />;
-  if (!user || user.role === "platform_admin") return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === "platform_admin") return <Navigate to="/admin/dashboard" replace />;
   if (!canUser(user, permissionForProPath(pathname)))
     return <Navigate to="/pro/dashboard" replace />;
   const visibleItems = items.filter((item) => canUser(user, permissionForProPath(item.to)));

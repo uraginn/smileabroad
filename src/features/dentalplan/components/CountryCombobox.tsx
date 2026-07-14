@@ -15,9 +15,11 @@ import { DENTAL_PLANNER_COUNTRIES } from "../data/countries";
 export function CountryCombobox({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -28,6 +30,7 @@ export function CountryCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="w-full justify-between font-normal"
         >
           {value || "Select a country"}

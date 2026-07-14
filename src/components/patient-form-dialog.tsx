@@ -80,17 +80,21 @@ export function PatientFormDialog({
           ? parts.at(-1)!
           : "";
     if (patient) {
-      updatePatient(patient.id, {
-        first_name: firstName,
-        last_name: lastName,
-        email: email.trim(),
-        phone: phone.trim() || undefined,
-        whatsapp: whatsapp.trim() || undefined,
-        country: country.trim(),
-        language: language.trim() || undefined,
-        date_of_birth: dateOfBirth || undefined,
-        preferred_contact_method: contactMethod || undefined,
-      });
+      updatePatient(
+        patient.id,
+        {
+          first_name: firstName,
+          last_name: lastName,
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          whatsapp: whatsapp.trim() || undefined,
+          country: country.trim(),
+          language: language.trim() || undefined,
+          date_of_birth: dateOfBirth || undefined,
+          preferred_contact_method: contactMethod || undefined,
+        },
+        user?.id,
+      );
       updateAssignment(
         patient.id,
         clinicId,

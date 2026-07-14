@@ -24,6 +24,7 @@ export function Combobox({
   placeholder = "Select an option",
   searchPlaceholder = "Search...",
   emptyText = "No options found",
+  disabled,
 }: {
   value?: string;
   options: ComboboxOption[];
@@ -31,6 +32,7 @@ export function Combobox({
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
@@ -41,6 +43,7 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="w-full justify-between"
         >
           <span className="truncate">{selected?.label ?? placeholder}</span>

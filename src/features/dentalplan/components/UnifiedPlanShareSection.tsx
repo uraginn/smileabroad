@@ -36,9 +36,14 @@ export function UnifiedPlanShareSection({
   const ensureToken = useMockStore((state) => state.ensureTreatmentPlanShareToken);
   const status = plan.status ?? "draft";
   const canApprove = ["dentist", "clinic_owner", "clinic_admin"].includes(role ?? "");
+  const canSubmitReview = ["dentist", "coordinator", "clinic_owner", "clinic_admin"].includes(
+    role ?? "",
+  );
+  const canShare = ["coordinator", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const publicLinkReady = Boolean(plan.share_token && isTreatmentPlanPubliclyViewable(plan.status));
   const preview = () => {
-    const token = ensureToken(plan.id, plan.clinic_id);
+    const token =
+      plan.share_token ?? (canShare ? ensureToken(plan.id, plan.clinic_id, actorId) : undefined);
     if (!token) return;
     window.open(`/shared/treatment-plan/${token}?preview=true`, "_blank", "noopener,noreferrer");
   };
@@ -51,7 +56,7 @@ export function UnifiedPlanShareSection({
   };
   const approve = () => {
     updateStatus(plan.id, plan.clinic_id, "approved", actorId);
-    ensureToken(plan.id, plan.clinic_id);
+    ensureToken(plan.id, plan.clinic_id, actorId);
     toast.success("Treatment Plan approved");
   };
   return (
@@ -69,7 +74,11 @@ export function UnifiedPlanShareSection({
                 {shareGuidance(status, canApprove)}
               </p>
             </div>
-            <Button variant={status === "draft" ? "default" : "outline"} onClick={preview}>
+            <Button
+              variant={status === "draft" ? "default" : "outline"}
+              disabled={!plan.share_token && !canShare}
+              onClick={preview}
+            >
               Preview Patient View
             </Button>
           </div>
@@ -81,7 +90,7 @@ export function UnifiedPlanShareSection({
           </Alert>
           <Separator />
           <div className="flex flex-wrap gap-2">
-            {status === "draft" && (
+            {status === "draft" && canSubmitReview && (
               <Button
                 variant="outline"
                 onClick={() => updateStatus(plan.id, plan.clinic_id, "doctor_review", actorId)}
@@ -108,7 +117,7 @@ export function UnifiedPlanShareSection({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {status === "approved" && (
+            {status === "approved" && canShare && (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -121,12 +130,12 @@ export function UnifiedPlanShareSection({
             )}
             <Button
               variant={publicLinkReady ? "default" : "outline"}
-              disabled={!publicLinkReady}
+              disabled={!publicLinkReady || !canShare}
               onClick={copyLink}
             >
               Copy Patient Link
             </Button>
-            {["approved", "sent", "viewed"].includes(status) && (
+            {canShare && ["approved", "sent", "viewed"].includes(status) && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="ghost" className="text-destructive hover:text-destructive">

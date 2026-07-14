@@ -20,7 +20,7 @@ const DEMO_USERS: Record<Role, DemoUser> = {
     clinic_id: "clinic_istanbul",
   },
   clinic_admin: {
-    id: "u_owner",
+    id: "u_clinic_admin",
     name: "Clinic Admin",
     email: "admin@bosphorus.com",
     role: "clinic_admin",
@@ -34,9 +34,9 @@ const DEMO_USERS: Record<Role, DemoUser> = {
     clinic_id: "clinic_istanbul",
   },
   dentist: {
-    id: "u_coord",
-    name: "Dr. Marco Alvarez",
-    email: "dentist@bosphorus.com",
+    id: "u_dtkurt_yusuf",
+    name: "Dr. M. Yusuf Kurt",
+    email: "yusuf@dtkurt.com",
     role: "dentist",
     clinic_id: "clinic_istanbul",
   },
@@ -48,7 +48,7 @@ const DEMO_USERS: Record<Role, DemoUser> = {
     clinic_id: "clinic_istanbul",
   },
   sales: {
-    id: "u_coord",
+    id: "u_sales",
     name: "Sales Rep",
     email: "sales@bosphorus.com",
     role: "sales",
@@ -77,13 +77,11 @@ export const useAuth = create<AuthState>()(
     }),
     {
       name: "smileabroad-auth-v1",
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
         const state = persisted as Partial<AuthState>;
         if (state.user && state.user.role === ("patient" as Role)) return { ...state, user: null };
-        return state.user?.role === "clinic_owner"
-          ? { ...state, user: DEMO_USERS.clinic_owner }
-          : state;
+        return state.user?.role ? { ...state, user: DEMO_USERS[state.user.role] } : state;
       },
     },
   ),

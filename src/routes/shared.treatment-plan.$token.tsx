@@ -49,6 +49,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { Separator } from "@/components/ui/separator";
+import { PageLoading } from "@/components/ui-bits";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Table,
@@ -167,7 +168,8 @@ function SharedPlan() {
         : [],
     [document, faqs.length],
   );
-  if (!hydrated || (preview && !authHydrated)) return null;
+  if (!hydrated || (preview && !authHydrated))
+    return <PageLoading label="Loading Treatment Plan" />;
   if (!plan || !document) return <SafeNotFound />;
   const accent = document.clinic?.accent_color ?? "#0f766e";
   const primary = document.clinic?.primary_color ?? accent;

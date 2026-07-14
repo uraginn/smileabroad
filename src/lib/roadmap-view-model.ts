@@ -108,7 +108,7 @@ export function createPatientRoadmapViewModel({
   ];
   if (implant)
     exclusions.push(
-      "Additional graft material or sinus procedures unless included in the confirmed Quote",
+      "Additional graft material or sinus procedures unless included in the confirmed Treatment Plan",
     );
   if (!keys.has("extraction")) exclusions.push("Unexpected extractions");
   if (!keys.has("root-canal-treatment"))
@@ -139,7 +139,7 @@ export function createPatientRoadmapViewModel({
   const questions = [
     "Will this preliminary estimate change after clinical examination?",
     "How many visits and treatment days are expected?",
-    "What is included and excluded from the confirmed Quote?",
+    "What is included and excluded from the confirmed Treatment Plan?",
     "What guarantee and aftercare are provided?",
     "What happens if additional treatment is identified?",
   ];

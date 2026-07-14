@@ -280,7 +280,7 @@ function ApplyToClinic() {
               <AlertTitle>Preliminary information</AlertTitle>
               <AlertDescription>
                 The clinic will review your Assessment, uploaded-file metadata and Roadmap before
-                preparing a detailed Treatment Plan and Quote.
+                preparing a detailed Treatment Plan for your review.
               </AlertDescription>
             </Alert>
           </CardContent>
