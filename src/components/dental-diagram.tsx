@@ -3,7 +3,10 @@ import { cn } from "@/lib/utils";
 import type { TreatmentPlanItem } from "@/types/models";
 
 export function DentalDiagram({
-  items = [], selected, onSelect, size = "md",
+  items = [],
+  selected,
+  onSelect,
+  size = "md",
 }: {
   items?: TreatmentPlanItem[];
   selected?: number;
@@ -23,7 +26,15 @@ export function DentalDiagram({
             key={n}
             type="button"
             onClick={() => onSelect?.(n)}
-            style={t ? { backgroundColor: treatmentColor(t), color: "white", borderColor: treatmentColor(t) } : undefined}
+            style={
+              t
+                ? {
+                    backgroundColor: treatmentColor(t),
+                    color: "white",
+                    borderColor: treatmentColor(t),
+                  }
+                : undefined
+            }
             className={cn(
               w,
               "rounded-md border border-border font-medium transition-all",
@@ -42,11 +53,15 @@ export function DentalDiagram({
 
   return (
     <div className="space-y-2 select-none">
-      <p className="text-[11px] text-muted-foreground text-center uppercase tracking-wider">Upper</p>
+      <p className="text-[11px] text-muted-foreground text-center uppercase tracking-wider">
+        Upper
+      </p>
       {renderRow(FDI_UPPER)}
       <div className="h-px bg-border my-3" />
       {renderRow(FDI_LOWER)}
-      <p className="text-[11px] text-muted-foreground text-center uppercase tracking-wider">Lower</p>
+      <p className="text-[11px] text-muted-foreground text-center uppercase tracking-wider">
+        Lower
+      </p>
     </div>
   );
 }

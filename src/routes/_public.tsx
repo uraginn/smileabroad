@@ -7,7 +7,9 @@ function PublicLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <PublicHeader />
-      <main className="flex-1"><Outlet /></main>
+      <main className="flex-1">
+        <Outlet />
+      </main>
       <PublicFooter />
     </div>
   );

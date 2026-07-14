@@ -19,5 +19,9 @@ function AdminLayout() {
   if (!hydrated) return <PageLoading label="Loading admin workspace" />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "platform_admin") return <Navigate to="/pro/dashboard" replace />;
-  return <SidebarShell items={items} section="Platform admin"><Outlet /></SidebarShell>;
+  return (
+    <SidebarShell items={items} section="Platform admin">
+      <Outlet />
+    </SidebarShell>
+  );
 }

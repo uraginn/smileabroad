@@ -77,7 +77,9 @@ export function EmptyState({
   return (
     <div className="border border-dashed border-border rounded-xl p-10 text-center bg-surface/50">
       <h3 className="font-display text-lg font-semibold">{title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">{description ?? "There is nothing to display here yet."}</p>
+      <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+        {description ?? "There is nothing to display here yet."}
+      </p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -97,7 +99,24 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div>
-        {segments.length > 1 && <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Link to="/pro/dashboard" className="hover:text-foreground">CRM</Link>{segments.slice(1).map((segment, index) => <span key={`${segment}-${index}`} className="flex items-center gap-1.5"><span aria-hidden="true">/</span><span className={index === segments.length - 2 ? "text-foreground" : ""}>{segment.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase())}</span></span>)}</nav>}
+        {segments.length > 1 && (
+          <nav
+            aria-label="Breadcrumb"
+            className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <Link to="/pro/dashboard" className="hover:text-foreground">
+              CRM
+            </Link>
+            {segments.slice(1).map((segment, index) => (
+              <span key={`${segment}-${index}`} className="flex items-center gap-1.5">
+                <span aria-hidden="true">/</span>
+                <span className={index === segments.length - 2 ? "text-foreground" : ""}>
+                  {segment.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase())}
+                </span>
+              </span>
+            ))}
+          </nav>
+        )}
         <h1 className="text-2xl font-display font-semibold">{title}</h1>
         {description && (
           <p className="mt-1 text-sm text-muted-foreground max-w-2xl">{description}</p>
@@ -109,22 +128,54 @@ export function PageHeader({
 }
 
 const statusTone: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground", new_lead: "bg-primary/10 text-primary",
-  awaiting_images: "bg-warning/20 text-warning-foreground", doctor_review: "bg-warning/20 text-warning-foreground",
-  awaiting_doctor_review: "bg-warning/20 text-warning-foreground", contacted: "bg-accent/15 text-accent",
-  treatment_planning: "bg-accent/15 text-accent", approved: "bg-success/15 text-success",
-  sent: "bg-primary/10 text-primary", quote_sent: "bg-primary/10 text-primary", viewed: "bg-primary/10 text-primary",
-  accepted: "bg-success/15 text-success", booked: "bg-success/15 text-success", completed: "bg-success/15 text-success",
-  open: "bg-primary/10 text-primary", done: "bg-success/15 text-success",
-  declined: "bg-destructive/15 text-destructive", lost: "bg-destructive/15 text-destructive",
-  expired: "bg-muted text-muted-foreground", archived: "bg-muted text-muted-foreground",
+  draft: "bg-muted text-muted-foreground",
+  new_lead: "bg-primary/10 text-primary",
+  awaiting_images: "bg-warning/20 text-warning-foreground",
+  doctor_review: "bg-warning/20 text-warning-foreground",
+  awaiting_doctor_review: "bg-warning/20 text-warning-foreground",
+  contacted: "bg-accent/15 text-accent",
+  treatment_planning: "bg-accent/15 text-accent",
+  approved: "bg-success/15 text-success",
+  sent: "bg-primary/10 text-primary",
+  quote_sent: "bg-primary/10 text-primary",
+  viewed: "bg-primary/10 text-primary",
+  accepted: "bg-success/15 text-success",
+  booked: "bg-success/15 text-success",
+  completed: "bg-success/15 text-success",
+  open: "bg-primary/10 text-primary",
+  done: "bg-success/15 text-success",
+  declined: "bg-destructive/15 text-destructive",
+  lost: "bg-destructive/15 text-destructive",
+  expired: "bg-muted text-muted-foreground",
+  archived: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({ status, className }: { status?: string; className?: string }) {
   const value = status || "draft";
-  return <Badge className={cn("border-0 capitalize", statusTone[value] ?? "bg-muted text-muted-foreground", className)}>{value.replace(/_/g, " ")}</Badge>;
+  return (
+    <Badge
+      className={cn(
+        "border-0 capitalize",
+        statusTone[value] ?? "bg-muted text-muted-foreground",
+        className,
+      )}
+    >
+      {value.replace(/_/g, " ")}
+    </Badge>
+  );
 }
 
 export function PageLoading({ label = "Loading workspace" }: { label?: string }) {
-  return <div className="p-4 sm:p-6 space-y-5" role="status" aria-label={label}><Skeleton className="h-5 w-40" /><Skeleton className="h-9 w-72 max-w-full" /><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}</div><Skeleton className="h-64 rounded-xl" /></div>;
+  return (
+    <div className="p-4 sm:p-6 space-y-5" role="status" aria-label={label}>
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-9 w-72 max-w-full" />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-24 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-64 rounded-xl" />
+    </div>
+  );
 }

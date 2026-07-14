@@ -2,6 +2,10 @@ node_modules
 dist
 .output
 .vinxi
+.wrangler
+.tanstack
+.reference
+coverage
 pnpm-lock.yaml
 package-lock.json
 bun.lock
