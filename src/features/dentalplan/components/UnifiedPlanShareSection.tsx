@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,123 +61,126 @@ export function UnifiedPlanShareSection({
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Share & delivery</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Current status</p>
-              <StatusBadge status={status} />
-              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                {shareGuidance(status, canApprove)}
-              </p>
-            </div>
-            <Button
-              variant={status === "draft" ? "default" : "outline"}
-              disabled={!plan.share_token && !canShare}
-              onClick={preview}
-            >
-              Preview Patient View
-            </Button>
-          </div>
-          <Alert>
-            <AlertTitle>Private preview is always safe</AlertTitle>
-            <AlertDescription>
-              Previewing does not approve the plan, publish a link or mark it as viewed.
-            </AlertDescription>
-          </Alert>
-          <Separator />
-          <div className="flex flex-wrap gap-2">
-            {status === "draft" && canSubmitReview && (
-              <Button
-                variant="outline"
-                onClick={() => updateStatus(plan.id, plan.clinic_id, "doctor_review", actorId)}
-              >
-                Send for Doctor Review
-              </Button>
-            )}
-            {status === "doctor_review" && canApprove && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button>Approve Treatment Plan</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Approve this Treatment Plan?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Approval makes the document eligible to be shared, but does not send it.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={approve}>Approve</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {status === "approved" && canShare && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  markSent(plan.id, plan.clinic_id, actorId);
-                  toast.success("Treatment Plan marked as sent");
-                }}
-              >
-                Mark Sent
-              </Button>
-            )}
-            <Button
-              variant={publicLinkReady ? "default" : "outline"}
-              disabled={!publicLinkReady || !canShare}
-              onClick={copyLink}
-            >
-              Copy Patient Link
-            </Button>
-            {canShare && ["approved", "sent", "viewed"].includes(status) && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" className="text-destructive hover:text-destructive">
-                    Revoke public access
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Revoke public access?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      The patient link will become unavailable. The token remains stable for a
-                      future reapproval.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => {
-                        updateStatus(plan.id, plan.clinic_id, "draft", actorId);
-                        toast.success("Public access revoked");
-                      }}
-                    >
-                      Revoke access
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-          {!publicLinkReady && (
-            <p className="text-xs text-muted-foreground">
-              The public link becomes available after clinical approval.
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Share & delivery</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Preview first, then complete the clinical approval and patient delivery workflow.
             </p>
-          )}
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Meta label="Validity" value={plan.valid_until ?? "Not set"} />
-            <Meta label="Last shared" value={formatDate(plan.shared_at)} />
-            <Meta label="Viewed" value={formatDate(plan.viewed_at)} />
-            <Meta
-              label="Accepted / declined"
-              value={formatDate(plan.accepted_at ?? plan.declined_at)}
-            />
-          </dl>
+          </div>
+          <Button disabled={!plan.share_token && !canShare} onClick={preview}>
+            Preview Patient View
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <section aria-labelledby="share-actions-heading" className="space-y-3">
+            <h3 id="share-actions-heading" className="text-sm font-semibold">
+              Actions
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {status === "draft" && canSubmitReview && (
+                <Button
+                  variant="outline"
+                  onClick={() => updateStatus(plan.id, plan.clinic_id, "doctor_review", actorId)}
+                >
+                  Send for Doctor Review
+                </Button>
+              )}
+              {status === "doctor_review" && canApprove && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline">Approve Treatment Plan</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Approve this Treatment Plan?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Approval makes the document eligible to be shared, but does not send it.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={approve}>Approve</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {status === "approved" && canShare && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    markSent(plan.id, plan.clinic_id, actorId);
+                    toast.success("Treatment Plan marked as sent");
+                  }}
+                >
+                  Mark Sent
+                </Button>
+              )}
+              <Button variant="outline" disabled={!publicLinkReady || !canShare} onClick={copyLink}>
+                Copy Patient Link
+              </Button>
+              {canShare && ["approved", "sent", "viewed"].includes(status) && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" className="text-destructive hover:text-destructive">
+                      Revoke public access
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Revoke public access?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        The patient link will become unavailable. The token remains stable for a
+                        future reapproval.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          updateStatus(plan.id, plan.clinic_id, "draft", actorId);
+                          toast.success("Public access revoked");
+                        }}
+                      >
+                        Revoke access
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+            {!publicLinkReady && (
+              <p className="text-xs text-muted-foreground">
+                Copy Link becomes available after clinical approval. Private preview does not
+                publish or change the plan status.
+              </p>
+            )}
+          </section>
+          <Separator />
+          <section aria-labelledby="share-status-heading" className="space-y-2">
+            <h3 id="share-status-heading" className="text-sm font-semibold">
+              Status
+            </h3>
+            <StatusBadge status={status} />
+            <p className="max-w-xl text-sm text-muted-foreground">
+              {shareGuidance(status, canApprove)}
+            </p>
+          </section>
+          <Separator />
+          <section aria-labelledby="share-timeline-heading" className="space-y-3">
+            <h3 id="share-timeline-heading" className="text-sm font-semibold">
+              Timeline
+            </h3>
+            <dl className="grid gap-3 rounded-lg bg-muted/30 p-3 text-sm sm:grid-cols-2">
+              <Meta label="Validity" value={plan.valid_until ?? "Not set"} />
+              <Meta label="Last shared" value={formatDate(plan.shared_at)} />
+              <Meta label="Viewed" value={formatDate(plan.viewed_at)} />
+              <Meta
+                label="Accepted / declined"
+                value={formatDate(plan.accepted_at ?? plan.declined_at)}
+              />
+            </dl>
+          </section>
         </CardContent>
       </Card>
     </div>

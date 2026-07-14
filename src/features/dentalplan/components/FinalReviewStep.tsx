@@ -1,5 +1,5 @@
+import type { ReactNode } from "react";
 import { AlertTriangle, Check } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
@@ -33,71 +33,97 @@ export function FinalReviewStep({
     { label: "Payment", ready: totals.total > 0 && scheduled === totals.total, step: 3 },
   ];
   const missing = readiness.filter((item) => !item.ready);
-  const warnings = [
-    ...defaults.warnings,
-    ...(!plan.patient.dentistId ? ["No dentist is assigned to this case."] : []),
-    ...(scheduled > totals.total ? ["Scheduled payments exceed the final total."] : []),
+  const warningItems = [
+    ...defaults.warnings.map((label) => ({ label, step: 1 })),
+    ...(!plan.patient.dentistId
+      ? [{ label: "No dentist is assigned to this case.", step: 0 }]
+      : []),
+    ...(scheduled > totals.total
+      ? [{ label: "Scheduled payments exceed the final total.", step: 3 }]
+      : []),
   ];
   const ready = missing.length === 0;
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
-        <header className="pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Case validation</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Confirm the case is clinically and commercially ready before sharing.
-              </p>
-            </div>
-            <Badge variant={ready ? "secondary" : "outline"}>
-              {ready ? "Ready to share" : `${missing.length} item(s) need attention`}
-            </Badge>
+    <section className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
+      <header className="pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Case validation</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Confirm the case is clinically and commercially ready before sharing.
+            </p>
           </div>
-        </header>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {readiness.map((item) => (
+          <Badge variant={ready ? "secondary" : "outline"}>
+            {ready ? "Ready to share" : `${missing.length} item(s) need attention`}
+          </Badge>
+        </div>
+      </header>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <ValidationGroup
+          title="Ready"
+          icon={<Check className="size-4 text-success" />}
+          items={readiness.filter((item) => item.ready)}
+          empty="Nothing completed yet."
+          onNavigate={onNavigate}
+        />
+        <ValidationGroup
+          title="Missing"
+          icon={<AlertTriangle className="size-4 text-destructive" />}
+          items={missing}
+          empty="No required information is missing."
+          onNavigate={onNavigate}
+        />
+        <ValidationGroup
+          title="Warnings"
+          icon={<AlertTriangle className="size-4 text-warning-foreground" />}
+          items={warningItems}
+          empty="No additional warnings."
+          onNavigate={onNavigate}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ValidationGroup({
+  title,
+  icon,
+  items,
+  empty,
+  onNavigate,
+}: {
+  title: string;
+  icon: ReactNode;
+  items: Array<{ label: string; step: number }>;
+  empty: string;
+  onNavigate?: (step: number) => void;
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        {icon}
+        {title}
+        <Badge variant="outline" className="ml-auto font-normal">
+          {items.length}
+        </Badge>
+      </div>
+      {items.length ? (
+        <div className="space-y-1">
+          {items.map((item) => (
             <Button
-              key={item.label}
+              key={`${title}-${item.label}`}
               type="button"
-              variant="outline"
-              className="h-auto justify-start gap-2 py-3"
+              variant="ghost"
+              className="h-auto w-full justify-start whitespace-normal px-2 py-1.5 text-left text-sm"
               onClick={() => onNavigate?.(item.step)}
             >
-              {item.ready ? (
-                <Check className="size-4 text-success" />
-              ) : (
-                <AlertTriangle className="size-4 text-warning-foreground" />
-              )}
-              <span className="text-left">
-                <span className="block text-xs text-muted-foreground">
-                  {item.ready ? "Ready" : "Review needed"}
-                </span>
-                {item.label}
-              </span>
+              {item.label}
             </Button>
           ))}
         </div>
-      </section>
-
-      {(missing.length > 0 || warnings.length > 0) && (
-        <Alert>
-          <AlertTriangle className="size-4" />
-          <AlertTitle>
-            {missing.length ? "Case is not share-ready" : "Clinical review advised"}
-          </AlertTitle>
-          <AlertDescription>
-            <ul className="mt-2 list-disc space-y-1 pl-4">
-              {missing.map((item) => (
-                <li key={item.label}>{item.label} requires attention.</li>
-              ))}
-              {warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
+      ) : (
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">{empty}</p>
       )}
     </div>
   );

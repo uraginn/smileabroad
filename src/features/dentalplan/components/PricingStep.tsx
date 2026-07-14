@@ -35,6 +35,10 @@ export function PricingStep({
         : 0,
   };
   const totals = calculateCommercial(billableCommercial);
+  const packageTotal =
+    billableCommercial.hotelTotal +
+    billableCommercial.transferTotal +
+    billableCommercial.otherServiceTotal;
   const previousTotal = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (commercial.paymentSchedule.length >= 2) return;
@@ -92,23 +96,23 @@ export function PricingStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totals.total, commercial.paymentSchedule.length]);
   return (
-    <section className="space-y-5 rounded-xl bg-card p-4 shadow-sm sm:p-6">
+    <section className="space-y-4 rounded-xl bg-card p-4 shadow-sm sm:p-6">
       <fieldset disabled={readOnly} className="contents">
         <header>
           <h2 className="text-lg font-semibold">Commercial</h2>
           <p className="text-sm text-muted-foreground">Plan totals, discount and visit payments.</p>
         </header>
-        <div className="space-y-6">
-          <section className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
-            <div className="space-y-1.5">
-              <Label>Currency</Label>
+        <div className="space-y-5">
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2">
+            <Label htmlFor="commercial-currency">Currency</Label>
+            <div className="w-32">
               <Select
                 value={commercial.currency}
                 onValueChange={(currency) =>
                   update({ currency: currency as typeof commercial.currency })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="commercial-currency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -120,117 +124,82 @@ export function PricingStep({
                 </SelectContent>
               </Select>
             </div>
-            <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
-              <Row
-                label="Treatment subtotal"
-                value={formatQuoteMoney(totals.subtotal, commercial.currency)}
-                strong
-              />
-            </div>
           </section>
           <Separator />
-          <section aria-labelledby="service-costs-heading">
-            <h3 id="service-costs-heading" className="mb-4 font-semibold">
+          <section aria-labelledby="service-costs-heading" className="space-y-3">
+            <h3 id="service-costs-heading" className="font-semibold">
               Package costs
             </h3>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Money
-                label="Hotel total"
+            <div className="divide-y rounded-lg border">
+              <CostRow
+                label="Hotel"
+                enabled={plan.travel.hotelIncluded}
                 value={commercial.hotelTotal}
                 onChange={(hotelTotal) => update({ hotelTotal })}
               />
-              <Money
-                label="Transfer total"
+              <CostRow
+                label={transferCostLabel(plan)}
+                enabled={Boolean(billableCommercial.transferTotal || hasTransfers(plan))}
                 value={commercial.transferTotal}
                 onChange={(transferTotal) => update({ transferTotal })}
               />
-              <Money
-                label="Other service total"
+              <CostRow
+                label="Other package costs"
+                enabled
                 value={commercial.otherServiceTotal}
                 onChange={(otherServiceTotal) => update({ otherServiceTotal })}
               />
             </div>
           </section>
           <Separator />
-          <section aria-labelledby="discount-heading" className="grid gap-4 sm:grid-cols-2">
-            <h3 id="discount-heading" className="font-semibold sm:col-span-2">
+          <section aria-labelledby="discount-heading" className="space-y-3">
+            <h3 id="discount-heading" className="font-semibold">
               Discount
             </h3>
-            <div className="space-y-1.5">
-              <Label>Discount type</Label>
-              <Select
-                value={commercial.discountType}
-                onValueChange={(discountType) =>
-                  update({
-                    discountType: discountType as typeof commercial.discountType,
-                    discountValue: 0,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No discount</SelectItem>
-                  <SelectItem value="fixed">Fixed amount</SelectItem>
-                  <SelectItem value="percentage">Percentage</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {commercial.discountType !== "none" && (
+            <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+              <div className="space-y-1.5">
+                <Label>Discount type</Label>
+                <Select
+                  value={commercial.discountType}
+                  onValueChange={(discountType) =>
+                    update({
+                      discountType: discountType as typeof commercial.discountType,
+                      discountValue: 0,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No discount</SelectItem>
+                    <SelectItem value="fixed">Fixed amount</SelectItem>
+                    <SelectItem value="percentage">Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Money
-                label={
-                  commercial.discountType === "percentage"
-                    ? "Discount percentage"
-                    : "Discount amount"
-                }
+                label={commercial.discountType === "percentage" ? "Percentage" : "Amount"}
                 value={commercial.discountValue}
+                disabled={commercial.discountType === "none"}
                 max={commercial.discountType === "percentage" ? 100 : undefined}
                 onChange={(discountValue) => update({ discountValue })}
               />
-            )}
-          </section>
-          <Separator />
-          <section aria-labelledby="total-summary-heading" className="space-y-2 text-sm">
-            <h3 id="total-summary-heading" className="mb-4 font-semibold">
-              Total
-            </h3>
-            <Row
-              label="Treatment subtotal"
-              value={formatQuoteMoney(totals.subtotal, commercial.currency)}
-            />
-            <Row
-              label="Hotel"
-              value={formatQuoteMoney(billableCommercial.hotelTotal, commercial.currency)}
-            />
-            <Row
-              label="Transfer and services"
-              value={formatQuoteMoney(
-                billableCommercial.transferTotal + commercial.otherServiceTotal,
-                commercial.currency,
-              )}
-            />
-            <Row label="Discount" value={formatQuoteMoney(totals.discount, commercial.currency)} />
-            <Row
-              label="Final total"
-              value={formatQuoteMoney(totals.total, commercial.currency)}
-              strong
-            />
+              <div className="min-w-36 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <span className="block text-xs text-muted-foreground">Calculated discount</span>
+                <strong>{formatQuoteMoney(totals.discount, commercial.currency)}</strong>
+              </div>
+            </div>
           </section>
           <Separator />
           <section aria-labelledby="payment-schedule-heading" className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 id="payment-schedule-heading" className="font-semibold">
-                Payment schedule
-              </h3>
-              <span className="text-sm font-medium">
-                Total {formatQuoteMoney(totals.total, commercial.currency)}
-              </span>
-            </div>
+            <h3 id="payment-schedule-heading" className="font-semibold">
+              Payment schedule
+            </h3>
             {commercial.paymentSchedule.slice(0, 2).map((payment) => (
               <div
                 key={payment.id}
-                className="grid gap-2 rounded-lg border p-3 md:grid-cols-[120px_160px_1fr]"
+                className="grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[90px_150px_1fr] sm:items-center"
               >
                 <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
                 <Input
@@ -256,6 +225,10 @@ export function PricingStep({
                 />
               </div>
             ))}
+            <div className="flex items-center justify-between border-t px-3 pt-3 text-sm font-semibold">
+              <span>Total</span>
+              <span>{formatQuoteMoney(totals.total, commercial.currency)}</span>
+            </div>
             {scheduled > totals.total && (
               <p className="rounded bg-warning/15 p-2 text-sm">
                 Scheduled payments exceed the current plan total.
@@ -273,6 +246,26 @@ export function PricingStep({
               </div>
             )}
           </section>
+          <Separator />
+          <section
+            aria-labelledby="commercial-summary-heading"
+            className="space-y-2 rounded-xl bg-primary px-4 py-4 text-primary-foreground"
+          >
+            <h3 id="commercial-summary-heading" className="mb-3 font-semibold">
+              Commercial summary
+            </h3>
+            <Row label="Treatment" value={formatQuoteMoney(totals.subtotal, commercial.currency)} />
+            <Row label="Package" value={formatQuoteMoney(packageTotal, commercial.currency)} />
+            <Row
+              label="Discount"
+              value={`-${formatQuoteMoney(totals.discount, commercial.currency)}`}
+            />
+            <Row
+              label="Final total"
+              value={formatQuoteMoney(totals.total, commercial.currency)}
+              strong
+            />
+          </section>
         </div>
       </fieldset>
     </section>
@@ -283,11 +276,13 @@ function Money({
   value,
   onChange,
   max,
+  disabled,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   max?: number;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -296,8 +291,38 @@ function Money({
         type="number"
         min={0}
         max={max}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(Math.min(max ?? Infinity, Math.max(0, Number(e.target.value))))}
+      />
+    </div>
+  );
+}
+
+function CostRow({
+  label,
+  enabled,
+  value,
+  onChange,
+}: {
+  label: string;
+  enabled: boolean;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="grid gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-center">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {!enabled && <p className="text-xs text-muted-foreground">Not included in Package</p>}
+      </div>
+      <Input
+        aria-label={`${label} cost`}
+        type="number"
+        min={0}
+        disabled={!enabled}
+        value={enabled ? value : 0}
+        onChange={(event) => onChange(Math.max(0, Number(event.target.value)))}
       />
     </div>
   );
@@ -323,4 +348,20 @@ function updatePayment(
       item.id === id ? { ...item, ...patch } : item,
     ),
   });
+}
+
+function hasTransfers(plan: DentalPlan) {
+  return (
+    plan.travel.includedServices.includes("Airport Transfer") ||
+    plan.travel.includedServices.includes("Hotel Transfer")
+  );
+}
+
+function transferCostLabel(plan: DentalPlan) {
+  const airport = plan.travel.includedServices.includes("Airport Transfer");
+  const hotel = plan.travel.includedServices.includes("Hotel Transfer");
+  if (airport && hotel) return "Airport & hotel transfers";
+  if (airport) return "Airport transfer";
+  if (hotel) return "Hotel transfer";
+  return "Transfers";
 }
