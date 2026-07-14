@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Carousel,
   CarouselContent,
@@ -104,8 +103,14 @@ export function TravelServicesStep({
   const selectableServices = [...new Set([...serviceOptions, ...legacyServices])];
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-5 rounded-xl bg-card p-4 shadow-sm sm:p-6">
       <fieldset disabled={readOnly} className="contents">
+        <div>
+          <h2 className="text-lg font-semibold">Package</h2>
+          <p className="text-sm text-muted-foreground">
+            Accommodation, transfers and services included for the patient.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
           <span>
             Suggested package: <b>{defaults.recommendedVisits} visit(s)</b> ·{" "}
@@ -113,9 +118,9 @@ export function TravelServicesStep({
           </span>
           <Badge variant="outline">Confirm clinically</Badge>
         </div>
-        <Card>
-          <CardContent className="p-3 sm:p-5">
-            <Accordion type="multiple" defaultValue={["accommodation"]}>
+        <div>
+          <div>
+            <Accordion type="multiple" defaultValue={["accommodation"]} className="border-y">
               <AccordionItem value="accommodation">
                 <AccordionTrigger>
                   <SectionTitle
@@ -235,10 +240,10 @@ export function TravelServicesStep({
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </fieldset>
-    </div>
+    </section>
   );
 }
 

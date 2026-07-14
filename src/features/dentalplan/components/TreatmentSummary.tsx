@@ -42,7 +42,7 @@ export function TreatmentSummary({
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="border-t pt-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-semibold">Applied treatments</p>
         <Badge variant="secondary">{treatments.length} items</Badge>

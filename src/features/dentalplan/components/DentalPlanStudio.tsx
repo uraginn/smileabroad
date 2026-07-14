@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { ChevronDown, Eye } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Combobox } from "@/components/ui/combobox";
+import { formatDistanceToNow } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -143,6 +152,20 @@ function PlannerShell({
   onChangeRef.current = onChange;
   useEffect(() => onChangeRef.current?.(plan), [plan]);
   const step = Math.max(0, Math.min(4, plan.draftStep));
+  const stepStatus = (index: number) => {
+    if (index === step) return "Current";
+    const complete =
+      index === 0
+        ? Boolean(plan.patient.fullName)
+        : index === 1
+          ? plan.proposedTreatments.length > 0
+          : index === 2
+            ? index < step
+            : index === 3
+              ? plan.commercial.items.some((item) => item.unitPrice > 0)
+              : plan.finalized;
+    return complete ? "Completed" : "Incomplete";
+  };
   const save = () => {
     if (readOnly) return;
     repository.savePlan(plan);
@@ -186,64 +209,63 @@ function PlannerShell({
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar className="size-10 border">
-              <AvatarFallback>{patientInitials(plan.patient.fullName)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
-                <Link to="/pro/treatment-plans">Treatment Plans</Link>
-              </Button>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-semibold">
-                  {plan.patient.fullName || "New treatment case"}
-                </h1>
-                <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
-              </div>
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Treatment Plan</p>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="truncate text-base font-semibold sm:text-lg">
+                {plan.patient.fullName || "New treatment case"}
+              </h1>
+              <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary" className="font-normal">
+            <span className="whitespace-nowrap">
               {saving
                 ? "Saving…"
                 : lastSavedAt
-                  ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
+                  ? `Saved ${formatDistanceToNow(new Date(lastSavedAt), { addSuffix: true })}`
                   : "Not saved"}
-            </Badge>
+            </span>
             {onPreview && (
-              <Button variant="ghost" size="sm" onClick={onPreview}>
-                <Eye className="size-4" /> Preview
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" onClick={onPreview}>
+                    <Eye className="size-4" /> Preview
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Preview the patient-facing plan</TooltipContent>
+              </Tooltip>
             )}
-            <Button variant="outline" size="sm" onClick={save} disabled={readOnly}>
+            <Button size="sm" onClick={save} disabled={readOnly}>
               Save
             </Button>
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-6">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Step {step + 1} of {STEPS.length}
-            </span>
-            <span>{Math.round(((step + 1) / STEPS.length) * 100)}%</span>
-          </div>
-          <Progress value={((step + 1) / STEPS.length) * 100} aria-label="Planner progress" />
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Tabs
             value={String(step)}
             onValueChange={(value) => change({ draftStep: Number(value) })}
+            className="min-w-max"
           >
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
+            <TabsList className="h-auto w-max justify-start gap-1 bg-muted/60 p-1">
               {STEPS.map((label, index) => (
                 <TabsTrigger
                   key={label}
                   value={String(index)}
-                  className="min-h-11 min-w-0 justify-start whitespace-normal px-2 text-left"
+                  className="min-h-12 w-44 justify-start gap-2 px-3 text-left"
                 >
-                  <span className="mr-1.5 font-semibold">{index + 1}</span>
-                  <span className="truncate">{label}</span>
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold shadow-sm">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{label}</span>
+                    <span className="block text-[11px] font-normal text-muted-foreground">
+                      {stepStatus(index)}
+                    </span>
+                  </span>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -324,31 +346,39 @@ function PlannerShell({
           <PricingStep plan={plan} change={change} readOnly={readOnly || commercialReadOnly} />
         )}
         {step === 4 && (
-          <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2 sm:w-80">
-              <TabsTrigger value="review">Review</TabsTrigger>
-              <TabsTrigger value="share" disabled={context?.mode === "template"}>
-                Share
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="review">
-              <FinalReviewStep
-                plan={plan}
-                hotels={hotels}
-                clinicUsers={clinicUsers}
-                onNavigate={(draftStep) => change({ draftStep })}
-              />
-            </TabsContent>
-            <TabsContent value="share">
-              {shareSection ?? (
-                <Card>
-                  <CardContent className="p-6 text-sm text-muted-foreground">
-                    Save this Treatment Plan before sharing.
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          </Tabs>
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Review & Share</h2>
+              <p className="text-sm text-muted-foreground">
+                Validate the plan, then choose the patient-facing action.
+              </p>
+            </div>
+            <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2 sm:w-80">
+                <TabsTrigger value="review">Review</TabsTrigger>
+                <TabsTrigger value="share" disabled={context?.mode === "template"}>
+                  Share
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="review">
+                <FinalReviewStep
+                  plan={plan}
+                  hotels={hotels}
+                  clinicUsers={clinicUsers}
+                  onNavigate={(draftStep) => change({ draftStep })}
+                />
+              </TabsContent>
+              <TabsContent value="share">
+                {shareSection ?? (
+                  <Card>
+                    <CardContent className="p-6 text-sm text-muted-foreground">
+                      Save this Treatment Plan before sharing.
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+          </section>
         )}
         <div className="flex justify-between">
           <Button
@@ -417,23 +447,21 @@ function PatientStep({
     plan.patient.treatmentInterest,
   );
   return (
-    <Card>
-      <CardHeader className="flex-row items-center gap-3">
-        <Avatar className="size-12 border">
-          <AvatarFallback>{patientInitials(plan.patient.fullName)}</AvatarFallback>
-        </Avatar>
-        <div>
-          <CardTitle>Patient & Case</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Identify the patient and assign clinical responsibility.
-          </p>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <section aria-labelledby="patient-information-heading">
-          <h3 id="patient-information-heading" className="mb-4 text-sm font-semibold">
-            Patient information
-          </h3>
+    <section className="space-y-6 rounded-xl bg-card p-4 shadow-sm sm:p-6">
+      <div>
+        <h2 className="text-lg font-semibold">Patient & Case</h2>
+        <p className="text-sm text-muted-foreground">Patient identity and case responsibility.</p>
+      </div>
+      <div className="grid gap-8 lg:grid-cols-2 lg:divide-x">
+        <section aria-labelledby="patient-information-heading" className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="size-10 border">
+              <AvatarFallback>{patientInitials(plan.patient.fullName)}</AvatarFallback>
+            </Avatar>
+            <h3 id="patient-information-heading" className="font-semibold">
+              Patient
+            </h3>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Full name">
               <Input
@@ -457,14 +485,21 @@ function PatientStep({
                 onChange={(country) => update({ country })}
               />
             </Field>
+            <Field label="Email">
+              <Input
+                disabled={readOnly}
+                type="email"
+                value={plan.patient.email ?? ""}
+                onChange={(event) => update({ email: event.target.value })}
+              />
+            </Field>
           </div>
         </section>
-        <Separator />
-        <section aria-labelledby="assignment-heading">
-          <h3 id="assignment-heading" className="mb-4 text-sm font-semibold">
+        <section aria-labelledby="assignment-heading" className="space-y-4 lg:pl-8">
+          <h3 id="assignment-heading" className="font-semibold">
             Assignment
           </h3>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Field label="Assigned dentist">
               <TeamSelect
                 value={plan.patient.dentistId}
@@ -487,62 +522,60 @@ function PatientStep({
             </Field>
           </div>
         </section>
-        {hasSourceContext && (
-          <>
-            <Separator />
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" className="w-full justify-between px-0">
-                  Source information
-                  <ChevronDown className="size-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 pt-3">
-                <div className="flex flex-wrap gap-2">
-                  {plan.patient.source && (
-                    <Badge variant="secondary">
-                      Source: {plan.patient.source.replace(/_/g, " ")}
-                    </Badge>
-                  )}
-                  {plan.patient.assessmentId && (
-                    <Badge variant="outline">Assessment available</Badge>
-                  )}
-                  {plan.patient.roadmapId && (
-                    <Badge variant="outline">Preliminary Roadmap available</Badge>
-                  )}
-                  {plan.patient.applicationId && (
-                    <Badge variant="outline">Clinic application available</Badge>
-                  )}
-                  {plan.patient.leadId && <Badge variant="outline">CRM Lead linked</Badge>}
-                  {plan.importedAssessment.destinationCountry && (
-                    <Badge variant="outline">
-                      Destination: {plan.importedAssessment.destinationCountry}
-                    </Badge>
-                  )}
-                  {plan.patient.treatmentInterest && (
-                    <Badge variant="outline">
-                      Preliminary interest: {plan.patient.treatmentInterest}
-                    </Badge>
-                  )}
-                </div>
-                {plan.patient.uploadedFiles.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Uploaded case files</p>
-                    <div className="flex flex-wrap gap-2">
-                      {plan.patient.uploadedFiles.map((file, index) => (
-                        <Badge key={`${file.kind}-${index}`} variant="secondary">
-                          {file.kind.replace(/_/g, " ")}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
+      </div>
+      {hasSourceContext && (
+        <>
+          <Separator />
+          <Collapsible className="rounded-lg bg-muted/30 px-4">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" className="w-full justify-between px-0">
+                Source information
+                <ChevronDown className="size-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-3">
+              <div className="flex flex-wrap gap-2">
+                {plan.patient.source && (
+                  <Badge variant="secondary">
+                    Source: {plan.patient.source.replace(/_/g, " ")}
+                  </Badge>
                 )}
-              </CollapsibleContent>
-            </Collapsible>
-          </>
-        )}
-      </CardContent>
-    </Card>
+                {plan.patient.assessmentId && <Badge variant="outline">Assessment available</Badge>}
+                {plan.patient.roadmapId && (
+                  <Badge variant="outline">Preliminary Roadmap available</Badge>
+                )}
+                {plan.patient.applicationId && (
+                  <Badge variant="outline">Clinic application available</Badge>
+                )}
+                {plan.patient.leadId && <Badge variant="outline">CRM Lead linked</Badge>}
+                {plan.importedAssessment.destinationCountry && (
+                  <Badge variant="outline">
+                    Destination: {plan.importedAssessment.destinationCountry}
+                  </Badge>
+                )}
+                {plan.patient.treatmentInterest && (
+                  <Badge variant="outline">
+                    Preliminary interest: {plan.patient.treatmentInterest}
+                  </Badge>
+                )}
+              </div>
+              {plan.patient.uploadedFiles.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium">Uploaded case files</p>
+                  <div className="flex flex-wrap gap-2">
+                    {plan.patient.uploadedFiles.map((file, index) => (
+                      <Badge key={`${file.kind}-${index}`} variant="secondary">
+                        {file.kind.replace(/_/g, " ")}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </>
+      )}
+    </section>
   );
 }
 function TeamSelect({
@@ -553,24 +586,90 @@ function TeamSelect({
   disabled,
 }: {
   value?: string;
-  users: Array<{ id: string; name: string }>;
+  users: Array<{ id: string; name: string; role: string }>;
   placeholder: string;
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const selected = users.find((user) => user.id === value);
   return (
-    <Combobox
-      value={value || "unassigned"}
-      options={[
-        { value: "unassigned", label: "Unassigned" },
-        ...users.map((user) => ({ value: user.id, label: user.name })),
-      ]}
-      onValueChange={(next) => onChange(next === "unassigned" ? "" : next)}
-      placeholder={placeholder}
-      searchPlaceholder={`Search ${placeholder.toLowerCase()}...`}
-      emptyText="No matching clinic user"
-      disabled={disabled}
-    />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-auto min-h-10 w-full justify-between py-2"
+        >
+          {selected ? (
+            <span className="flex min-w-0 items-center gap-2 text-left">
+              <Avatar className="size-7">
+                <AvatarFallback className="text-[10px]">
+                  {patientInitials(selected.name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0">
+                <span className="block truncate text-sm">{selected.name}</span>
+                <span className="block text-[11px] capitalize text-muted-foreground">
+                  {selected.role.replace(/_/g, " ")}
+                </span>
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
+          <CommandList>
+            <CommandEmpty>No matching clinic user</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="Unassigned"
+                onSelect={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                <Check className={cn("mr-2 size-4", !value ? "opacity-100" : "opacity-0")} />
+                Unassigned
+              </CommandItem>
+              {users.map((user) => (
+                <CommandItem
+                  key={user.id}
+                  value={`${user.name} ${user.role}`}
+                  onSelect={() => {
+                    onChange(user.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn("mr-2 size-4", value === user.id ? "opacity-100" : "opacity-0")}
+                  />
+                  <Avatar className="mr-2 size-7">
+                    <AvatarFallback className="text-[10px]">
+                      {patientInitials(user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>
+                    <span className="block text-sm">{user.name}</span>
+                    <span className="block text-[11px] capitalize text-muted-foreground">
+                      {user.role.replace(/_/g, " ")}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

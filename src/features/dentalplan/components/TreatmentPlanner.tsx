@@ -51,7 +51,6 @@ import { ConditionSelector } from "./ConditionSelector";
 import { TreatmentSelector } from "./TreatmentSelector";
 import { TreatmentSummary } from "./TreatmentSummary";
 import { ConditionSummary } from "./ConditionSummary";
-import { TreatmentLegend } from "./TreatmentLegend";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { BridgeConfigurator } from "./BridgeConfigurator";
 import { formatQuoteMoney } from "@/lib/quote";
@@ -660,7 +659,7 @@ export function TreatmentPlanner({
           </div>
         </div>
         <div className="space-y-3">
-          <div className="rounded-lg border bg-card p-4">
+          <div className="border-t pt-4">
             {message && (
               <div
                 role="alert"
@@ -691,17 +690,6 @@ export function TreatmentPlanner({
               />
             </div>
           )}
-          <Collapsible className="rounded-lg border bg-card px-4">
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" className="w-full justify-between px-0">
-                Visual legend
-                <ChevronDown className="size-4" />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pb-4 [&>div]:border-0 [&>div]:p-0">
-              <TreatmentLegend showTitle={false} />
-            </CollapsibleContent>
-          </Collapsible>
         </div>
       </div>
       {mode === "current" ? (
@@ -713,6 +701,15 @@ export function TreatmentPlanner({
         />
       ) : (
         <>
+          <TreatmentSummary
+            treatments={history.state.proposedTreatments}
+            pricingItems={history.state.commercial.items}
+            currency={history.state.commercial.currency}
+            readOnly={readOnly}
+            onDelete={(ids) => !readOnly && deleteTreatments(ids)}
+            onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}
+            onHighlight={highlightTeeth}
+          />
           <UnitPricing
             plan={history.state}
             readOnly={readOnly || pricingReadOnly}
@@ -734,18 +731,9 @@ export function TreatmentPlanner({
               )
             }
           />
-          <TreatmentSummary
-            treatments={history.state.proposedTreatments}
-            pricingItems={history.state.commercial.items}
-            currency={history.state.commercial.currency}
-            readOnly={readOnly}
-            onDelete={(ids) => !readOnly && deleteTreatments(ids)}
-            onEdit={(ids, notes) => !readOnly && editTreatments(ids, notes)}
-            onHighlight={highlightTeeth}
-          />
         </>
       )}
-      <Collapsible className="rounded-lg border bg-card px-4">
+      <Collapsible className="border-t px-1 pt-1">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="w-full justify-between px-0">
             <span className="flex items-center gap-2">
@@ -798,11 +786,8 @@ function UnitPricing({
     );
   const categories = [...new Set(plan.commercial.items.map((item) => item.category ?? "Other"))];
   return (
-    <section
-      className="overflow-hidden rounded-lg border bg-card"
-      aria-labelledby="unit-pricing-heading"
-    >
-      <div className="border-b px-4 py-3">
+    <section className="overflow-hidden border-t pt-4" aria-labelledby="unit-pricing-heading">
+      <div className="px-1 pb-3">
         <h3 id="unit-pricing-heading" className="font-semibold">
           Unit pricing
         </h3>

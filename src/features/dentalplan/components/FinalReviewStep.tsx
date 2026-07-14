@@ -2,8 +2,6 @@ import { AlertTriangle, Check } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatQuoteMoney } from "@/lib/quote";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { calculateCommercial } from "../utils/commercial";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
@@ -11,7 +9,6 @@ import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 export function FinalReviewStep({
   plan,
   onNavigate,
-  clinicUsers = [],
 }: {
   plan: DentalPlan;
   hotels?: DentalPlanStudioProps["hotels"];
@@ -29,8 +26,6 @@ export function FinalReviewStep({
   });
   const defaults = derivePlanDefaults(plan);
   const scheduled = plan.commercial.paymentSchedule.reduce((sum, item) => sum + item.amount, 0);
-  const dentist = clinicUsers.find((user) => user.id === plan.patient.dentistId);
-  const coordinator = clinicUsers.find((user) => user.id === plan.patient.coordinatorId);
   const readiness = [
     { label: "Patient & Case", ready: Boolean(plan.patient.fullName), step: 0 },
     { label: "Clinical Planning", ready: plan.proposedTreatments.length > 0, step: 1 },
@@ -47,11 +42,11 @@ export function FinalReviewStep({
 
   return (
     <div className="space-y-4">
-      <Card className={ready ? "border-success/40" : "border-warning/50"}>
-        <CardHeader className="pb-3">
+      <section className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
+        <header className="pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle>Case validation</CardTitle>
+              <h2 className="text-lg font-semibold">Case validation</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Confirm the case is clinically and commercially ready before sharing.
               </p>
@@ -60,8 +55,8 @@ export function FinalReviewStep({
               {ready ? "Ready to share" : `${missing.length} item(s) need attention`}
             </Badge>
           </div>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        </header>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {readiness.map((item) => (
             <Button
               key={item.label}
@@ -83,8 +78,8 @@ export function FinalReviewStep({
               </span>
             </Button>
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {(missing.length > 0 || warnings.length > 0) && (
         <Alert>
@@ -104,36 +99,6 @@ export function FinalReviewStep({
           </AlertDescription>
         </Alert>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Case snapshot</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <Meta label="Patient" value={plan.patient.fullName || "Missing"} />
-          <Meta label="Dentist" value={dentist?.name || "Unassigned"} />
-          <Meta label="Coordinator" value={coordinator?.name || "Unassigned"} />
-          <Meta label="Treatments" value={`${plan.proposedTreatments.length} planned`} />
-          <Meta
-            label="Package"
-            value={
-              plan.travel.hotelIncluded
-                ? `${plan.travel.hotelNights} hotel nights`
-                : "No accommodation"
-            }
-          />
-          <Meta label="Total" value={formatQuoteMoney(totals.total, plan.commercial.currency)} />
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
     </div>
   );
 }
