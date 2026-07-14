@@ -46,12 +46,16 @@ export function UnifiedPlanShareSection({
     if (!token) return;
     window.open(`/shared/treatment-plan/${token}?preview=true`, "_blank", "noopener,noreferrer");
   };
-  const copyLink = () => {
+  const copyLink = async () => {
     if (!publicLinkReady || !plan.share_token) return;
-    void navigator.clipboard.writeText(
-      `${window.location.origin}/shared/treatment-plan/${plan.share_token}`,
-    );
-    toast.success("Share link copied");
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/shared/treatment-plan/${plan.share_token}`,
+      );
+      toast.success("Share link copied");
+    } catch {
+      toast.error("Could not copy the patient link");
+    }
   };
   const approve = () => {
     updateStatus(plan.id, plan.clinic_id, "approved", actorId);
@@ -61,14 +65,18 @@ export function UnifiedPlanShareSection({
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 sm:items-center">
           <div>
             <CardTitle>Share & delivery</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Preview first, then complete the clinical approval and patient delivery workflow.
             </p>
           </div>
-          <Button disabled={!plan.share_token && !canShare} onClick={preview}>
+          <Button
+            className="w-full sm:w-auto"
+            disabled={!plan.share_token && !canShare}
+            onClick={preview}
+          >
             Preview Patient View
           </Button>
         </CardHeader>
@@ -78,6 +86,13 @@ export function UnifiedPlanShareSection({
               Actions
             </h3>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={!publicLinkReady || !canShare}
+                onClick={() => void copyLink()}
+              >
+                Copy Patient Link
+              </Button>
               {status === "draft" && canSubmitReview && (
                 <Button
                   variant="outline"
@@ -116,9 +131,6 @@ export function UnifiedPlanShareSection({
                   Mark Sent
                 </Button>
               )}
-              <Button variant="outline" disabled={!publicLinkReady || !canShare} onClick={copyLink}>
-                Copy Patient Link
-              </Button>
               {canShare && ["approved", "sent", "viewed"].includes(status) && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

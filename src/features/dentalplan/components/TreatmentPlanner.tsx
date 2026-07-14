@@ -93,7 +93,25 @@ export function TreatmentPlanner({
   }>();
   const currentSelection = useToothSelection();
   const proposedSelection = useToothSelection();
+  const clearCurrentSelection = currentSelection.clear;
+  const clearProposedSelection = proposedSelection.clear;
   const selection = mode === "current" ? currentSelection : proposedSelection;
+  useEffect(() => {
+    const clearSelectionShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.matches("input, textarea, select, [contenteditable='true']") ||
+        document.querySelector("[role='dialog']")
+      )
+        return;
+      if (mode === "current") clearCurrentSelection();
+      else clearProposedSelection();
+      setMessage(null);
+    };
+    window.addEventListener("keydown", clearSelectionShortcut);
+    return () => window.removeEventListener("keydown", clearSelectionShortcut);
+  }, [clearCurrentSelection, clearProposedSelection, mode]);
   const selectedTreatment = definitions.find((item) => item.id === selectedTreatmentId);
   const selectedConditionLabel = CONDITION_DEFINITIONS.find(
     (item) => item.type === selectedCondition,
@@ -660,6 +678,8 @@ export function TreatmentPlanner({
               variant="ghost"
               disabled={!selection.selected.length}
               onClick={selection.clear}
+              aria-keyshortcuts="Escape"
+              title="Clear selection (Esc)"
             >
               Clear
             </Button>

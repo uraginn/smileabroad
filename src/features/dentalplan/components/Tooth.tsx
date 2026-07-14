@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type {
   ConditionType,
   PlannerMode,
@@ -24,7 +25,7 @@ type Props = {
 };
 const W = 40,
   H = 56;
-export function Tooth({
+export const Tooth = memo(function Tooth({
   toothNumber,
   currentConditions,
   proposedTreatments,
@@ -66,7 +67,7 @@ export function Tooth({
       disabled={readOnly && !allowReadOnlySelection}
       aria-label={label}
       aria-pressed={selected}
-      className={`group relative flex flex-col items-center focus:outline-none ${readOnly && !allowReadOnlySelection ? "cursor-default opacity-90" : "cursor-pointer touch-manipulation select-none"}`}
+      className={`group relative flex flex-col items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${readOnly && !allowReadOnlySelection ? "cursor-default opacity-90" : "cursor-pointer touch-manipulation select-none"}`}
     >
       {isUpper ? (
         <>
@@ -85,7 +86,7 @@ export function Tooth({
       )}
     </button>
   );
-}
+});
 function ToothSvg({
   visual,
   selected,

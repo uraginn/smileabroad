@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronsUpDown, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
@@ -72,8 +74,7 @@ export function DentalPlanStudio(props: DentalPlanStudioProps) {
       );
     });
   }, [incomingPlanId, repository]);
-  if (!plan)
-    return <div className="flex min-h-screen items-center justify-center">Loading planner…</div>;
+  if (!plan) return <PlannerSkeleton />;
   return <PlannerShell plan={plan} setPlan={setPlan} repository={repository} {...props} />;
 }
 function PlannerShell({
@@ -100,7 +101,7 @@ function PlannerShell({
   setPlan: (plan: DentalPlan) => void;
   repository: LocalStorageDentalPlanRepository;
 } & DentalPlanStudioProps) {
-  const { lastSavedAt, saving } = useAutoSave(plan, repository);
+  const { lastSavedAt, status: saveStatus, saveNow } = useAutoSave(plan, repository);
   const effectiveTreatments = useMemo<EffectiveTreatmentDefinition[]>(() => {
     const system = TREATMENT_DEFINITIONS.flatMap((base) => {
       const override = treatmentDefaults.find(
@@ -174,12 +175,30 @@ function PlannerShell({
               : plan.finalized;
     return complete ? "Completed" : "Incomplete";
   };
-  const save = () => {
+  const save = useCallback(() => {
     if (readOnly) return;
-    repository.savePlan(plan);
-    onSave?.(plan);
-    setResult("Draft saved.");
-  };
+    const saved = saveNow();
+    onSave?.(saved);
+    setResult("");
+    toast.success("Treatment plan saved");
+  }, [onSave, readOnly, saveNow]);
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      save();
+    };
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [save]);
+  const stepIssue =
+    step === 0 && context?.mode !== "template" && !plan.patient.fullName.trim()
+      ? "Add the patient name before continuing to Clinical Planning."
+      : step === 1 && !plan.proposedTreatments.length
+        ? "Apply at least one proposed treatment before continuing."
+        : step === 3 && !plan.commercial.items.some((item) => item.unitPrice > 0)
+          ? "Add treatment pricing before continuing to Final Validation."
+          : null;
   const finalize = async () => {
     if (readOnly) return;
     const hardConflicts = validatePlanForFinalize(plan);
@@ -227,13 +246,30 @@ function PlannerShell({
               <Badge variant="outline">{(documentStatus ?? "draft").replace(/_/g, " ")}</Badge>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">
-              {saving
-                ? "Saving…"
-                : lastSavedAt
-                  ? `Saved ${formatDistanceToNow(new Date(lastSavedAt), { addSuffix: true })}`
-                  : "Not saved"}
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground sm:w-auto">
+            <span
+              className="inline-flex min-w-28 items-center justify-end gap-1.5 whitespace-nowrap"
+              role="status"
+              aria-live="polite"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
+                  saveStatus === "saved"
+                    ? "bg-success"
+                    : saveStatus === "saving"
+                      ? "animate-pulse bg-primary"
+                      : "bg-warning",
+                )}
+              />
+              {saveStatus === "saving"
+                ? "Saving..."
+                : saveStatus === "unsaved"
+                  ? "Unsaved changes"
+                  : lastSavedAt
+                    ? `Saved ${formatDistanceToNow(new Date(lastSavedAt), { addSuffix: true })}`
+                    : "Saved"}
             </span>
             {onPreview && (
               <Tooltip>
@@ -245,9 +281,19 @@ function PlannerShell({
                 <TooltipContent>Preview the patient-facing plan</TooltipContent>
               </Tooltip>
             )}
-            <Button size="sm" onClick={save} disabled={readOnly}>
-              Save
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  onClick={save}
+                  disabled={readOnly || saveStatus === "saving"}
+                  aria-keyshortcuts="Control+S Meta+S"
+                >
+                  Save
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Save (Ctrl/Cmd + S)</TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -363,8 +409,8 @@ function PlannerShell({
             </div>
             <Tabs value={reviewShareTab} onValueChange={setReviewShareTab} className="space-y-4">
               <TabsList className="grid w-full grid-cols-2 sm:w-80">
-                <TabsTrigger value="review">Review</TabsTrigger>
-                <TabsTrigger value="share" disabled={context?.mode === "template"}>
+                <TabsTrigger value="review">Final Validation</TabsTrigger>
+                <TabsTrigger value="share" disabled={context?.mode === "template" || !shareSection}>
                   Share
                 </TabsTrigger>
               </TabsList>
@@ -379,8 +425,11 @@ function PlannerShell({
               <TabsContent value="share">
                 {shareSection ?? (
                   <Card>
-                    <CardContent className="p-6 text-sm text-muted-foreground">
-                      Save this Treatment Plan before sharing.
+                    <CardContent className="space-y-3 p-6 text-sm text-muted-foreground">
+                      <p>Complete Final Validation and save this Treatment Plan before sharing.</p>
+                      <Button variant="outline" onClick={() => setReviewShareTab("review")}>
+                        Return to Final Validation
+                      </Button>
                     </CardContent>
                   </Card>
                 )}
@@ -388,7 +437,12 @@ function PlannerShell({
             </Tabs>
           </section>
         )}
-        <div className="flex justify-between">
+        {stepIssue && step < 4 && (
+          <Alert>
+            <AlertDescription>{stepIssue}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap justify-between gap-2">
           <Button
             variant="outline"
             disabled={step === 0}
@@ -397,7 +451,9 @@ function PlannerShell({
             Back
           </Button>
           {step < 4 ? (
-            <Button onClick={() => change({ draftStep: step + 1 })}>Continue</Button>
+            <Button disabled={Boolean(stepIssue)} onClick={() => change({ draftStep: step + 1 })}>
+              Continue
+            </Button>
           ) : reviewShareTab === "share" ? null : context?.mode === "template" ? (
             <Button onClick={save}>Save template</Button>
           ) : (
@@ -423,6 +479,26 @@ function PlannerShell({
             </AlertDialog>
           )}
         </div>
+      </main>
+    </div>
+  );
+}
+
+function PlannerSkeleton() {
+  return (
+    <div className="min-h-screen bg-background" aria-label="Loading treatment planner">
+      <div className="border-b bg-card px-4 py-3">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-6 w-52" />
+          </div>
+          <Skeleton className="h-9 w-24" />
+        </div>
+      </div>
+      <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-6">
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-[28rem] w-full rounded-xl" />
       </main>
     </div>
   );

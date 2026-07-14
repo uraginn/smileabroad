@@ -48,6 +48,7 @@ export function DentalChart({
   return (
     <div
       className={`rounded-xl bg-muted/20 px-2 py-4 sm:p-6 ${readOnly ? "opacity-90" : ""}`}
+      role="group"
       aria-label={title}
     >
       <div className="mb-3 flex items-center justify-between">

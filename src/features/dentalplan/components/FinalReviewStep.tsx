@@ -49,7 +49,7 @@ export function FinalReviewStep({
       <header className="pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Case validation</h2>
+            <h2 className="text-lg font-semibold">Final Validation</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Confirm the case is clinically and commercially ready before sharing.
             </p>
@@ -68,17 +68,17 @@ export function FinalReviewStep({
           onNavigate={onNavigate}
         />
         <ValidationGroup
-          title="Missing"
-          icon={<AlertTriangle className="size-4 text-destructive" />}
-          items={missing}
-          empty="No required information is missing."
-          onNavigate={onNavigate}
-        />
-        <ValidationGroup
           title="Warnings"
           icon={<AlertTriangle className="size-4 text-warning-foreground" />}
           items={warningItems}
           empty="No additional warnings."
+          onNavigate={onNavigate}
+        />
+        <ValidationGroup
+          title="Missing"
+          icon={<AlertTriangle className="size-4 text-destructive" />}
+          items={missing}
+          empty="No required information is missing."
           onNavigate={onNavigate}
         />
       </div>
