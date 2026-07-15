@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { canUser } from "@/lib/auth/permissions";
@@ -106,8 +106,7 @@ function ClinicSettings() {
           <TabsTrigger value="users">Users & Roles</TabsTrigger>
           <TabsTrigger value="planner">Dental Planner</TabsTrigger>
           <TabsTrigger value="workflow">CRM Workflow</TabsTrigger>
-          <TabsTrigger value="templates">Communication Templates</TabsTrigger>
-          <TabsTrigger value="sources">Sources</TabsTrigger>
+          <TabsTrigger value="templates">Communication</TabsTrigger>
           <TabsTrigger value="security">Security & Data</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
@@ -116,7 +115,7 @@ function ClinicSettings() {
             brand={brand}
             save={(clinicPatch, brandPatch) => {
               updateClinic(clinicId, clinicPatch, actor?.id);
-              if (brand) updateBranding(clinicId, brandPatch);
+              if (brand) updateBranding(clinicId, brandPatch, actor?.id);
               toast.success("Clinic profile saved");
             }}
           />
@@ -200,8 +199,8 @@ function ClinicSettings() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Treatments, dentist profiles, clinical templates and hotels remain in the existing
-                planner settings workspace.
+                Treatment Library, dentist profiles, hotels and Included Services are managed in one
+                clinic-scoped workspace.
               </p>
               <Button className="mt-4" asChild>
                 <Link to="/pro/settings/dental-planner">Open Dental Planner settings</Link>
@@ -210,10 +209,16 @@ function ClinicSettings() {
           </Card>
         </TabsContent>
         <TabsContent value="workflow">
-          <Pipeline
-            rows={pipeline}
-            save={(rows) => saveSettings(clinicId, { pipeline: rows, sources }, actor?.id)}
-          />
+          <div className="space-y-5">
+            <Pipeline
+              rows={pipeline}
+              save={(rows) => saveSettings(clinicId, { pipeline: rows, sources }, actor?.id)}
+            />
+            <Sources
+              rows={sources}
+              save={(rows) => saveSettings(clinicId, { pipeline, sources: rows }, actor?.id)}
+            />
+          </div>
         </TabsContent>
         <TabsContent value="templates">
           <Card>
@@ -256,12 +261,6 @@ function ClinicSettings() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
-        <TabsContent value="sources">
-          <Sources
-            rows={sources}
-            save={(rows) => saveSettings(clinicId, { pipeline, sources: rows }, actor?.id)}
-          />
         </TabsContent>
         <TabsContent value="security">
           <Alert>
@@ -308,11 +307,12 @@ function Profile({
     brand?.logo_url ?? brand?.shared_view_logo_url,
   );
   useEffect(() => {
-    if (!sharedLogo && storedLogoUrl) setSharedLogo(storedLogoUrl);
-  }, [sharedLogo, storedLogoUrl]);
+    if (sharedLogoAssetId === brand?.logo_asset_id && storedLogoUrl !== sharedLogo)
+      setSharedLogo(storedLogoUrl ?? "");
+  }, [brand?.logo_asset_id, sharedLogo, sharedLogoAssetId, storedLogoUrl]);
   const [logoUploadError, setLogoUploadError] = useState("");
   const [sharedBanner, setSharedBanner] = useState(
-    clinic.cover_image || brand?.shared_view_banner_url || "",
+    brand?.shared_view_banner_url || clinic.cover_image || "",
   );
   const [sharedTagline, setSharedTagline] = useState(brand?.shared_view_tagline ?? "");
   const [sharedIntroduction, setSharedIntroduction] = useState(
@@ -324,164 +324,369 @@ function Profile({
     brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A",
   );
   const logoIsSvg = !sharedLogo || !!sharedLogoAssetId || isSvgLogoUrl(sharedLogo);
+  const colorsAreValid = [primaryColor, secondaryColor, sharedAccent].every(isHexColor);
+  const savedSignature = JSON.stringify({
+    name: clinic.name,
+    website: clinic.website ?? brand?.website ?? "",
+    country: clinic.country,
+    city: clinic.city,
+    description: clinic.short_description,
+    phone: brand?.phone ?? "",
+    email: brand?.email ?? "",
+    logo: brand?.logo_asset_id ? "" : (brand?.logo_url ?? brand?.shared_view_logo_url ?? ""),
+    logoAssetId: brand?.logo_asset_id,
+    banner: brand?.shared_view_banner_url || clinic.cover_image || "",
+    tagline: brand?.shared_view_tagline ?? "",
+    introduction: brand?.shared_view_introduction ?? "",
+    primaryColor: normalizeHex(brand?.primary_color ?? "#0A1626"),
+    secondaryColor: normalizeHex(brand?.secondary_color ?? "#415469"),
+    accent: normalizeHex(brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A"),
+  });
+  const currentSignature = JSON.stringify({
+    name,
+    website,
+    country,
+    city,
+    description,
+    phone,
+    email,
+    logo: sharedLogoAssetId ? "" : sharedLogo,
+    logoAssetId: sharedLogoAssetId,
+    banner: sharedBanner,
+    tagline: sharedTagline,
+    introduction: sharedIntroduction,
+    primaryColor: normalizeHex(primaryColor),
+    secondaryColor: normalizeHex(secondaryColor),
+    accent: normalizeHex(sharedAccent),
+  });
+  const dirty = savedSignature !== currentSignature;
+  const submit = () => {
+    if (!dirty || !logoIsSvg || !colorsAreValid || !name.trim()) return;
+    save(
+      {
+        name: name.trim(),
+        website: website.trim() || undefined,
+        country: country.trim(),
+        city: city.trim(),
+        short_description: description.trim(),
+      },
+      {
+        website: website.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        logo_url: sharedLogoAssetId ? undefined : sharedLogo.trim() || undefined,
+        logo_asset_id: sharedLogoAssetId,
+        shared_view_banner_url: sharedBanner.trim() || undefined,
+        shared_view_tagline: sharedTagline.trim() || undefined,
+        shared_view_introduction: sharedIntroduction.trim() || undefined,
+        primary_color: normalizeHex(primaryColor),
+        secondary_color: normalizeHex(secondaryColor),
+        shared_view_accent_color: normalizeHex(sharedAccent),
+      },
+    );
+  };
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Clinic Profile</CardTitle>
+      <CardHeader className="gap-1 border-b">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle>Clinic Profile</CardTitle>
+          <Badge variant={dirty ? "default" : "secondary"}>
+            {dirty ? "Unsaved changes" : "Saved"}
+          </Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Manage the clinic identity and patient-facing information used across Shared Treatment
+          Plans.
+        </p>
       </CardHeader>
-      <CardContent className="grid gap-4 sm:grid-cols-2">
-        <Field label="Clinic name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Website">
-          <Input value={website} onChange={(e) => setWebsite(e.target.value)} />
-        </Field>
-        <Field label="Public phone">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </Field>
-        <Field label="Public email">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Field>
-        <Field label="Country">
-          <Input value={country} onChange={(e) => setCountry(e.target.value)} />
-        </Field>
-        <Field label="City">
-          <Input value={city} onChange={(e) => setCity(e.target.value)} />
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label="Public description">
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-          </Field>
-        </div>
-        <div className="sm:col-span-2 border-t pt-4">
-          <h3 className="font-medium">Clinic branding</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your clinic identity is used automatically across patient-facing Treatment Plans.
-          </p>
-        </div>
-        <Field label="Clinic logo URL (SVG only)">
-          <Input
-            value={sharedLogo}
-            placeholder="https://example.com/clinic-logo.svg"
-            aria-invalid={!logoIsSvg}
-            onChange={(e) => {
-              setSharedLogo(e.target.value);
-              setSharedLogoAssetId(undefined);
-            }}
-          />
-          {!logoIsSvg && (
-            <p className="mt-1 text-xs text-destructive">
-              Shared Treatment Plan logos must use an SVG URL.
+      <CardContent className="p-0">
+        <Tabs defaultValue="details" className="min-w-0">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent px-4 py-2">
+            <TabsTrigger value="details">Clinic Details</TabsTrigger>
+            <TabsTrigger value="branding">Branding</TabsTrigger>
+            <TabsTrigger value="shared">Shared Patient View</TabsTrigger>
+            <TabsTrigger value="contact">Contact</TabsTrigger>
+          </TabsList>
+          <TabsContent value="details" className="m-0 grid gap-4 p-4 sm:grid-cols-2 sm:p-6">
+            <Field label="Clinic name">
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="Website">
+              <Input value={website} onChange={(e) => setWebsite(e.target.value)} />
+            </Field>
+            <Field label="Country">
+              <Input value={country} onChange={(e) => setCountry(e.target.value)} />
+            </Field>
+            <Field label="City">
+              <Input value={city} onChange={(e) => setCity(e.target.value)} />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Public description">
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+              </Field>
+            </div>
+          </TabsContent>
+          <TabsContent value="branding" className="m-0 grid gap-6 p-4 lg:grid-cols-2 sm:p-6">
+            <div className="space-y-5">
+              <Field label="Clinic logo URL (SVG only)">
+                <Input
+                  value={sharedLogoAssetId ? "Stored SVG logo" : sharedLogo}
+                  disabled={Boolean(sharedLogoAssetId)}
+                  placeholder="https://example.com/clinic-logo.svg"
+                  aria-invalid={!logoIsSvg}
+                  onChange={(e) => setSharedLogo(e.target.value)}
+                />
+                {!logoIsSvg && (
+                  <p className="mt-1 text-xs text-destructive">
+                    Shared Treatment Plan logos must use an SVG URL.
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Input
+                    type="file"
+                    accept=".svg,image/svg+xml"
+                    className="max-w-sm"
+                    aria-label="Upload clinic SVG logo"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const asset = await settingsAssetAdapter.readSvgLogo(file);
+                        setSharedLogo(asset.data_url ?? "");
+                        setSharedLogoAssetId(asset.storage_key);
+                        setLogoUploadError("");
+                      } catch (error) {
+                        setLogoUploadError(
+                          error instanceof Error
+                            ? error.message
+                            : "The SVG logo could not be saved.",
+                        );
+                        event.target.value = "";
+                      }
+                    }}
+                  />
+                  {sharedLogoAssetId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setSharedLogo("");
+                        setSharedLogoAssetId(undefined);
+                      }}
+                    >
+                      Remove logo
+                    </Button>
+                  )}
+                </div>
+                {logoUploadError && (
+                  <p className="mt-1 text-xs text-destructive">{logoUploadError}</p>
+                )}
+              </Field>
+              <Field label="Shared View banner URL">
+                <Input value={sharedBanner} onChange={(e) => setSharedBanner(e.target.value)} />
+              </Field>
+              <CompactPaletteEditor
+                primary={primaryColor}
+                secondary={secondaryColor}
+                accent={sharedAccent}
+                onPrimary={setPrimaryColor}
+                onSecondary={setSecondaryColor}
+                onAccent={setSharedAccent}
+              />
+            </div>
+            <BrandPreview
+              clinicName={name}
+              tagline={sharedTagline || description}
+              logo={sharedLogo}
+              banner={sharedBanner}
+              primary={isHexColor(primaryColor) ? primaryColor : "#0A1626"}
+              accent={isHexColor(sharedAccent) ? sharedAccent : "#C8A46A"}
+            />
+          </TabsContent>
+          <TabsContent value="shared" className="m-0 space-y-5 p-4 sm:p-6">
+            <Field label="Clinic tagline">
+              <Input value={sharedTagline} onChange={(e) => setSharedTagline(e.target.value)} />
+            </Field>
+            <Field label="Patient-facing introduction">
+              <Textarea
+                value={sharedIntroduction}
+                maxLength={250}
+                rows={4}
+                placeholder="A short, reassuring welcome shown at the beginning of each patient Treatment Plan."
+                onChange={(e) => setSharedIntroduction(e.target.value)}
+              />
+            </Field>
+            <p className="text-right text-xs text-muted-foreground">
+              {sharedIntroduction.length}/250
             </p>
-          )}
-          <div className="mt-2">
-            <Input
-              type="file"
-              accept=".svg,image/svg+xml"
-              aria-label="Upload clinic SVG logo"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                try {
-                  const asset = await settingsAssetAdapter.readSvgLogo(file);
-                  setSharedLogo(asset.data_url ?? "");
-                  setSharedLogoAssetId(asset.storage_key);
-                  setLogoUploadError("");
-                } catch (error) {
-                  setLogoUploadError(
-                    error instanceof Error ? error.message : "The SVG logo could not be saved.",
-                  );
-                  event.target.value = "";
-                }
-              }}
-            />
-            {logoUploadError && <p className="mt-1 text-xs text-destructive">{logoUploadError}</p>}
-          </div>
-        </Field>
-        <Field label="Clinic banner URL">
-          <Input value={sharedBanner} onChange={(e) => setSharedBanner(e.target.value)} />
-        </Field>
-        <Field label="Tagline">
-          <Input value={sharedTagline} onChange={(e) => setSharedTagline(e.target.value)} />
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label="Shared Treatment Plan introduction">
-            <Textarea
-              value={sharedIntroduction}
-              maxLength={250}
-              rows={4}
-              placeholder="A short, reassuring welcome shown at the beginning of each patient Treatment Plan."
-              onChange={(e) => setSharedIntroduction(e.target.value)}
-            />
-          </Field>
-          <p className="mt-1 text-right text-xs text-muted-foreground">
-            {sharedIntroduction.length}/250
+            <Alert>
+              <AlertTitle>Automatic clinic details</AlertTitle>
+              <AlertDescription>
+                Clinic name, logo, website and coordinator profile are taken automatically from
+                Clinic Profile and the assigned clinic user. They are not duplicated here.
+              </AlertDescription>
+            </Alert>
+          </TabsContent>
+          <TabsContent value="contact" className="m-0 grid gap-4 p-4 sm:grid-cols-2 sm:p-6">
+            <Field label="Public phone">
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </Field>
+            <Field label="Public email">
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Website">
+                <Input value={website} onChange={(e) => setWebsite(e.target.value)} />
+              </Field>
+            </div>
+          </TabsContent>
+        </Tabs>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4 sm:px-6">
+          <p className="text-xs text-muted-foreground">
+            {!colorsAreValid
+              ? "Use a valid six-digit hex value for each brand color."
+              : !logoIsSvg
+                ? "Use an SVG logo URL or upload an SVG file."
+                : dirty
+                  ? "Review and save your changes."
+                  : "Clinic Profile is up to date."}
           </p>
+          <Button
+            disabled={!dirty || !logoIsSvg || !colorsAreValid || !name.trim()}
+            onClick={submit}
+          >
+            Save Clinic Profile
+          </Button>
         </div>
-        <Field label="Primary color">
-          <Input
-            type="color"
-            className="h-10"
-            value={primaryColor}
-            onChange={(e) => setPrimaryColor(e.target.value)}
-          />
-        </Field>
-        <Field label="Secondary color">
-          <Input
-            type="color"
-            className="h-10"
-            value={secondaryColor}
-            onChange={(e) => setSecondaryColor(e.target.value)}
-          />
-        </Field>
-        <Field label="Accent color">
-          <Input
-            type="color"
-            className="h-10"
-            value={sharedAccent}
-            onChange={(e) => setSharedAccent(e.target.value)}
-          />
-        </Field>
-        {sharedBanner && (
-          <img
-            src={sharedBanner}
-            alt="Shared Treatment Plan banner preview"
-            className="sm:col-span-2 h-32 w-full rounded-lg object-cover"
-          />
-        )}
-        <Button
-          className="sm:col-span-2 sm:w-fit"
-          disabled={!logoIsSvg}
-          onClick={() =>
-            save(
-              {
-                name,
-                website,
-                country,
-                city,
-                cover_image: sharedBanner,
-                short_description: description,
-              },
-              {
-                website,
-                phone,
-                email,
-                logo_url: sharedLogoAssetId ? undefined : sharedLogo || undefined,
-                logo_asset_id: sharedLogoAssetId,
-                shared_view_tagline: sharedTagline || undefined,
-                shared_view_introduction: sharedIntroduction.trim() || undefined,
-                primary_color: primaryColor,
-                secondary_color: secondaryColor,
-                shared_view_accent_color: sharedAccent,
-              },
-            )
-          }
-        >
-          Save profile
-        </Button>
       </CardContent>
     </Card>
   );
+}
+
+function CompactPaletteEditor({
+  primary,
+  secondary,
+  accent,
+  onPrimary,
+  onSecondary,
+  onAccent,
+}: {
+  primary: string;
+  secondary: string;
+  accent: string;
+  onPrimary: (value: string) => void;
+  onSecondary: (value: string) => void;
+  onAccent: (value: string) => void;
+}) {
+  const rows = [
+    ["Primary", primary, onPrimary, "#0A1626"],
+    ["Secondary", secondary, onSecondary, "#415469"],
+    ["Accent", accent, onAccent, "#C8A46A"],
+  ] as const;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>Patient-facing palette</Label>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            onPrimary("#0A1626");
+            onSecondary("#415469");
+            onAccent("#C8A46A");
+          }}
+        >
+          <RotateCcw className="size-4" /> Reset
+        </Button>
+      </div>
+      <div className="divide-y rounded-lg border">
+        {rows.map(([label, value, onChange, fallback]) => (
+          <div key={label} className="grid grid-cols-[6rem_2.5rem_1fr] items-center gap-2 p-2">
+            <span className="text-sm font-medium">{label}</span>
+            <Input
+              type="color"
+              className="h-9 w-10 cursor-pointer p-1"
+              value={isHexColor(value) ? value : fallback}
+              aria-label={`${label} color swatch`}
+              onChange={(event) => onChange(event.target.value.toUpperCase())}
+            />
+            <Input
+              value={value}
+              className="h-9 font-mono uppercase"
+              maxLength={7}
+              aria-invalid={!isHexColor(value)}
+              aria-label={`${label} hex color`}
+              onBlur={() => isHexColor(value) && onChange(normalizeHex(value))}
+              onChange={(event) => onChange(event.target.value.toUpperCase())}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BrandPreview({
+  clinicName,
+  tagline,
+  logo,
+  banner,
+  primary,
+  accent,
+}: {
+  clinicName: string;
+  tagline: string;
+  logo?: string;
+  banner?: string;
+  primary: string;
+  accent: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-white">
+      <div className="relative grid min-h-64 place-items-center overflow-hidden p-6 text-center">
+        {banner && <img src={banner} alt="" className="absolute inset-0 size-full object-cover" />}
+        <div className="absolute inset-0 bg-gradient-to-b from-white via-white/90 to-white/55" />
+        <div className="relative max-w-sm">
+          {logo ? (
+            <img
+              src={logo}
+              alt={`${clinicName} logo preview`}
+              className="mx-auto max-h-24 max-w-full object-contain"
+            />
+          ) : (
+            <span
+              className="mx-auto grid size-14 place-items-center rounded-full text-xl font-semibold text-white"
+              style={{ background: primary }}
+            >
+              {clinicName.charAt(0) || "C"}
+            </span>
+          )}
+          <p className="mt-4 text-lg font-semibold" style={{ color: primary }}>
+            {clinicName || "Clinic name"}
+          </p>
+          <p className="mt-1 line-clamp-2 text-sm text-slate-600">
+            {tagline || "Your clinic tagline"}
+          </p>
+          <span
+            className="mx-auto mt-4 block h-1 w-16 rounded-full"
+            style={{ background: accent }}
+          />
+        </div>
+      </div>
+      <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+        Compact Shared Patient View preview
+      </p>
+    </div>
+  );
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-f]{6}$/i.test(value.trim());
+}
+
+function normalizeHex(value: string) {
+  return value.trim().toUpperCase();
 }
 
 function isSvgLogoUrl(value: string) {

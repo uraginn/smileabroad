@@ -209,14 +209,10 @@ function SharedPlan() {
           className="shared-section -mx-4 scroll-mt-24 rounded-b-[2rem] bg-stone-100/70 px-4 py-12 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:text-left">
-            {document.coordinator?.avatar_url || document.clinic?.logo_url ? (
+            {document.coordinator?.avatar_url ? (
               <img
-                src={document.coordinator?.avatar_url ?? document.clinic?.logo_url}
-                alt={
-                  document.coordinator
-                    ? `${document.coordinator.name}, your clinic coordinator`
-                    : `${document.clinic?.name} logo`
-                }
+                src={document.coordinator.avatar_url}
+                alt={`${document.coordinator.name}, your clinic coordinator`}
                 className="size-24 shrink-0 rounded-full bg-white object-cover p-1 shadow-lg ring-4 ring-white sm:size-28"
                 style={{ outline: `2px solid ${accent}` }}
               />
@@ -226,7 +222,7 @@ function SharedPlan() {
                 style={{ background: primary }}
                 aria-hidden="true"
               >
-                {document.clinic?.name.charAt(0)}
+                {document.coordinator?.name.charAt(0) ?? document.clinic?.name.charAt(0)}
               </span>
             )}
             <div className="max-w-3xl">

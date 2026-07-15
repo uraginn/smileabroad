@@ -531,7 +531,7 @@ export function mapTreatmentPlanToPatientDocument(
       city: clinic.city,
       country: clinic.country,
       logo_url: svgLogoUrl(branding?.logo_url ?? branding?.shared_view_logo_url),
-      banner_url: clinic.cover_image || branding?.shared_view_banner_url,
+      banner_url: branding?.shared_view_banner_url || clinic.cover_image,
       tagline: branding?.shared_view_tagline ?? clinic.short_description,
       introduction: branding?.shared_view_introduction,
       primary_color: branding?.primary_color,
@@ -705,7 +705,9 @@ function publicTreatmentLabel(treatment: DentalPlanData["proposedTreatments"][nu
 function svgLogoUrl(value?: string) {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
-  return normalized.startsWith("data:image/svg+xml") || /\.svg(?:[?#].*)?$/.test(normalized)
+  return normalized.startsWith("blob:") ||
+    normalized.startsWith("data:image/svg+xml") ||
+    /\.svg(?:[?#].*)?$/.test(normalized)
     ? value
     : undefined;
 }

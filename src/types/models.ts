@@ -59,6 +59,7 @@ export interface Clinic extends BaseRecord {
   directory_source?: "curated" | "platform";
   supported_treatments?: string[];
   planner_included_services?: string[];
+  planner_service_categories?: Record<string, "Clinical" | "Travel" | "Support" | "Comfort">;
   website?: string;
   source_label?: string;
   source_url?: string;

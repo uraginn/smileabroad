@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MoreHorizontal, Plus, Trash2 } from "lucide-react";
@@ -50,7 +50,6 @@ import {
   TREATMENT_DEFINITIONS,
 } from "@/features/dentalplan/data/treatmentDefinitions";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
-import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import { Tooth } from "@/features/dentalplan/components/Tooth";
 import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
 import { LocalPlannerAssetAdapter } from "@/features/dentalplan/adapters/LocalPlannerAssetAdapter";
@@ -63,34 +62,38 @@ import {
 import { useAuth } from "@/lib/auth/mock-auth";
 import { useMockStore } from "@/lib/mock/store";
 import { formatQuoteMoney } from "@/lib/quote";
-import type {
-  ClinicHotel,
-  ClinicTreatmentDefinition,
-  DentalPlanTemplate,
-  PlannerCurrency,
-  User,
-} from "@/types/models";
+import type { ClinicHotel, ClinicTreatmentDefinition, PlannerCurrency, User } from "@/types/models";
 
 export const Route = createFileRoute("/pro/settings/dental-planner")({
   component: DentalPlannerSettings,
 });
 const currencies: PlannerCurrency[] = ["GBP", "EUR", "USD", "TRY"];
 const assetAdapter = new LocalPlannerAssetAdapter();
+const PLANNER_SERVICE_CATEGORIES = ["Clinical", "Travel", "Support", "Comfort"] as const;
+type PlannerServiceCategory = (typeof PLANNER_SERVICE_CATEGORIES)[number];
+
+function serviceCategory(
+  service: string,
+  configured: Record<string, PlannerServiceCategory>,
+): PlannerServiceCategory {
+  if (configured[service]) return configured[service];
+  const normalized = service.toLowerCase();
+  if (/hotel|transfer|airport|flight|travel/.test(normalized)) return "Travel";
+  if (/concierge|translator|support|coordinator/.test(normalized)) return "Support";
+  if (/welcome|comfort|companion|refreshment/.test(normalized)) return "Comfort";
+  return "Clinical";
+}
 
 function DentalPlannerSettings() {
   const user = useAuth((state) => state.user);
-  const navigate = useNavigate();
   const clinicId = user?.clinic_id;
   const definitions = useMockStore((state) => state.clinicTreatmentDefinitions);
-  const templates = useMockStore((state) => state.dentalPlanTemplates);
   const hotels = useMockStore((state) => state.clinicHotels);
   const clinic = useMockStore((state) => state.clinics.find((item) => item.id === clinicId));
   const users = useMockStore((state) => state.users);
   const plans = useMockStore((state) => state.treatmentPlans);
   const saveDefinition = useMockStore((state) => state.saveClinicTreatmentDefinition);
   const deleteDefinition = useMockStore((state) => state.deleteClinicTreatmentDefinition);
-  const saveTemplate = useMockStore((state) => state.saveDentalPlanTemplate);
-  const deleteTemplate = useMockStore((state) => state.deleteDentalPlanTemplate);
   const saveHotel = useMockStore((state) => state.saveClinicHotel);
   const deleteHotel = useMockStore((state) => state.deleteClinicHotel);
   const addDentist = useMockStore((state) => state.addClinicDentist);
@@ -100,7 +103,6 @@ function DentalPlannerSettings() {
   const [treatment, setTreatment] = useState<ClinicTreatmentDefinition | null>(null);
   const [dentist, setDentist] = useState<Partial<User> | null>(null);
   const [dentistToDelete, setDentistToDelete] = useState<User | null>(null);
-  const [template, setTemplate] = useState<DentalPlanTemplate | null>(null);
   const [hotel, setHotel] = useState<ClinicHotel | null>(null);
   const [hotelCategories, setHotelCategories] = useState<string[]>([]);
   const [treatmentSearch, setTreatmentSearch] = useState("");
@@ -109,6 +111,9 @@ function DentalPlannerSettings() {
   const [hotelSearch, setHotelSearch] = useState("");
   const [hotelStatus, setHotelStatus] = useState("all");
   const [serviceName, setServiceName] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("all");
+  const [newServiceCategory, setNewServiceCategory] = useState<PlannerServiceCategory>("Clinical");
   const [pendingDelete, setPendingDelete] = useState<{
     title: string;
     description: string;
@@ -118,10 +123,6 @@ function DentalPlannerSettings() {
   const clinicDefinitions = useMemo(
     () => definitions.filter((item) => item.clinic_id === clinicId),
     [definitions, clinicId],
-  );
-  const clinicTemplates = useMemo(
-    () => templates.filter((item) => item.clinic_id === clinicId),
-    [templates, clinicId],
   );
   const clinicHotels = useMemo(
     () => hotels.filter((item) => item.clinic_id === clinicId),
@@ -178,6 +179,12 @@ function DentalPlannerSettings() {
     ...new Set([...HOTEL_CATEGORY_DEFAULTS, ...clinicHotels.flatMap((item) => item.categories)]),
   ];
   const configuredServices = clinic?.planner_included_services ?? DEFAULT_CLINICAL_SERVICES;
+  const serviceCategories = clinic?.planner_service_categories ?? {};
+  const visibleServices = configuredServices.filter(
+    (service) =>
+      service.toLowerCase().includes(serviceSearch.trim().toLowerCase()) &&
+      (serviceFilter === "all" || serviceCategory(service, serviceCategories) === serviceFilter),
+  );
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <PageHeader
@@ -186,160 +193,99 @@ function DentalPlannerSettings() {
       />
       <Tabs defaultValue="treatments">
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
-          <TabsTrigger value="treatments">Treatments</TabsTrigger>
+          <TabsTrigger value="treatments">Treatment Library</TabsTrigger>
           <TabsTrigger value="dentists">Dentists</TabsTrigger>
           <TabsTrigger value="services">Included Services</TabsTrigger>
           <TabsTrigger value="hotels">Hotels</TabsTrigger>
         </TabsList>
         <TabsContent value="treatments">
-          <Tabs defaultValue="library">
-            <TabsList>
-              <TabsTrigger value="library">Treatment Library</TabsTrigger>
-              <TabsTrigger value="templates">Plan Templates</TabsTrigger>
-            </TabsList>
-            <TabsContent value="library">
-              <Section
-                title="Treatment Library"
-                description="Browse clinic treatments, pricing defaults and planner behaviour."
-                action={() => setTreatment(blankTreatment(clinicId))}
-              >
-                <div className="grid gap-2 border-b p-4 sm:grid-cols-[1fr_10rem_10rem_auto]">
-                  <Input
-                    value={treatmentSearch}
-                    onChange={(event) => setTreatmentSearch(event.target.value)}
-                    placeholder="Search treatments"
-                  />
-                  <Select value={treatmentStatus} onValueChange={setTreatmentStatus}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={treatmentKind} onValueChange={setTreatmentKind}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">System & custom</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {(treatmentSearch || treatmentStatus !== "all" || treatmentKind !== "all") && (
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setTreatmentSearch("");
-                        setTreatmentStatus("all");
-                        setTreatmentKind("all");
-                      }}
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
-                <Accordion type="multiple" className="px-4">
-                  {groupedTreatments.map((group) => (
-                    <AccordionItem key={group.category} value={group.category}>
-                      <AccordionTrigger>
-                        <span>
-                          {group.category}{" "}
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            {group.items.length} treatments ·{" "}
-                            {group.items.filter((item) => item.active).length} active ·{" "}
-                            {group.items.filter((item) => !item.system).length} custom
-                          </span>
-                        </span>
-                      </AccordionTrigger>
-                      <AccordionContent className="divide-y">
-                        {group.items.map((item) => (
-                          <Row
-                            key={item.id}
-                            title={item.display_name}
-                            description={`Appears as: ${treatmentName(item.visual_key)} · Clinical behavior: ${clinicalBehaviorLabel(item.clinical_behavior)}`}
-                            badges={[
-                              item.system ? "System" : "Custom",
-                              item.active ? "Active" : "Inactive",
-                              priceSummary(item.prices),
-                            ]}
-                            onEdit={() => setTreatment(item)}
-                            onDelete={
-                              !item.system
-                                ? () =>
-                                    setPendingDelete({
-                                      title: "Delete treatment?",
-                                      description: `${item.display_name} will be removed from this clinic's library.`,
-                                      action: () => deleteDefinition(item.id, clinicId),
-                                      message: "Treatment removed",
-                                    })
-                                : undefined
-                            }
-                          />
-                        ))}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </Section>
-            </TabsContent>
-            <TabsContent value="templates">
-              <Section
-                title="Plan Templates"
-                description="Create reusable clinical plans and edit them in the real Dental Planner."
-                action={() => {
-                  const record = blankTemplate(clinicId, user.id);
-                  saveTemplate(record, user.id);
-                  navigate({
-                    to: "/dentalplan",
-                    search: { mode: "template", templateId: record.id },
-                  });
-                }}
-                actionLabel="Create template"
-              >
-                {clinicTemplates.map((item) => (
-                  <Row
-                    key={item.id}
-                    title={item.name}
-                    description={templateSummary(item)}
-                    badges={[item.category, item.active ? "Active" : "Inactive"]}
-                    onEdit={() =>
-                      navigate({
-                        to: "/dentalplan",
-                        search: { mode: "template", templateId: item.id },
-                      })
-                    }
-                    editLabel="Edit in Planner"
-                    onSecondary={() => setTemplate(item)}
-                    secondaryLabel="Details"
-                    onDuplicate={() => {
-                      saveTemplate(
-                        {
-                          ...item,
-                          id: crypto.randomUUID(),
-                          name: `${item.name} copy`,
-                          plan_data: createDentalPlan(item.plan_data as never),
-                        },
-                        user.id,
-                      );
-                      toast.success("Template duplicated");
-                    }}
-                    onDelete={() =>
-                      setPendingDelete({
-                        title: "Delete template?",
-                        description: `${item.name} will be permanently removed.`,
-                        action: () => deleteTemplate(item.id, clinicId),
-                        message: "Template removed",
-                      })
-                    }
-                  />
-                ))}
-              </Section>
-            </TabsContent>
-          </Tabs>
+          <Section
+            title="Treatment Library"
+            description="Browse clinic treatments, pricing defaults and planner behaviour."
+            action={() => setTreatment(blankTreatment(clinicId))}
+          >
+            <div className="grid gap-2 border-b p-4 sm:grid-cols-[1fr_10rem_10rem_auto]">
+              <Input
+                value={treatmentSearch}
+                onChange={(event) => setTreatmentSearch(event.target.value)}
+                placeholder="Search treatments"
+              />
+              <Select value={treatmentStatus} onValueChange={setTreatmentStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={treatmentKind} onValueChange={setTreatmentKind}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">System & custom</SelectItem>
+                  <SelectItem value="system">System</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+              {(treatmentSearch || treatmentStatus !== "all" || treatmentKind !== "all") && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setTreatmentSearch("");
+                    setTreatmentStatus("all");
+                    setTreatmentKind("all");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <Accordion type="multiple" className="px-4">
+              {groupedTreatments.map((group) => (
+                <AccordionItem key={group.category} value={group.category}>
+                  <AccordionTrigger>
+                    <span>
+                      {group.category}{" "}
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {group.items.length} treatments ·{" "}
+                        {group.items.filter((item) => item.active).length} active ·{" "}
+                        {group.items.filter((item) => !item.system).length} custom
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="divide-y">
+                    {group.items.map((item) => (
+                      <Row
+                        key={item.id}
+                        title={item.display_name}
+                        description={`Appears as: ${treatmentName(item.visual_key)} · Clinical behavior: ${clinicalBehaviorLabel(item.clinical_behavior)}`}
+                        badges={[
+                          item.system ? "System" : "Custom",
+                          item.active ? "Active" : "Inactive",
+                          priceSummary(item.prices),
+                        ]}
+                        onEdit={() => setTreatment(item)}
+                        onDelete={
+                          !item.system
+                            ? () =>
+                                setPendingDelete({
+                                  title: "Delete treatment?",
+                                  description: `${item.display_name} will be removed from this clinic's library.`,
+                                  action: () => deleteDefinition(item.id, clinicId),
+                                  message: "Treatment removed",
+                                })
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Section>
         </TabsContent>
         <TabsContent value="dentists">
           <Section
@@ -351,6 +297,7 @@ function DentalPlannerSettings() {
               <Row
                 key={item.id}
                 title={item.name}
+                thumbnail={item.avatar_url}
                 description={
                   [item.title, item.specialty, item.languages?.join(", ")]
                     .filter(Boolean)
@@ -389,7 +336,7 @@ function DentalPlannerSettings() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:grid-cols-[1fr_10rem_auto]">
                 <Input
                   value={serviceName}
                   onChange={(event) => setServiceName(event.target.value)}
@@ -401,12 +348,33 @@ function DentalPlannerSettings() {
                     if (!value || configuredServices.includes(value)) return;
                     updateClinic(
                       clinicId,
-                      { planner_included_services: [...configuredServices, value] },
+                      {
+                        planner_included_services: [...configuredServices, value],
+                        planner_service_categories: {
+                          ...serviceCategories,
+                          [value]: newServiceCategory,
+                        },
+                      },
                       user.id,
                     );
                     setServiceName("");
                   }}
                 />
+                <Select
+                  value={newServiceCategory}
+                  onValueChange={(value) => setNewServiceCategory(value as PlannerServiceCategory)}
+                >
+                  <SelectTrigger aria-label="New service category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLANNER_SERVICE_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   type="button"
                   onClick={() => {
@@ -414,7 +382,13 @@ function DentalPlannerSettings() {
                     if (!value || configuredServices.includes(value)) return;
                     updateClinic(
                       clinicId,
-                      { planner_included_services: [...configuredServices, value] },
+                      {
+                        planner_included_services: [...configuredServices, value],
+                        planner_service_categories: {
+                          ...serviceCategories,
+                          [value]: newServiceCategory,
+                        },
+                      },
                       user.id,
                     );
                     setServiceName("");
@@ -424,15 +398,69 @@ function DentalPlannerSettings() {
                   <Plus className="size-4" /> Add
                 </Button>
               </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+                <Input
+                  value={serviceSearch}
+                  onChange={(event) => setServiceSearch(event.target.value)}
+                  placeholder="Search included services"
+                />
+                <Select value={serviceFilter} onValueChange={setServiceFilter}>
+                  <SelectTrigger aria-label="Filter service category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    {PLANNER_SERVICE_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="divide-y rounded-lg border">
-                {configuredServices.map((service) => (
-                  <div key={service} className="flex items-center justify-between gap-3 p-3">
-                    <span className="text-sm font-medium">{service}</span>
+                {visibleServices.map((service) => (
+                  <div
+                    key={service}
+                    className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium">{service}</span>
+                      <Badge variant="outline" className="ml-2">
+                        Active
+                      </Badge>
+                    </div>
+                    <Select
+                      value={serviceCategory(service, serviceCategories)}
+                      onValueChange={(value) =>
+                        updateClinic(
+                          clinicId,
+                          {
+                            planner_service_categories: {
+                              ...serviceCategories,
+                              [service]: value as PlannerServiceCategory,
+                            },
+                          },
+                          user.id,
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full sm:w-36" aria-label={`${service} category`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PLANNER_SERVICE_CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
-                      size="icon"
+                      size="sm"
                       variant="ghost"
-                      aria-label={`Remove ${service}`}
+                      aria-label={`Deactivate ${service}`}
                       onClick={() =>
                         updateClinic(
                           clinicId,
@@ -445,10 +473,15 @@ function DentalPlannerSettings() {
                         )
                       }
                     >
-                      <Trash2 className="size-4" />
+                      <Trash2 className="size-4" /> Deactivate
                     </Button>
                   </div>
                 ))}
+                {visibleServices.length === 0 && (
+                  <p className="p-6 text-center text-sm text-muted-foreground">
+                    No active services match these filters.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -633,16 +666,6 @@ function DentalPlannerSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <TemplateDialog
-        value={template}
-        dentists={dentists}
-        onClose={() => setTemplate(null)}
-        onSave={(record) => {
-          saveTemplate(record, user.id);
-          setTemplate(null);
-          toast.success("Template saved");
-        }}
-      />
       <HotelDialog
         value={hotel}
         onClose={() => setHotel(null)}
@@ -1073,72 +1096,6 @@ function DentistDialog({
   );
 }
 
-function TemplateDialog({
-  value,
-  dentists,
-  onClose,
-  onSave,
-}: {
-  value: DentalPlanTemplate | null;
-  dentists: User[];
-  onClose: () => void;
-  onSave: (value: DentalPlanTemplate) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  if (value?.id !== draft?.id) setDraft(value);
-  if (!draft) return null;
-  const patch = (next: Partial<DentalPlanTemplate>) => setDraft({ ...draft, ...next });
-  return (
-    <DialogFrame open title="Dental plan template" onClose={onClose} onSave={() => onSave(draft)}>
-      <Field label="Template name">
-        <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} />
-      </Field>
-      <Field label="Category">
-        <Input value={draft.category} onChange={(e) => patch({ category: e.target.value })} />
-      </Field>
-      <Field label="Description" wide>
-        <Textarea
-          value={draft.description ?? ""}
-          onChange={(e) => patch({ description: e.target.value })}
-        />
-      </Field>
-      <Field label="Default dentist">
-        <Select
-          value={draft.default_dentist_id ?? "none"}
-          onValueChange={(id) => patch({ default_dentist_id: id === "none" ? undefined : id })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">No default</SelectItem>
-            {dentists.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Active">
-        <Switch checked={draft.active} onCheckedChange={(active) => patch({ active })} />
-      </Field>
-      <Field label="Patient-facing summary" wide>
-        <Textarea
-          value={draft.patient_summary ?? ""}
-          onChange={(e) => patch({ patient_summary: e.target.value })}
-        />
-      </Field>
-      <Field label="Internal notes" wide>
-        <Textarea
-          value={draft.internal_notes ?? ""}
-          onChange={(e) => patch({ internal_notes: e.target.value })}
-        />
-      </Field>
-    </DialogFrame>
-  );
-}
-
 function HotelDialog({
   value,
   onClose,
@@ -1410,16 +1367,6 @@ function priceSummary(prices: Partial<Record<PlannerCurrency, number>>) {
 function treatmentName(key: string) {
   return TREATMENT_DEFINITIONS.find((item) => item.type === key)?.label ?? "Other";
 }
-function templateSummary(template: DentalPlanTemplate) {
-  const plan = createDentalPlan(template.plan_data as never);
-  const upper = plan.proposedTreatments.some((item) =>
-    item.toothNumbers.some((tooth) => tooth < 30),
-  );
-  const lower = plan.proposedTreatments.some((item) =>
-    item.toothNumbers.some((tooth) => tooth > 30),
-  );
-  return `${upper && lower ? "Both arches" : upper ? "Upper arch" : lower ? "Lower arch" : "No arch"} · ${plan.proposedTreatments.length} treatments · ${plan.treatmentGroups.length} linked groups`;
-}
 function currencySymbol(currency: PlannerCurrency) {
   return { GBP: "£", EUR: "€", USD: "$", TRY: "₺" }[currency];
 }
@@ -1494,20 +1441,6 @@ function clinicalBehaviorLabel(behavior: ClinicTreatmentDefinition["clinical_beh
     bridge: "Bridge",
     arch: "Global / arch treatment",
   }[behavior];
-}
-function blankTemplate(clinicId: string, userId: string): DentalPlanTemplate {
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    clinic_id: clinicId,
-    name: "New template",
-    category: "Custom",
-    active: true,
-    plan_data: createDentalPlan({ name: "Template" }),
-    created_at: now,
-    updated_at: now,
-    created_by: userId,
-  };
 }
 function blankHotel(clinicId: string, userId: string): ClinicHotel {
   const now = new Date().toISOString();

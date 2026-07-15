@@ -111,7 +111,13 @@ export const seedBranding: ClinicBranding[] = seedClinics.map((c, i) => ({
   id: id("brand"),
   ...base(),
   clinic_id: c.id,
-  logo_url: undefined,
+  logo_url: i === 0 ? "/dtkurt-logo.svg" : undefined,
+  shared_view_banner_url: c.cover_image,
+  shared_view_tagline: c.short_description,
+  shared_view_introduction:
+    i === 0
+      ? "Your treatment plan has been prepared by the DTKURT team to make every stage of your care clear and easy to review."
+      : undefined,
   primary_color: ["#0A1626", "#1A2332", "#415469"][i],
   secondary_color: ["#C8A46A", "#9DD6FF", "#C8A46A"][i],
   shared_view_accent_color: ["#C8A46A", "#9DD6FF", "#C8A46A"][i],

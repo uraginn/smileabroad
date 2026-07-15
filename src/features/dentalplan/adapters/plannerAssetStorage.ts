@@ -100,7 +100,7 @@ export function usePlannerAssetUrl(storageKey?: string, fallbackUrl?: string) {
   const [url, setUrl] = useState(fallbackUrl);
   useEffect(() => {
     setUrl(fallbackUrl);
-    if (!storageKey || fallbackUrl) return;
+    if (!storageKey) return;
     let active = true;
     let objectUrl: string | undefined;
     void loadPlannerAsset(storageKey)

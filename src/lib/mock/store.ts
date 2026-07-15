@@ -62,7 +62,7 @@ import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import type { DentalPlan } from "@/features/dentalplan/types/dental-plan.types";
 
 const MOCK_STORAGE_KEY = "smileabroad-mock-v1";
-const MOCK_STORAGE_VERSION = 25;
+const MOCK_STORAGE_VERSION = 28;
 const DTKURT_CLINIC_ID = "clinic_istanbul";
 const OBSOLETE_PLANNER_DRAFT_KEYS = [
   "smileabroad.dentalplan.dev.v2",
@@ -185,7 +185,7 @@ interface Store {
   markTreatmentPlanViewed: (id: string, clinicId: string) => void;
   markTreatmentPlanAccepted: (id: string, clinicId: string) => void;
   markTreatmentPlanDeclined: (id: string, clinicId: string) => void;
-  updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>) => void;
+  updateBranding: (clinic_id: string, patch: Partial<ClinicBranding>, changedBy?: string) => void;
   addTask: (
     task: Omit<Task, "id" | "created_at" | "updated_at" | "created_by">,
     createdBy?: string,
@@ -1566,12 +1566,20 @@ export const useMockStore = create<Store>()(
         if (!plan || plan.status !== "viewed") return;
         get().updateTreatmentPlan(id, { status: "declined", declined_at: now() }, "patient_shared");
       },
-      updateBranding: (clinic_id, patch) =>
+      updateBranding: (clinic_id, patch, changedBy = "system") => {
+        const actor = get().users.find((item) => item.id === changedBy);
+        if (
+          actor &&
+          (actor.clinic_id !== clinic_id ||
+            !["clinic_owner", "clinic_admin", "platform_admin"].includes(actor.role))
+        )
+          return;
         set((s) => ({
           branding: s.branding.map((b) =>
             b.clinic_id === clinic_id ? { ...b, ...patch, updated_at: now() } : b,
           ),
-        })),
+        }));
+      },
       addTask: (task, createdBy = "system") => {
         const actor = get().users.find((item) => item.id === createdBy);
         if (!actor && createdBy !== "system") throw new Error("Task actor is unavailable.");
@@ -2559,18 +2567,30 @@ export const useMockStore = create<Store>()(
                   !(state.users ?? seedUsers).some((member) => member.id === seedUser.id),
               ),
             ],
-            branding: (state.branding ?? seedBranding).map((item) => ({
-              ...item,
-              ...(item.clinic_id === DTKURT_CLINIC_ID
-                ? {
-                    primary_color: "#0A1626",
-                    secondary_color: "#415469",
-                    shared_view_accent_color: "#C8A46A",
-                  }
-                : {}),
-              doctors: Array.isArray(item.doctors) ? item.doctors : [],
-              guarantees: Array.isArray(item.guarantees) ? item.guarantees : [],
-            })),
+            branding: (state.branding ?? seedBranding).map((item) => {
+              const fallback = seedBranding.find(
+                (seedItem) => seedItem.clinic_id === item.clinic_id,
+              );
+              return {
+                ...item,
+                logo_url:
+                  item.logo_url ?? (item.shared_view_logo_url ? undefined : fallback?.logo_url),
+                shared_view_banner_url:
+                  item.shared_view_banner_url ?? fallback?.shared_view_banner_url,
+                shared_view_tagline: item.shared_view_tagline ?? fallback?.shared_view_tagline,
+                shared_view_introduction:
+                  item.shared_view_introduction ?? fallback?.shared_view_introduction,
+                primary_color: item.primary_color || fallback?.primary_color || "#0A1626",
+                secondary_color: item.secondary_color || fallback?.secondary_color || "#415469",
+                shared_view_accent_color:
+                  item.shared_view_accent_color ||
+                  fallback?.shared_view_accent_color ||
+                  item.primary_color ||
+                  "#C8A46A",
+                doctors: Array.isArray(item.doctors) ? item.doctors : [],
+                guarantees: Array.isArray(item.guarantees) ? item.guarantees : [],
+              };
+            }),
             assessments: (state.assessments ?? []).map((assessment) =>
               migrateAssessment(assessment as LegacyAssessment),
             ),
