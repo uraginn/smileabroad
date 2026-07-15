@@ -74,6 +74,9 @@ export type TreatmentType =
   | "other";
 
 export type BridgeUnitRole = "abutment-crown" | "pontic" | "implant-abutment";
+export type TreatmentLayer =
+  "condition" | "procedure" | "foundation" | "support" | "restoration" | "prosthetic";
+export type TreatmentScope = "tooth" | "span" | "arch" | "plan";
 export type TreatmentSupport = "natural" | "implant" | "soft-tissue" | "arch";
 export type ClinicalTreatmentStage =
   | "disease-control"
@@ -100,6 +103,8 @@ export type ToothTreatment = {
   visualKey?: TreatmentType;
   displayName?: string;
   treatmentGroupId?: string;
+  layer?: TreatmentLayer;
+  scope?: TreatmentScope;
   sequence?: number;
   stage?: ClinicalTreatmentStage;
   supportType?: TreatmentSupport;

@@ -1,4 +1,4 @@
-import type { TreatmentType } from "../types/dental-plan.types";
+import type { TreatmentLayer, TreatmentScope, TreatmentType } from "../types/dental-plan.types";
 export type TreatmentDefinition = {
   type: TreatmentType;
   label: string;
@@ -8,12 +8,12 @@ export type TreatmentDefinition = {
   perTooth: boolean;
   category: string;
 };
-export type TreatmentRole =
-  "procedure" | "restoration" | "support-procedure" | "cosmetic" | "full-arch" | "global";
+export type TreatmentRole = TreatmentLayer;
 export type TreatmentTarget = "natural-tooth" | "implant-site" | "arch" | "tooth-site";
 export type TreatmentRelationship = {
   role: TreatmentRole;
   target: TreatmentTarget;
+  scope: TreatmentScope;
   conflictsWith?: TreatmentType[];
   composition?: TreatmentType[];
   requiresContext?: "implant" | "posterior-maxilla";
@@ -108,27 +108,32 @@ const CONSERVATIVE_RESTORATIONS: TreatmentType[] = [
 const DEFAULT_RELATIONSHIP: TreatmentRelationship = {
   role: "procedure",
   target: "tooth-site",
+  scope: "tooth",
 };
 
 export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRelationship>> = {
   extraction: {
     role: "procedure",
     target: "natural-tooth",
+    scope: "tooth",
     conflictsWith: [...CONSERVATIVE_RESTORATIONS, "root-canal-treatment", "post-core"],
   },
   "dental-implant": {
-    role: "procedure",
+    role: "foundation",
     target: "implant-site",
+    scope: "tooth",
     conflictsWith: [...CONSERVATIVE_RESTORATIONS, "root-canal-treatment", "post-core"],
   },
   "implant-abutment": {
-    role: "support-procedure",
+    role: "support",
     target: "implant-site",
+    scope: "tooth",
     requiresContext: "implant",
   },
   "implant-crown": {
     role: "restoration",
     target: "implant-site",
+    scope: "tooth",
     conflictsWith: [...FINAL_CROWNS, ...CONSERVATIVE_RESTORATIONS],
   },
   ...Object.fromEntries(
@@ -137,6 +142,7 @@ export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRel
       {
         role: "restoration" as const,
         target: "tooth-site" as const,
+        scope: "tooth" as const,
         conflictsWith:
           type === "temporary-crown"
             ? (["veneer", "composite-bonding"] as TreatmentType[])
@@ -150,48 +156,57 @@ export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRel
     ]),
   ),
   veneer: {
-    role: "cosmetic",
+    role: "restoration",
     target: "natural-tooth",
+    scope: "tooth",
     conflictsWith: [...CROWN_TREATMENTS, "implant-crown", "composite-bonding"],
   },
   "composite-bonding": {
-    role: "cosmetic",
+    role: "restoration",
     target: "natural-tooth",
+    scope: "tooth",
     conflictsWith: [...FINAL_CROWNS, "implant-crown", "veneer"],
   },
   "composite-filling": {
     role: "restoration",
     target: "natural-tooth",
+    scope: "tooth",
     conflictsWith: ["implant-crown"],
   },
   "inlay-onlay": {
     role: "restoration",
     target: "natural-tooth",
+    scope: "tooth",
     conflictsWith: ["implant-crown"],
   },
-  "root-canal-treatment": { role: "procedure", target: "natural-tooth" },
-  "post-core": { role: "support-procedure", target: "natural-tooth" },
-  bridge: { role: "restoration", target: "tooth-site" },
-  pontic: { role: "restoration", target: "tooth-site" },
-  whitening: { role: "global", target: "arch" },
+  "root-canal-treatment": { role: "procedure", target: "natural-tooth", scope: "tooth" },
+  "post-core": { role: "support", target: "natural-tooth", scope: "tooth" },
+  bridge: { role: "prosthetic", target: "tooth-site", scope: "span" },
+  pontic: { role: "prosthetic", target: "tooth-site", scope: "tooth" },
+  whitening: { role: "restoration", target: "arch", scope: "arch" },
   "bone-graft": {
-    role: "support-procedure",
+    role: "support",
     target: "implant-site",
+    scope: "tooth",
     requiresContext: "implant",
   },
   "sinus-lift": {
-    role: "support-procedure",
+    role: "support",
     target: "implant-site",
+    scope: "tooth",
     requiresContext: "posterior-maxilla",
   },
-  "all-on-4": { role: "full-arch", target: "arch" },
-  "all-on-6": { role: "full-arch", target: "arch" },
-  denture: { role: "full-arch", target: "arch" },
+  "all-on-4": { role: "prosthetic", target: "arch", scope: "arch" },
+  "all-on-6": { role: "prosthetic", target: "arch", scope: "arch" },
+  denture: { role: "prosthetic", target: "arch", scope: "arch" },
 };
 
 export function treatmentRelationship(type: TreatmentType): TreatmentRelationship {
   return TREATMENT_RELATIONSHIPS[type] ?? DEFAULT_RELATIONSHIP;
 }
+
+export const treatmentLayer = (type: TreatmentType) => treatmentRelationship(type).role;
+export const treatmentScope = (type: TreatmentType) => treatmentRelationship(type).scope;
 
 export function treatmentComposition(type: TreatmentType): TreatmentType[] {
   return treatmentRelationship(type).composition ?? [type];

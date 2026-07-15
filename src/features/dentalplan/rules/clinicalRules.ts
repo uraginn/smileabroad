@@ -5,19 +5,15 @@ import type {
   TreatmentSupport,
   TreatmentType,
 } from "../types/dental-plan.types";
-import {
-  getArch,
-  isContiguousInArch,
-  sameArch,
-  UPPER_TEETH,
-  LOWER_TEETH,
-} from "../utils/toothNumbers";
+import { getArch, sameArch, UPPER_TEETH, LOWER_TEETH } from "../utils/toothNumbers";
 import {
   CROWN_TREATMENTS,
   conflictsWithTreatment,
   isCrownTreatment,
   targetsNaturalTooth,
   treatmentRelationship,
+  treatmentLayer,
+  treatmentScope,
 } from "../data/treatmentDefinitions";
 
 export type ClinicalRuleOutcome =
@@ -38,6 +34,15 @@ export type DentalRuleResult = {
   conflictingTreatmentIds?: string[];
   requiredTreatments?: TreatmentType[];
   suggestedTreatments?: TreatmentType[];
+};
+
+export type TreatmentApplicationEvaluation = {
+  status: "allowed" | "warning" | "blocked";
+  layer: ReturnType<typeof treatmentLayer>;
+  scope: ReturnType<typeof treatmentScope>;
+  results: DentalRuleResult[];
+  reason?: string;
+  suggestedAction?: string;
 };
 
 export const ALL_ON_4_PRESETS = {
@@ -90,15 +95,14 @@ export function validateClinicalTreatment(
     if (isCrownTreatment(treatment)) {
       if ((missing || extractionPlanned) && !implantContext) {
         results.push({
-          ...block(
+          ...warning(
             "crown_support_required",
-            `Tooth ${tooth}: this crown needs a retained natural tooth or implant support. Add the implant first or use a bridge pontic.`,
-            tooth,
-            "requires_dependency",
+            `Tooth ${tooth}: this crown currently has no retained natural-tooth or implant support. Add the intended support before finalizing the plan.`,
+            [tooth],
           ),
+          outcome: "requires_dependency",
           requiredTreatments: ["dental-implant"],
         });
-        continue;
       }
     } else if ((missing || extractionPlanned) && targetsNaturalTooth(treatment)) {
       results.push(
@@ -165,17 +169,13 @@ export function validateClinicalTreatment(
       );
   }
 
-  if (
-    treatment === "bridge" &&
-    teeth.length > 1 &&
-    (!sameArch(teeth) || !isContiguousInArch(teeth))
-  )
+  if (treatment === "bridge" && teeth.length > 1 && !sameArch(teeth))
     results.push({
       allowed: false,
       severity: "block",
       outcome: "conflict",
       code: "invalid_bridge",
-      message: "A bridge requires contiguous positions in one arch.",
+      message: "Bridge endpoints must belong to the same arch.",
       affectedTeeth: teeth,
     });
 
@@ -214,6 +214,52 @@ export function validateClinicalTreatment(
     });
 
   return dedupeRuleResults(results);
+}
+
+export function evaluateTreatmentApplication({
+  plan,
+  treatment,
+  selectedTeeth,
+}: {
+  plan: DentalPlan;
+  treatment: TreatmentType;
+  selectedTeeth: ToothNumber[];
+}): TreatmentApplicationEvaluation {
+  const validTeeth = new Set<ToothNumber>([...UPPER_TEETH, ...LOWER_TEETH]);
+  if (!selectedTeeth.length)
+    return {
+      status: "blocked",
+      layer: treatmentLayer(treatment),
+      scope: treatmentScope(treatment),
+      results: [],
+      reason: "Select at least one valid tooth position.",
+    };
+  if (selectedTeeth.some((tooth) => !validTeeth.has(tooth)))
+    return {
+      status: "blocked",
+      layer: treatmentLayer(treatment),
+      scope: treatmentScope(treatment),
+      results: [],
+      reason: "The selection contains an invalid tooth position.",
+    };
+  const results = validateClinicalTreatment(plan, treatment, selectedTeeth);
+  const blocked = results.find((result) => !result.allowed || result.severity === "block");
+  const warnings = results.filter(
+    (result) => result.severity === "warning" && result.outcome !== "suggestion",
+  );
+  const suggestions = results.filter((result) => result.outcome === "suggestion");
+  return {
+    status: blocked ? "blocked" : warnings.length ? "warning" : "allowed",
+    layer: treatmentLayer(treatment),
+    scope: treatmentScope(treatment),
+    results,
+    reason: blocked?.message ?? (warnings.map((result) => result.message).join(" ") || undefined),
+    suggestedAction:
+      suggestions.map((result) => result.message).join(" ") ||
+      (warnings.flatMap((result) => result.requiredTreatments ?? []).length
+        ? "Add or confirm the supporting treatment before final approval."
+        : undefined),
+  };
 }
 
 export function resolveTreatmentSupport(

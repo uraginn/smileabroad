@@ -34,13 +34,17 @@ export type BridgeConfiguration = {
 
 export function BridgeConfigurator({
   teeth,
+  implantPositions = [],
+  selectionWasNonContiguous,
   initialRoles,
-  initialBridgeType = "conventional",
+  initialBridgeType,
   initialMaterial = "zirconium",
   onCancel,
   onConfirm,
 }: {
   teeth: ToothNumber[];
+  implantPositions?: ToothNumber[];
+  selectionWasNonContiguous?: boolean;
   initialRoles?: Partial<Record<ToothNumber, BridgeUnitRole>>;
   initialBridgeType?: BridgeType;
   initialMaterial?: ToothTreatment["material"];
@@ -48,16 +52,30 @@ export function BridgeConfigurator({
   onConfirm: (configuration: BridgeConfiguration) => void;
 }) {
   const initialSpan = useMemo(() => defaultBridgeSpan(teeth), [teeth]);
+  const implantPositionKey = implantPositions.join(",");
+  const stableImplantPositions = useMemo(
+    () =>
+      implantPositionKey
+        .split(",")
+        .filter(Boolean)
+        .map((tooth) => Number(tooth) as ToothNumber),
+    [implantPositionKey],
+  );
+  const resolvedInitialBridgeType =
+    initialBridgeType ??
+    (stableImplantPositions.filter((tooth) => initialSpan.includes(tooth)).length >= 2
+      ? "implant-supported"
+      : "conventional");
   const archTeeth = getArch(initialSpan[0] ?? teeth[0]) === "lower" ? LOWER_TEETH : UPPER_TEETH;
   const [start, setStart] = useState<ToothNumber>(initialSpan[0] ?? archTeeth[0]);
   const [end, setEnd] = useState<ToothNumber>(initialSpan.at(-1) ?? archTeeth[2]);
-  const [bridgeType, setBridgeType] = useState<BridgeType>(initialBridgeType);
+  const [bridgeType, setBridgeType] = useState<BridgeType>(resolvedInitialBridgeType);
   const [material, setMaterial] = useState<ToothTreatment["material"]>(initialMaterial);
   const span = useMemo(() => bridgeSpan(start, end), [end, start]);
   const [roles, setRoles] = useState<Partial<Record<ToothNumber, BridgeUnitRole>>>(() =>
     initialRoles && Object.keys(initialRoles).length
       ? initialRoles
-      : defaultBridgeRoles(initialSpan, initialBridgeType),
+      : defaultBridgeRoles(initialSpan, resolvedInitialBridgeType, stableImplantPositions),
   );
   const [error, setError] = useState("");
   const initialized = useRef(false);
@@ -67,9 +85,9 @@ export function BridgeConfigurator({
       initialized.current = true;
       return;
     }
-    setRoles(defaultBridgeRoles(span, bridgeType));
+    setRoles(defaultBridgeRoles(span, bridgeType, stableImplantPositions));
     setError("");
-  }, [bridgeType, span]);
+  }, [bridgeType, span, stableImplantPositions]);
 
   const supportCount = span.filter((tooth) => roles[tooth] !== "pontic").length;
   const ponticCount = span.filter((tooth) => roles[tooth] === "pontic").length;
@@ -154,6 +172,17 @@ export function BridgeConfigurator({
         </BridgeField>
       </div>
 
+      {selectionWasNonContiguous && (
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Selection resolved as one bridge span</AlertTitle>
+          <AlertDescription>
+            The selected positions were not contiguous. The preview includes every position from
+            {` ${start} to ${end}`}; review the units below before applying.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {bridgeType === "cantilever" && (
         <Alert>
           <AlertTriangle className="size-4" />
@@ -211,7 +240,7 @@ export function BridgeConfigurator({
             onConfirm({ teeth: span, roles, bridgeType, material });
           }}
         >
-          Confirm Bridge {rangeLabel}
+          Apply Bridge {rangeLabel}
         </Button>
       </div>
     </div>

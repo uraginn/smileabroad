@@ -155,12 +155,32 @@ function ToothSvg({
         {visual.currentConditions.includes("existing-crown") && (
           <path d="M7 26 Q7 7 20 5 Q33 7 33 26 Z" fill="none" stroke="#f59e0b" strokeWidth={2} />
         )}
+        {visual.currentConditions.includes("existing-bridge") && (
+          <path
+            d="M7 22 Q7 10 20 8 Q33 10 33 22 Q33 29 20 31 Q7 29 7 22 Z"
+            fill="none"
+            stroke="#a855f7"
+            strokeWidth={2}
+          />
+        )}
         {visual.currentConditions.includes("existing-implant") && <Implant color="#6366f1" />}
         {visual.currentConditions.includes("extraction-required") && <Cross color="#ef4444" />}
         {visual.proposedTreatments.includes("extraction") && <Cross color="#ef4444" />}
         {visual.proposedTreatments.includes("dental-implant") && <Implant color="#4f46e5" />}
         {visual.proposedTreatments.includes("implant-abutment") && (
           <rect x={16} y={23} width={8} height={7} rx={1.5} fill="#6366f1" opacity={0.9} />
+        )}
+        {visual.proposedTreatments.includes("bone-graft") && (
+          <path
+            d="M10 47 Q20 54 30 47"
+            fill="none"
+            stroke="#a16207"
+            strokeWidth={3}
+            strokeDasharray="2 2"
+          />
+        )}
+        {visual.proposedTreatments.includes("sinus-lift") && (
+          <path d="M8 5 Q20 0 32 5" fill="none" stroke="#f97316" strokeWidth={2.5} />
         )}
         {visual.proposedTreatments.includes("implant-crown") && <Crown color="#7c3aed" />}
         {visual.proposedTreatments.includes("zirconium-crown") && <Crown color="#0284c7" />}
@@ -190,7 +210,7 @@ function ToothSvg({
         {visual.bridgeRole === "abutment-crown" && <Crown color="#0369a1" />}
         {visual.bridgeRole === "implant-abutment" && (
           <>
-            <Implant color="#4f46e5" />
+            <rect x={16} y={23} width={8} height={7} rx={1.5} fill="#6366f1" opacity={0.9} />
             <Crown color="#0369a1" />
           </>
         )}

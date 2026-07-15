@@ -6,6 +6,11 @@ import type {
   ToothNumber,
   ToothTreatment,
 } from "../types/dental-plan.types";
+import {
+  TREATMENT_DEFINITIONS,
+  treatmentLayer,
+  treatmentScope,
+} from "../data/treatmentDefinitions";
 
 const CURRENCIES = ["GBP", "EUR", "USD", "TRY"] as const;
 const defaultPreference = (value: string): PlanningPreference => ({ mode: "automatic", value });
@@ -146,20 +151,62 @@ function normalizeConditions(value: DentalPlan["currentConditions"] | undefined)
 
 function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined) {
   if (!Array.isArray(value)) return [];
-  const normalized = value
+  const expanded = value
     .filter((item) => item && typeof item === "object")
-    .map(
-      (item, index) =>
-        ({
+    .flatMap((item, index) => {
+      const id = text(item.id) || `legacy-treatment-${index}`;
+      const rawType = text(item.treatmentType);
+      if (["implant_crown", "implant_and_crown", "implant+crown"].includes(rawType)) {
+        const common = {
           ...item,
-          id: text(item.id) || `legacy-treatment-${index}`,
           toothNumbers: numberArray(item.toothNumbers) as ToothNumber[],
-          treatmentType: item.treatmentType ?? "other",
-          sequence: finite(item.sequence, legacyTreatmentSequence(item.treatmentType ?? "other")),
-          stage: item.stage ?? legacyTreatmentStage(item.treatmentType ?? "other"),
-          material: item.material ?? legacyTreatmentMaterial(item.treatmentType ?? "other"),
-        }) satisfies ToothTreatment,
-    );
+          treatmentDefinitionId: undefined,
+        };
+        return [
+          {
+            ...common,
+            id,
+            treatmentType: "dental-implant" as const,
+            treatmentKey: "dental-implant",
+            visualKey: "dental-implant" as const,
+            displayName: "Dental Implant",
+          },
+          {
+            ...common,
+            id: `${id}-crown`,
+            treatmentType: "zirconium-crown" as const,
+            treatmentKey: "zirconium-crown",
+            visualKey: "zirconium-crown" as const,
+            displayName: "Zirconium Crown",
+          },
+        ];
+      }
+      const aliasedType =
+        rawType === "all_on_4" ? "all-on-4" : rawType === "all_on_6" ? "all-on-6" : rawType;
+      const supported = TREATMENT_DEFINITIONS.some((definition) => definition.type === aliasedType);
+      return [
+        {
+          ...item,
+          id,
+          treatmentType: (supported ? aliasedType : "other") as ToothTreatment["treatmentType"],
+          treatmentKey: text(item.treatmentKey) || (supported ? aliasedType : rawType || "other"),
+          visualKey: supported ? (aliasedType as ToothTreatment["visualKey"]) : "other",
+          toothNumbers: numberArray(item.toothNumbers) as ToothNumber[],
+        },
+      ];
+    });
+  const normalized = expanded.map((item) => {
+    const type = item.treatmentType ?? "other";
+    return {
+      ...item,
+      treatmentType: type,
+      layer: item.layer ?? treatmentLayer(type),
+      scope: item.scope ?? treatmentScope(type),
+      sequence: finite(item.sequence, legacyTreatmentSequence(type)),
+      stage: item.stage ?? legacyTreatmentStage(type),
+      material: item.material ?? legacyTreatmentMaterial(type),
+    } satisfies ToothTreatment;
+  });
   return normalized.map((item) => {
     if (item.supportType) return item;
     const implantSupported =

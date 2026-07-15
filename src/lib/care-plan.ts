@@ -153,7 +153,14 @@ export function buildPatientTreatmentTable(
   if (embedded?.proposedTreatments.length) {
     const groups = new Map<string, PatientTreatmentGroup>();
     const consumedPrices = new Set<string>();
+    const treatmentLayers = new Map<string, typeof embedded.proposedTreatments>();
     for (const treatment of embedded.proposedTreatments) {
+      const key =
+        treatment.treatmentDefinitionId ?? treatment.treatmentKey ?? treatment.treatmentType;
+      treatmentLayers.set(key, [...(treatmentLayers.get(key) ?? []), treatment]);
+    }
+    for (const [layerKey, treatments] of treatmentLayers) {
+      const treatment = treatments[0];
       const definition = treatmentDefinitions.find(
         (item) =>
           item.id === treatment.treatmentDefinitionId ||
@@ -162,11 +169,16 @@ export function buildPatientTreatmentTable(
       const price = (plan.price_items ?? []).find(
         (item) =>
           !consumedPrices.has(item.id) &&
-          (item.id === `price_${treatment.id}` ||
-            item.treatment_definition_id === treatment.treatmentDefinitionId),
+          (item.id === `price_${layerKey}` ||
+            item.treatment_definition_id === treatment.treatmentDefinitionId ||
+            item.treatment_key === (treatment.treatmentKey ?? treatment.treatmentType)),
       );
       const embeddedPrice = embedded.commercial.items.find(
-        (item) => item.treatmentId === treatment.id,
+        (item) =>
+          item.treatmentId === layerKey ||
+          item.treatmentDefinitionId === treatment.treatmentDefinitionId ||
+          item.treatmentKey === (treatment.treatmentKey ?? treatment.treatmentType) ||
+          treatments.some((entry) => entry.id === item.treatmentId),
       );
       const treatmentKey =
         treatment.treatmentKey ?? definition?.treatment_key ?? treatment.treatmentType;
@@ -175,7 +187,9 @@ export function buildPatientTreatmentTable(
         treatment.treatmentType) as TreatmentType;
       const unitPrice = price?.unit_price ?? embeddedPrice?.unitPrice ?? 0;
       const quantity =
-        price?.quantity ?? embeddedPrice?.qty ?? Math.max(1, treatment.toothNumbers.length);
+        price?.quantity ??
+        embeddedPrice?.qty ??
+        treatments.reduce((sum, entry) => sum + Math.max(1, entry.toothNumbers.length), 0);
       const category = resolvePatientCategory(price?.category, definition, visualKey);
       const label =
         definition?.patient_label ??
@@ -183,28 +197,19 @@ export function buildPatientTreatmentTable(
         treatment.displayName ??
         treatmentByType(treatment.treatmentType).label;
       const groupKey = `${definition?.id ?? treatmentKey}|${unitPrice}|${category}`;
-      const current = groups.get(groupKey);
-      if (current) {
-        current.quantity += quantity;
-        current.total += quantity * unitPrice;
-        treatment.toothNumbers.forEach((tooth) => {
-          if (!current.teeth.includes(tooth)) current.teeth.push(tooth);
-        });
-      } else {
-        groups.set(groupKey, {
-          id: groupKey,
-          treatment: legacyTreatmentForKey(visualKey),
-          treatment_key: treatmentKey,
-          label,
-          category,
-          patient_description: definition?.description,
-          quantity,
-          unit_price: unitPrice,
-          total: quantity * unitPrice,
-          teeth: [...new Set(treatment.toothNumbers)],
-          patient_notes: [],
-        });
-      }
+      groups.set(groupKey, {
+        id: groupKey,
+        treatment: legacyTreatmentForKey(visualKey),
+        treatment_key: treatmentKey,
+        label,
+        category,
+        patient_description: definition?.description,
+        quantity,
+        unit_price: unitPrice,
+        total: quantity * unitPrice,
+        teeth: [...new Set(treatments.flatMap((entry) => entry.toothNumbers))],
+        patient_notes: [],
+      });
       if (price) consumedPrices.add(price.id);
     }
     appendUnmatchedPrices(groups, plan, consumedPrices, treatmentDefinitions);

@@ -10,7 +10,11 @@ export { UPPER_TEETH, LOWER_TEETH, ALL_TEETH } from "./utils/toothNumbers";
 export { CONDITION_DEFINITIONS } from "./data/conditionDefinitions";
 export { TREATMENT_DEFINITIONS } from "./data/treatmentDefinitions";
 export { applyCondition, removeCondition } from "./rules/conditionRules";
-export { validateTreatment } from "./rules/treatmentRules";
+export {
+  evaluateTreatmentApplication,
+  validateClinicalTreatment,
+  validatePlanForFinalize,
+} from "./rules/clinicalRules";
 export { validateBridge } from "./rules/bridgeRules";
 export type { DentalPlanRepository } from "./adapters/DentalPlanRepository";
 export type {
@@ -22,4 +26,6 @@ export type {
   ToothTreatment,
   ConditionType,
   TreatmentType,
+  TreatmentLayer,
+  TreatmentScope,
 } from "./types/dental-plan.types";

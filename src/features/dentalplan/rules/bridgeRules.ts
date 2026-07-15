@@ -25,16 +25,13 @@ export function bridgeSpan(start: ToothNumber, end: ToothNumber): ToothNumber[] 
   if (startIndex < 0 || endIndex < 0) return [];
   const from = Math.min(startIndex, endIndex);
   const to = Math.max(startIndex, endIndex);
-  return arch.slice(from, to + 1);
+  const span = arch.slice(from, to + 1);
+  return span[0] === start ? span : span.reverse();
 }
 
 export function defaultBridgeSpan(teeth: ToothNumber[]) {
   if (!teeth.length) return [];
-  if (teeth.length > 1 && sameArch(teeth)) {
-    const ordered = getArch(teeth[0]) === "upper" ? UPPER_TEETH : LOWER_TEETH;
-    const indices = teeth.map((tooth) => ordered.indexOf(tooth));
-    return ordered.slice(Math.min(...indices), Math.max(...indices) + 1);
-  }
+  if (teeth.length > 1 && sameArch(teeth)) return bridgeSpan(teeth[0], teeth.at(-1)!);
   const arch = getArch(teeth[0]) === "upper" ? UPPER_TEETH : LOWER_TEETH;
   const center = arch.indexOf(teeth[0]);
   const from = Math.max(0, center - 1);
@@ -45,15 +42,21 @@ export function defaultBridgeSpan(teeth: ToothNumber[]) {
 export function defaultBridgeRoles(
   teeth: ToothNumber[],
   bridgeType: BridgeType,
+  implantPositions: ToothNumber[] = [],
 ): Partial<Record<ToothNumber, BridgeUnitRole>> {
   const roles: Partial<Record<ToothNumber, BridgeUnitRole>> = {};
+  const implantSupports = new Set(implantPositions);
   teeth.forEach((tooth, index) => {
     const endpoint = index === 0 || index === teeth.length - 1;
     roles[tooth] =
       bridgeType === "implant-supported"
-        ? endpoint
-          ? "implant-abutment"
-          : "pontic"
+        ? implantSupports.size
+          ? implantSupports.has(tooth)
+            ? "implant-abutment"
+            : "pontic"
+          : endpoint
+            ? "implant-abutment"
+            : "pontic"
         : bridgeType === "cantilever"
           ? index === 0
             ? "abutment-crown"

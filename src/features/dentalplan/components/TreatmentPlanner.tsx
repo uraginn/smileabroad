@@ -38,16 +38,15 @@ import type {
 import { useHistoryState } from "../hooks/useHistoryState";
 import { useToothSelection } from "../hooks/useToothSelection";
 import { applyCondition, removeCondition } from "../rules/conditionRules";
-import { validateTreatment } from "../rules/treatmentRules";
 import {
   ALL_ON_4_PRESETS,
   ALL_ON_6_PRESETS,
   archForSelection,
   defaultTreatmentSequence,
   resolveTreatmentSupport,
-  validateClinicalTreatment,
+  evaluateTreatmentApplication,
 } from "../rules/clinicalRules";
-import { treatmentMaterial } from "../data/treatmentDefinitions";
+import { treatmentLayer, treatmentMaterial, treatmentScope } from "../data/treatmentDefinitions";
 import { CONDITION_DEFINITIONS } from "../data/conditionDefinitions";
 import { DentalChart } from "./DentalChart";
 import { ConditionSelector } from "./ConditionSelector";
@@ -57,7 +56,7 @@ import { ConditionSummary } from "./ConditionSummary";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
 import { BridgeConfigurator, type BridgeConfiguration } from "./BridgeConfigurator";
 import { formatQuoteMoney } from "@/lib/quote";
-import { sameArch } from "../utils/toothNumbers";
+import { isContiguousInArch, sameArch } from "../utils/toothNumbers";
 
 export type TreatmentPlannerProps = {
   value: DentalPlan;
@@ -96,6 +95,11 @@ export function TreatmentPlanner({
     messages: string[];
   }>();
   const [overrideReason, setOverrideReason] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    treatmentIds: string[];
+    dependentIds: string[];
+    implantTeeth: ToothNumber[];
+  }>();
   const currentSelection = useToothSelection();
   const proposedSelection = useToothSelection();
   const clearCurrentSelection = currentSelection.clear;
@@ -218,10 +222,14 @@ export function TreatmentPlanner({
         setMessage("Select at least one tooth first.");
         return;
       }
-      const ruleResults = validateClinicalTreatment(history.state, treatment, selection.selected);
-      const blocked = ruleResults.find((result) => !result.allowed && result.severity === "block");
-      if (blocked) {
-        setMessage(blocked.message);
+      const evaluation = evaluateTreatmentApplication({
+        plan: history.state,
+        treatment,
+        selectedTeeth: selection.selected,
+      });
+      const ruleResults = evaluation.results;
+      if (evaluation.status === "blocked") {
+        setMessage(evaluation.reason ?? "This treatment cannot be applied to the selection.");
         return;
       }
       const warnings = ruleResults.filter(
@@ -256,6 +264,8 @@ export function TreatmentPlanner({
             toothNumbers: [tooth],
             treatmentType: "dental-implant" as const,
             treatmentGroupId: groupId,
+            layer: "foundation" as const,
+            scope: "tooth" as const,
           }));
           return {
             ...previous,
@@ -306,7 +316,14 @@ export function TreatmentPlanner({
           ...previous,
           proposedTreatments: [
             ...previous.proposedTreatments,
-            { id, toothNumbers: teeth, treatmentType: "whitening", treatmentGroupId: groupId },
+            {
+              id,
+              toothNumbers: teeth,
+              treatmentType: "whitening",
+              treatmentGroupId: groupId,
+              layer: "restoration",
+              scope: "arch",
+            },
           ],
           treatmentGroups: [
             ...previous.treatmentGroups,
@@ -357,18 +374,6 @@ export function TreatmentPlanner({
         setMessage(`${selectedDefinition.displayName} is already included for a selected tooth.`);
         return;
       }
-      for (const tooth of targetTeeth) {
-        const result = validateTreatment(
-          treatment,
-          tooth,
-          history.state.currentConditions,
-          history.state.proposedTreatments,
-        );
-        if (!result.ok) {
-          setMessage(result.message);
-          return;
-        }
-      }
       history.commit((previous) => {
         const next = { ...previous, proposedTreatments: [...previous.proposedTreatments] };
         const sequence = defaultTreatmentSequence(treatment);
@@ -382,6 +387,8 @@ export function TreatmentPlanner({
               visualKey: selectedDefinition.visualKey,
               displayName: selectedDefinition.displayName,
               toothNumbers: [tooth],
+              layer: treatmentLayer(treatment),
+              scope: treatmentScope(treatment),
               supportType: resolveTreatmentSupport(previous, treatment, tooth),
               material: treatmentMaterial(treatment),
               clinicianOverrideReason: warningConfirmed ? overrideReason.trim() : undefined,
@@ -396,6 +403,8 @@ export function TreatmentPlanner({
             visualKey: selectedDefinition.visualKey,
             displayName: selectedDefinition.displayName,
             toothNumbers: [...targetTeeth],
+            layer: treatmentLayer(treatment),
+            scope: treatmentScope(treatment),
             supportType: undefined,
             material: treatmentMaterial(treatment),
             clinicianOverrideReason: warningConfirmed ? overrideReason.trim() : undefined,
@@ -464,6 +473,8 @@ export function TreatmentPlanner({
               bridgeDefinition?.displayName ?? existingTreatment?.displayName ?? "Bridge",
             toothNumbers: [...teeth],
             treatmentGroupId: groupId,
+            layer: "prosthetic",
+            scope: "span",
             bridgeRoles: roles,
             bridgeType,
             material,
@@ -566,6 +577,41 @@ export function TreatmentPlanner({
       }),
     [history],
   );
+  const requestDeleteTreatments = useCallback(
+    (ids: string[]) => {
+      const idSet = new Set(ids);
+      const implantTeeth = [
+        ...new Set(
+          history.state.proposedTreatments
+            .filter((item) => idSet.has(item.id) && item.treatmentType === "dental-implant")
+            .flatMap((item) => item.toothNumbers),
+        ),
+      ];
+      if (!implantTeeth.length) {
+        deleteTreatments(ids);
+        return;
+      }
+      const dependentIds = history.state.proposedTreatments
+        .filter((item) => {
+          if (idSet.has(item.id)) return false;
+          if (item.treatmentType === "bridge")
+            return implantTeeth.some((tooth) => item.bridgeRoles?.[tooth] === "implant-abutment");
+          if (
+            !["implant-abutment", "implant-crown"].includes(item.treatmentType) &&
+            item.supportType !== "implant"
+          )
+            return false;
+          return item.toothNumbers.some((tooth) => implantTeeth.includes(tooth));
+        })
+        .map((item) => item.id);
+      if (!dependentIds.length) {
+        deleteTreatments(ids);
+        return;
+      }
+      setPendingRemoval({ treatmentIds: ids, dependentIds, implantTeeth });
+    },
+    [deleteTreatments, history.state.proposedTreatments],
+  );
   const editTreatments = useCallback(
     (ids: string[], patch: Pick<ToothTreatment, "notes" | "stage" | "material">) =>
       history.commit((previous) => {
@@ -598,6 +644,16 @@ export function TreatmentPlanner({
     },
     [proposedSelection],
   );
+  const bridgeImplantPositions = [
+    ...new Set([
+      ...Object.entries(history.state.currentConditions)
+        .filter(([, condition]) => condition?.conditions.includes("existing-implant"))
+        .map(([tooth]) => Number(tooth) as ToothNumber),
+      ...history.state.proposedTreatments
+        .filter((item) => item.treatmentType === "dental-implant")
+        .flatMap((item) => item.toothNumbers),
+    ]),
+  ];
   return (
     <section className="space-y-4 rounded-xl border bg-card p-3 sm:p-5">
       <AlertDialog
@@ -633,6 +689,46 @@ export function TreatmentPlanner({
               }}
             >
               Continue with clinician override
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={!!pendingRemoval}
+        onOpenChange={(open) => !open && setPendingRemoval(undefined)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove supporting implant?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The implant at {pendingRemoval?.implantTeeth.join(", ")} supports another proposed
+              restoration. Choose whether to keep that restoration for replanning or remove the
+              related layers too.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:flex-wrap">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (pendingRemoval) deleteTreatments(pendingRemoval.treatmentIds);
+                setPendingRemoval(undefined);
+              }}
+            >
+              Remove implant only
+            </Button>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRemoval)
+                  deleteTreatments([
+                    ...pendingRemoval.treatmentIds,
+                    ...pendingRemoval.dependentIds,
+                  ]);
+                setPendingRemoval(undefined);
+              }}
+            >
+              Remove implant and related layers
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -811,6 +907,10 @@ export function TreatmentPlanner({
               <BridgeConfigurator
                 key={editingBridgeId ?? bridgeTeeth.join("-")}
                 teeth={bridgeTeeth}
+                implantPositions={bridgeImplantPositions}
+                selectionWasNonContiguous={
+                  bridgeTeeth.length > 2 && !isContiguousInArch(bridgeTeeth)
+                }
                 initialRoles={editingBridge?.bridgeRoles}
                 initialBridgeType={editingBridge?.bridgeType}
                 initialMaterial={editingBridge?.material}
@@ -837,7 +937,7 @@ export function TreatmentPlanner({
           <TreatmentSummary
             treatments={history.state.proposedTreatments}
             readOnly={readOnly}
-            onDelete={(ids) => !readOnly && deleteTreatments(ids)}
+            onDelete={(ids) => !readOnly && requestDeleteTreatments(ids)}
             onEdit={(ids, patch) => !readOnly && editTreatments(ids, patch)}
             onEditBridge={(id) => !readOnly && editBridge(id)}
             onHighlight={highlightTeeth}
