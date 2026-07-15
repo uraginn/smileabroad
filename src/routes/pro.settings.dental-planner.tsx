@@ -45,7 +45,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { TREATMENT_DEFINITIONS } from "@/features/dentalplan/data/treatmentDefinitions";
+import {
+  BRIDGE_SYSTEM_DEFINITIONS,
+  TREATMENT_DEFINITIONS,
+} from "@/features/dentalplan/data/treatmentDefinitions";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
 import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import { Tooth } from "@/features/dentalplan/components/Tooth";
@@ -139,10 +142,23 @@ function DentalPlannerSettings() {
       </div>
     );
   const rows = [
-    ...TREATMENT_DEFINITIONS.map(
+    ...TREATMENT_DEFINITIONS.filter((base) => base.type !== "bridge").map(
       (base) =>
         clinicDefinitions.find((item) => item.treatment_key === base.type && item.system) ??
         systemTreatment(clinicId, base.type, base.label, base.perTooth),
+    ),
+    ...BRIDGE_SYSTEM_DEFINITIONS.map(
+      (base) =>
+        clinicDefinitions.find((item) => item.treatment_key === base.treatmentKey && item.system) ??
+        systemTreatment(clinicId, base.treatmentKey, base.displayName, true, {
+          category: base.category,
+          prices: { ...base.prices },
+          description: base.patientDescription,
+          baseTreatmentKey: "bridge",
+          visualKey: "bridge",
+          clinicalBehavior: "bridge",
+          defaultMaterial: base.defaultMaterial,
+        }),
     ),
     ...clinicDefinitions.filter((item) => !item.system),
   ];
@@ -244,7 +260,7 @@ function DentalPlannerSettings() {
                           <Row
                             key={item.id}
                             title={item.display_name}
-                            description={`Appears as: ${treatmentName(item.visual_key)} · Behaves like: ${treatmentName(item.base_treatment_key)}`}
+                            description={`Appears as: ${treatmentName(item.visual_key)} · Clinical behavior: ${clinicalBehaviorLabel(item.clinical_behavior)}`}
                             badges={[
                               item.system ? "System" : "Custom",
                               item.active ? "Active" : "Inactive",
@@ -841,21 +857,44 @@ function TreatmentDialog({
           </Button>
         </div>
       </Field>
-      <Field label="Treatment behaviour" wide>
+      <Field label="Clinical behavior" wide>
         <p className="mb-2 text-xs text-muted-foreground">
-          Choose which existing treatment this should behave like. This controls where it can be
-          applied, conflicts and price quantity rules.
+          Controls selection rules, treatment scope and price quantity without relying on the
+          treatment name.
         </p>
         <Select
-          value={draft.base_treatment_key}
-          onValueChange={(base_treatment_key) => {
-            const definition = TREATMENT_DEFINITIONS.find(
-              (item) => item.type === base_treatment_key,
-            );
+          disabled={draft.system}
+          value={draft.clinical_behavior}
+          onValueChange={(clinical_behavior: ClinicTreatmentDefinition["clinical_behavior"]) => {
+            if (clinical_behavior === "bridge") {
+              patch({
+                clinical_behavior,
+                base_treatment_key: "bridge",
+                rule_profile_key: "bridge",
+                unit_type: "tooth",
+                visual_key: "bridge",
+                default_material: draft.default_material ?? "zirconium",
+              });
+              return;
+            }
+            if (clinical_behavior === "arch") {
+              patch({
+                clinical_behavior,
+                base_treatment_key: "whitening",
+                rule_profile_key: "whitening",
+                unit_type: "arch",
+              });
+              return;
+            }
+            const baseTreatmentKey =
+              draft.base_treatment_key === "bridge" || draft.unit_type === "arch"
+                ? "other"
+                : draft.base_treatment_key;
             patch({
-              base_treatment_key,
-              rule_profile_key: base_treatment_key,
-              unit_type: definition?.perTooth === false ? "arch" : "tooth",
+              clinical_behavior,
+              base_treatment_key: baseTreatmentKey,
+              rule_profile_key: baseTreatmentKey,
+              unit_type: "tooth",
             });
           }}
         >
@@ -863,11 +902,9 @@ function TreatmentDialog({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TREATMENT_DEFINITIONS.map((item) => (
-              <SelectItem key={item.type} value={item.type}>
-                {item.label}
-              </SelectItem>
-            ))}
+            <SelectItem value="tooth">Standard tooth treatment</SelectItem>
+            <SelectItem value="bridge">Bridge</SelectItem>
+            <SelectItem value="arch">Global / arch treatment</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -878,12 +915,13 @@ function TreatmentDialog({
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {TREATMENT_DEFINITIONS.filter((item) => item.supported).map((item) => (
-            <Button
+            <div
               key={item.type}
-              type="button"
-              variant={draft.visual_key === item.type ? "default" : "outline"}
-              className="h-auto justify-start gap-2 py-2"
-              onClick={() => patch({ visual_key: item.type })}
+              className={`relative flex items-center justify-start gap-2 rounded-md border px-3 py-2 ${
+                draft.visual_key === item.type
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "bg-background"
+              }`}
             >
               <Tooth
                 toothNumber={11}
@@ -902,7 +940,14 @@ function TreatmentDialog({
                 onSelect={() => {}}
               />
               <span className="text-xs">{item.label}</span>
-            </Button>
+              <button
+                type="button"
+                className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-label={`Use ${item.label} diagram appearance`}
+                aria-pressed={draft.visual_key === item.type}
+                onClick={() => patch({ visual_key: item.type })}
+              />
+            </div>
           ))}
         </div>
       </Field>
@@ -925,9 +970,7 @@ function TreatmentDialog({
         />
         <div>
           <p>
-            <b>Behaves like:</b>{" "}
-            {TREATMENT_DEFINITIONS.find((item) => item.type === draft.base_treatment_key)?.label ??
-              draft.base_treatment_key}
+            <b>Clinical behavior:</b> {clinicalBehaviorLabel(draft.clinical_behavior)}
           </p>
           <p>
             <b>Uses visual:</b>{" "}
@@ -1399,21 +1442,34 @@ function systemTreatment(
   key: string,
   label: string,
   perTooth: boolean,
+  options: {
+    category?: string;
+    prices?: Partial<Record<PlannerCurrency, number>>;
+    description?: string;
+    baseTreatmentKey?: string;
+    visualKey?: string;
+    clinicalBehavior?: ClinicTreatmentDefinition["clinical_behavior"];
+    defaultMaterial?: ClinicTreatmentDefinition["default_material"];
+  } = {},
 ): ClinicTreatmentDefinition {
+  const baseTreatmentKey = options.baseTreatmentKey ?? key;
   return {
     id: `${clinicId}_system_${key}`,
     clinic_id: clinicId,
     treatment_key: key,
     system: true,
     display_name: label,
-    category: "System treatments",
-    prices: {},
+    category: options.category ?? "System treatments",
+    description: options.description,
+    prices: options.prices ?? {},
     unit_type: perTooth ? "tooth" : "arch",
     availability: "proposed",
     active: true,
-    base_treatment_key: key,
-    visual_key: key,
-    rule_profile_key: key,
+    base_treatment_key: baseTreatmentKey,
+    visual_key: options.visualKey ?? key,
+    rule_profile_key: baseTreatmentKey,
+    clinical_behavior: options.clinicalBehavior ?? (perTooth ? "tooth" : "arch"),
+    default_material: options.defaultMaterial,
     created_at: "",
     updated_at: "",
     created_by: "system",
@@ -1428,7 +1484,16 @@ function blankTreatment(clinicId: string): ClinicTreatmentDefinition {
     base_treatment_key: "other",
     visual_key: "dental-implant",
     rule_profile_key: "other",
+    clinical_behavior: "tooth",
   };
+}
+
+function clinicalBehaviorLabel(behavior: ClinicTreatmentDefinition["clinical_behavior"]) {
+  return {
+    tooth: "Standard tooth treatment",
+    bridge: "Bridge",
+    arch: "Global / arch treatment",
+  }[behavior];
 }
 function blankTemplate(clinicId: string, userId: string): DentalPlanTemplate {
   const now = new Date().toISOString();

@@ -58,9 +58,11 @@ import {
   now,
 } from "./seed";
 import { migrateLegacyPlannerAssets } from "@/features/dentalplan/adapters/plannerAssetStorage";
+import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
+import type { DentalPlan } from "@/features/dentalplan/types/dental-plan.types";
 
 const MOCK_STORAGE_KEY = "smileabroad-mock-v1";
-const MOCK_STORAGE_VERSION = 24;
+const MOCK_STORAGE_VERSION = 25;
 const DTKURT_CLINIC_ID = "clinic_istanbul";
 const OBSOLETE_PLANNER_DRAFT_KEYS = [
   "smileabroad.dentalplan.dev.v2",
@@ -2391,6 +2393,10 @@ export const useMockStore = create<Store>()(
           );
           return {
             ...plan,
+            dental_plan_data:
+              plan.dental_plan_data && typeof plan.dental_plan_data === "object"
+                ? createDentalPlan(plan.dental_plan_data as Partial<DentalPlan>)
+                : plan.dental_plan_data,
             lead_id: plan.lead_id ?? lead?.id,
             clinic_application_id: plan.clinic_application_id ?? application?.id,
             assessment_id: plan.assessment_id ?? lead?.assessment_id ?? application?.assessment_id,
@@ -2571,24 +2577,16 @@ export const useMockStore = create<Store>()(
             applications: linkedApplications,
             leads,
             treatmentPlans,
-            clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((legacy) => {
-              const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
-                svg_asset?: unknown;
-              };
-              const baseTreatmentKey =
-                item.base_treatment_key ?? (item.system ? item.treatment_key : "other");
-              return {
-                ...item,
-                prices: item.prices ?? {},
-                active: item.active !== false,
-                base_treatment_key: baseTreatmentKey,
-                visual_key: item.visual_key ?? (item.system ? baseTreatmentKey : "dental-implant"),
-                rule_profile_key: item.rule_profile_key ?? baseTreatmentKey,
-              };
-            }),
+            clinicTreatmentDefinitions: normalizeClinicTreatmentDefinitions(
+              state.clinicTreatmentDefinitions,
+            ),
             dentalPlanTemplates: (state.dentalPlanTemplates ?? []).map((item) => ({
               ...item,
               active: item.active !== false,
+              plan_data:
+                item.plan_data && typeof item.plan_data === "object"
+                  ? createDentalPlan(item.plan_data as Partial<DentalPlan>)
+                  : item.plan_data,
             })),
             clinicHotels: (state.clinicHotels ?? []).map((item) => ({
               ...item,
@@ -2627,6 +2625,74 @@ export const useMockStore = create<Store>()(
     },
   ),
 );
+
+function normalizeClinicTreatmentDefinitions(
+  definitions: ClinicTreatmentDefinition[] | undefined,
+): ClinicTreatmentDefinition[] {
+  const source = definitions ?? [];
+  const explicitZirconiumClinics = new Set(
+    source
+      .filter((item) => item.system && item.treatment_key === "zirconium-bridge")
+      .map((item) => item.clinic_id),
+  );
+  const normalized = source
+    .filter(
+      (item) =>
+        !(
+          item.system &&
+          item.treatment_key === "bridge" &&
+          explicitZirconiumClinics.has(item.clinic_id)
+        ),
+    )
+    .map((legacy) => {
+      const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
+        svg_asset?: unknown;
+      };
+      const legacySystemBridge = item.system && item.treatment_key === "bridge";
+      const treatmentKey = legacySystemBridge ? "zirconium-bridge" : item.treatment_key;
+      const baseTreatmentKey =
+        item.base_treatment_key ?? (item.system ? item.treatment_key : "other");
+      const clinicalBehavior =
+        item.clinical_behavior ??
+        (baseTreatmentKey === "bridge" ? "bridge" : item.unit_type === "arch" ? "arch" : "tooth");
+      const normalizedBaseTreatmentKey =
+        clinicalBehavior === "bridge" ? "bridge" : baseTreatmentKey;
+      return {
+        ...item,
+        treatment_key: treatmentKey,
+        display_name:
+          legacySystemBridge && item.display_name.trim().toLowerCase() === "bridge"
+            ? "Zirconium Bridge"
+            : item.display_name,
+        category:
+          legacySystemBridge && item.category === "System treatments"
+            ? "Restorative"
+            : item.category,
+        prices: item.prices ?? {},
+        active: item.active !== false,
+        unit_type: clinicalBehavior === "arch" ? "arch" : "tooth",
+        base_treatment_key: normalizedBaseTreatmentKey,
+        visual_key:
+          item.visual_key ??
+          (clinicalBehavior === "bridge"
+            ? "bridge"
+            : item.system
+              ? normalizedBaseTreatmentKey
+              : "dental-implant"),
+        rule_profile_key:
+          clinicalBehavior === "bridge"
+            ? "bridge"
+            : (item.rule_profile_key ?? normalizedBaseTreatmentKey),
+        clinical_behavior: clinicalBehavior,
+        default_material:
+          item.default_material ?? (clinicalBehavior === "bridge" ? "zirconium" : undefined),
+      } satisfies ClinicTreatmentDefinition;
+    });
+  const byClinicAndKey = new Map<string, ClinicTreatmentDefinition>();
+  for (const item of normalized)
+    byClinicAndKey.set(`${item.clinic_id}:${item.treatment_key}`, item);
+  return [...byClinicAndKey.values()];
+}
 
 function normalizePlanPaymentSchedule(schedule: TreatmentPlan["payment_schedule"]) {
   if (!Array.isArray(schedule)) return [];

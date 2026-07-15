@@ -37,14 +37,14 @@ export function TreatmentSummary({
   readOnly,
   onDelete,
   onEdit,
-  onEditBridge,
+  onEditSpan,
   onHighlight,
 }: {
   treatments: ToothTreatment[];
   readOnly?: boolean;
   onDelete: (ids: string[]) => void;
   onEdit: (ids: string[], patch: Pick<ToothTreatment, "notes" | "stage" | "material">) => void;
-  onEditBridge: (id: string) => void;
+  onEditSpan: (id: string) => void;
   onHighlight: (teeth: number[]) => void;
 }) {
   const groups = useMemo(() => groupTreatments(treatments), [treatments]);
@@ -103,7 +103,7 @@ export function TreatmentSummary({
                         disabled={readOnly}
                         onClick={() => {
                           if (group.bridgeId) {
-                            onEditBridge(group.bridgeId);
+                            onEditSpan(group.bridgeId);
                             return;
                           }
                           setEditing(group);
@@ -112,7 +112,7 @@ export function TreatmentSummary({
                           setMaterial(group.material);
                         }}
                       >
-                        Edit
+                        {group.bridgeId ? "Edit span" : "Edit"}
                       </Button>
                       <Button
                         type="button"
@@ -249,7 +249,7 @@ function groupTreatments(treatments: ToothTreatment[]) {
     const orderedTeeth = orderedByArch(treatment.toothNumbers);
     const bridgeLabel =
       treatment.treatmentType === "bridge"
-        ? `Bridge ${formatRange(orderedTeeth)} · ${orderedTeeth.length} units`
+        ? `${treatment.displayName ?? "Zirconium Bridge"} ${formatRange(orderedTeeth)} · ${orderedTeeth.length} units`
         : undefined;
     const current = groups.get(key) ?? {
       key,

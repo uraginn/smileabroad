@@ -387,6 +387,9 @@ function DentalPlanRoute() {
           baseTreatmentKey: item.base_treatment_key as TreatmentType,
           visualKey: item.visual_key as TreatmentType,
           perTooth: item.unit_type === "tooth",
+          clinicalBehavior: item.clinical_behavior,
+          defaultMaterial:
+            item.default_material as DentalPlanData["proposedTreatments"][number]["material"],
           prices: item.prices ?? {},
         })),
     [treatmentDefinitions, user?.clinic_id],

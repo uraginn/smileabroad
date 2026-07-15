@@ -77,6 +77,31 @@ export const TREATMENT_CATEGORIES = [
   "Supporting",
   "Other",
 ] as const;
+export const BRIDGE_SYSTEM_DEFINITIONS = [
+  {
+    treatmentKey: "zirconium-bridge",
+    displayName: "Zirconium Bridge",
+    patientDescription:
+      "A fixed zirconium bridge replacing or restoring teeth across the planned span.",
+    baseTreatmentKey: "bridge" as const,
+    visualKey: "bridge" as const,
+    category: "Restorative",
+    clinicalBehavior: "bridge" as const,
+    defaultMaterial: "zirconium" as const,
+    prices: { GBP: 130, EUR: 150, USD: 165, TRY: 7_000 },
+  },
+  {
+    treatmentKey: "porcelain-bridge",
+    displayName: "Porcelain Bridge",
+    patientDescription: "A fixed porcelain-fused-to-metal bridge across the planned span.",
+    baseTreatmentKey: "bridge" as const,
+    visualKey: "bridge" as const,
+    category: "Restorative",
+    clinicalBehavior: "bridge" as const,
+    defaultMaterial: "porcelain-metal" as const,
+    prices: { GBP: 110, EUR: 125, USD: 140, TRY: 5_800 },
+  },
+] as const;
 export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
   ([type, label, short, color, supported, perTooth]) => ({
     type,

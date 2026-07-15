@@ -77,6 +77,7 @@ export type BridgeUnitRole = "abutment-crown" | "pontic" | "implant-abutment";
 export type TreatmentLayer =
   "condition" | "procedure" | "foundation" | "support" | "restoration" | "prosthetic";
 export type TreatmentScope = "tooth" | "span" | "arch" | "plan";
+export type ClinicalTreatmentBehavior = "tooth" | "bridge" | "arch";
 export type TreatmentSupport = "natural" | "implant" | "soft-tissue" | "arch";
 export type ClinicalTreatmentStage =
   | "disease-control"
@@ -224,6 +225,8 @@ export type EffectiveTreatmentDefinition = {
   baseTreatmentKey: TreatmentType;
   visualKey: TreatmentType;
   perTooth: boolean;
+  clinicalBehavior: ClinicalTreatmentBehavior;
+  defaultMaterial?: ToothTreatment["material"];
   system: boolean;
   prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
 };
@@ -283,6 +286,8 @@ export interface DentalPlanStudioProps {
     baseTreatmentKey?: TreatmentType;
     visualKey?: TreatmentType;
     perTooth?: boolean;
+    clinicalBehavior?: ClinicalTreatmentBehavior;
+    defaultMaterial?: ToothTreatment["material"];
     prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
   }>;
   templates?: Array<{

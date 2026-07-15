@@ -15,7 +15,7 @@ export {
   validateClinicalTreatment,
   validatePlanForFinalize,
 } from "./rules/clinicalRules";
-export { validateBridge } from "./rules/bridgeRules";
+export { resolveBridgeSelection } from "./rules/bridgeRules";
 export type { DentalPlanRepository } from "./adapters/DentalPlanRepository";
 export type {
   DentalPlan,

@@ -611,6 +611,8 @@ export interface ClinicTreatmentDefinition extends BaseRecord {
   base_treatment_key: string;
   visual_key: string;
   rule_profile_key: string;
+  clinical_behavior: "tooth" | "bridge" | "arch";
+  default_material?: "zirconium" | "emax" | "porcelain-metal" | "temporary" | "composite";
 }
 
 export interface PlannerAssetMetadata {

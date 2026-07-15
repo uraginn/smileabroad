@@ -155,8 +155,7 @@ export function buildPatientTreatmentTable(
     const consumedPrices = new Set<string>();
     const treatmentLayers = new Map<string, typeof embedded.proposedTreatments>();
     for (const treatment of embedded.proposedTreatments) {
-      const key =
-        treatment.treatmentDefinitionId ?? treatment.treatmentKey ?? treatment.treatmentType;
+      const key = treatment.treatmentDefinitionId ?? publicTreatmentKey(treatment);
       treatmentLayers.set(key, [...(treatmentLayers.get(key) ?? []), treatment]);
     }
     for (const [layerKey, treatments] of treatmentLayers) {
@@ -164,7 +163,7 @@ export function buildPatientTreatmentTable(
       const definition = treatmentDefinitions.find(
         (item) =>
           item.id === treatment.treatmentDefinitionId ||
-          item.treatment_key === treatment.treatmentKey,
+          item.treatment_key === publicTreatmentKey(treatment),
       );
       const price = (plan.price_items ?? []).find(
         (item) =>
@@ -180,8 +179,7 @@ export function buildPatientTreatmentTable(
           item.treatmentKey === (treatment.treatmentKey ?? treatment.treatmentType) ||
           treatments.some((entry) => entry.id === item.treatmentId),
       );
-      const treatmentKey =
-        treatment.treatmentKey ?? definition?.treatment_key ?? treatment.treatmentType;
+      const treatmentKey = definition?.treatment_key ?? publicTreatmentKey(treatment);
       const visualKey = (definition?.visual_key ??
         treatment.visualKey ??
         treatment.treatmentType) as TreatmentType;
@@ -194,7 +192,7 @@ export function buildPatientTreatmentTable(
       const label =
         definition?.patient_label ??
         definition?.display_name ??
-        treatment.displayName ??
+        publicTreatmentLabel(treatment) ??
         treatmentByType(treatment.treatmentType).label;
       const groupKey = `${definition?.id ?? treatmentKey}|${unitPrice}|${category}`;
       groups.set(groupKey, {
@@ -687,6 +685,22 @@ function isDentalPlanData(value: unknown): value is DentalPlanData {
     (value as DentalPlanData).currentConditions &&
     typeof (value as DentalPlanData).currentConditions === "object",
   );
+}
+function publicTreatmentKey(treatment: DentalPlanData["proposedTreatments"][number]) {
+  if (
+    treatment.treatmentType !== "bridge" ||
+    (treatment.treatmentKey && treatment.treatmentKey !== "bridge")
+  )
+    return treatment.treatmentKey ?? treatment.treatmentType;
+  return treatment.material === "porcelain-metal" ? "porcelain-bridge" : "zirconium-bridge";
+}
+function publicTreatmentLabel(treatment: DentalPlanData["proposedTreatments"][number]) {
+  if (
+    treatment.treatmentType !== "bridge" ||
+    (treatment.treatmentKey && treatment.treatmentKey !== "bridge")
+  )
+    return treatment.displayName;
+  return treatment.material === "porcelain-metal" ? "Porcelain Bridge" : "Zirconium Bridge";
 }
 function svgLogoUrl(value?: string) {
   if (!value) return undefined;

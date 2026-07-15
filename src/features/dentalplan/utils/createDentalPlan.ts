@@ -197,14 +197,29 @@ function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined
     });
   const normalized = expanded.map((item) => {
     const type = item.treatmentType ?? "other";
+    const legacyBridge =
+      type === "bridge" && (!item.treatmentKey || item.treatmentKey === "bridge");
+    const porcelainBridge = legacyBridge && item.material === "porcelain-metal";
     return {
       ...item,
       treatmentType: type,
+      treatmentDefinitionId: legacyBridge ? undefined : item.treatmentDefinitionId,
+      treatmentKey: legacyBridge
+        ? porcelainBridge
+          ? "porcelain-bridge"
+          : "zirconium-bridge"
+        : item.treatmentKey,
+      displayName: legacyBridge
+        ? porcelainBridge
+          ? "Porcelain Bridge"
+          : "Zirconium Bridge"
+        : item.displayName,
+      visualKey: legacyBridge ? "bridge" : item.visualKey,
       layer: item.layer ?? treatmentLayer(type),
       scope: item.scope ?? treatmentScope(type),
       sequence: finite(item.sequence, legacyTreatmentSequence(type)),
       stage: item.stage ?? legacyTreatmentStage(type),
-      material: item.material ?? legacyTreatmentMaterial(type),
+      material: item.material ?? (legacyBridge ? "zirconium" : legacyTreatmentMaterial(type)),
     } satisfies ToothTreatment;
   });
   return normalized.map((item) => {

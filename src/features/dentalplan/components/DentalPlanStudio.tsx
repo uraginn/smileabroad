@@ -41,7 +41,12 @@ import type {
   DentalPlanStudioProps,
   EffectiveTreatmentDefinition,
 } from "../types/dental-plan.types";
-import { TREATMENT_CATEGORIES, TREATMENT_DEFINITIONS } from "../data/treatmentDefinitions";
+import {
+  BRIDGE_SYSTEM_DEFINITIONS,
+  TREATMENT_CATEGORIES,
+  TREATMENT_DEFINITIONS,
+  treatmentScope,
+} from "../data/treatmentDefinitions";
 import { createDentalPlan } from "../utils/createDentalPlan";
 import { LocalStorageDentalPlanRepository } from "../adapters/LocalStorageDentalPlanRepository";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -111,26 +116,53 @@ function PlannerShell({
 } & DentalPlanStudioProps) {
   const { lastSavedAt, status: saveStatus, saveNow } = useAutoSave(plan, repository);
   const effectiveTreatments = useMemo<EffectiveTreatmentDefinition[]>(() => {
-    const system = TREATMENT_DEFINITIONS.flatMap((base) => {
+    const system = TREATMENT_DEFINITIONS.filter((base) => base.type !== "bridge").flatMap(
+      (base) => {
+        const override = treatmentDefaults.find(
+          (item) => item.system !== false && item.treatmentKey === base.type,
+        );
+        if (override && !override.active) return [];
+        return [
+          {
+            id: override?.id ?? `system_${base.type}`,
+            treatmentKey: override?.treatmentKey ?? base.type,
+            displayName: override?.displayName ?? base.label,
+            category: TREATMENT_CATEGORIES.includes(
+              override?.category as (typeof TREATMENT_CATEGORIES)[number],
+            )
+              ? override!.category!
+              : base.category,
+            baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
+            visualKey: override?.visualKey ?? base.type,
+            perTooth: override?.perTooth ?? base.perTooth,
+            clinicalBehavior:
+              override?.clinicalBehavior ??
+              (treatmentScope(base.type) === "arch" ? "arch" : "tooth"),
+            defaultMaterial: override?.defaultMaterial,
+            system: true,
+            prices: override?.prices ?? {},
+          },
+        ];
+      },
+    );
+    const bridges = BRIDGE_SYSTEM_DEFINITIONS.flatMap((base) => {
       const override = treatmentDefaults.find(
-        (item) => item.system !== false && item.treatmentKey === base.type,
+        (item) => item.system !== false && item.treatmentKey === base.treatmentKey,
       );
       if (override && !override.active) return [];
       return [
         {
-          id: override?.id ?? `system_${base.type}`,
-          treatmentKey: override?.treatmentKey ?? base.type,
-          displayName: override?.displayName ?? base.label,
-          category: TREATMENT_CATEGORIES.includes(
-            override?.category as (typeof TREATMENT_CATEGORIES)[number],
-          )
-            ? override!.category!
-            : base.category,
-          baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
-          visualKey: override?.visualKey ?? base.type,
-          perTooth: override?.perTooth ?? base.perTooth,
+          id: override?.id ?? `system_${base.treatmentKey}`,
+          treatmentKey: base.treatmentKey,
+          displayName: override?.displayName ?? base.displayName,
+          category: override?.category ?? base.category,
+          baseTreatmentKey: "bridge" as const,
+          visualKey: override?.visualKey ?? base.visualKey,
+          perTooth: true,
+          clinicalBehavior: "bridge" as const,
+          defaultMaterial: override?.defaultMaterial ?? base.defaultMaterial,
           system: true,
-          prices: override?.prices ?? {},
+          prices: override?.prices ?? base.prices,
         },
       ];
     });
@@ -148,10 +180,12 @@ function PlannerShell({
         baseTreatmentKey: item.baseTreatmentKey ?? "other",
         visualKey: item.visualKey ?? item.baseTreatmentKey ?? "other",
         perTooth: item.perTooth ?? true,
+        clinicalBehavior: item.clinicalBehavior ?? "tooth",
+        defaultMaterial: item.defaultMaterial,
         system: false,
         prices: item.prices,
       }));
-    return [...system, ...custom];
+    return [...system, ...bridges, ...custom];
   }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
