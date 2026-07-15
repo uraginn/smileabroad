@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/ui-bits";
 import { useMockStore } from "@/lib/mock/store";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
@@ -31,14 +33,14 @@ export function UnifiedPlanShareSection({
   role?: string;
 }) {
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
+  const updatePlan = useMockStore((state) => state.updateTreatmentPlan);
   const markSent = useMockStore((state) => state.markTreatmentPlanSent);
   const ensureToken = useMockStore((state) => state.ensureTreatmentPlanShareToken);
   const status = plan.status ?? "draft";
   const canApprove = ["dentist", "clinic_owner", "clinic_admin"].includes(role ?? "");
-  const canSubmitReview = ["dentist", "coordinator", "clinic_owner", "clinic_admin"].includes(
-    role ?? "",
-  );
+  const canSubmitReview = ["coordinator", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const canShare = ["coordinator", "clinic_owner", "clinic_admin"].includes(role ?? "");
+  const [reviewNote, setReviewNote] = useState("");
   const publicLinkReady = Boolean(plan.share_token && isTreatmentPlanPubliclyViewable(plan.status));
   const preview = () => {
     const token =
@@ -102,23 +104,72 @@ export function UnifiedPlanShareSection({
                 </Button>
               )}
               {status === "doctor_review" && canApprove && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline">Approve Treatment Plan</Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Approve this Treatment Plan?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Approval makes the document eligible to be shared, but does not send it.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={approve}>Approve</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline">Approve Treatment Plan</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Approve this Treatment Plan?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Approval makes the document eligible to be shared, but does not send it.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={approve}>Approve</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline">Request Changes</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Return this plan for changes?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Add a clinic-only review note for the coordinator. The plan returns to
+                          Draft.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <Textarea
+                        value={reviewNote}
+                        onChange={(event) => setReviewNote(event.target.value)}
+                        placeholder="Describe the requested clinical changes"
+                        aria-label="Clinic-only doctor review note"
+                      />
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setReviewNote("")}>
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={!reviewNote.trim()}
+                          onClick={() => {
+                            updatePlan(
+                              plan.id,
+                              {
+                                internal_clinical_notes: [
+                                  plan.internal_clinical_notes,
+                                  `Doctor Review: ${reviewNote.trim()}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join("\n\n"),
+                              },
+                              actorId,
+                            );
+                            updateStatus(plan.id, plan.clinic_id, "draft", actorId);
+                            setReviewNote("");
+                            toast.success("Changes requested; plan returned to Draft");
+                          }}
+                        >
+                          Request Changes
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
               )}
               {status === "approved" && canShare && (
                 <Button

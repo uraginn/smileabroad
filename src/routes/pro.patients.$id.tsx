@@ -66,7 +66,12 @@ function PatientWorkspace() {
             (item.clinic_patient_id === patient?.id ||
               (!!patient?.user_id && item.patient_user_id === patient.user_id)),
         )
-        .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)),
+        .sort((a, b) => {
+          const aHistorical = ["declined", "expired"].includes(a.status ?? "");
+          const bHistorical = ["declined", "expired"].includes(b.status ?? "");
+          if (aHistorical !== bHistorical) return aHistorical ? 1 : -1;
+          return +new Date(b.updated_at) - +new Date(a.updated_at);
+        }),
     [leads, patient?.clinic_id, patient?.id, patient?.user_id],
   );
   const lead = patientLeads[0];
@@ -158,6 +163,13 @@ function PatientWorkspace() {
   );
   const lastContact = communications.find((item) => item.kind !== "note");
   const createOrOpenPlan = () => {
+    if (activePlan?.share_token && ["sent", "viewed"].includes(activePlan.status ?? "draft")) {
+      return void navigate({
+        to: "/shared/treatment-plan/$token",
+        params: { token: activePlan.share_token },
+        search: { preview: true },
+      });
+    }
     if (activePlan)
       return void navigate({ to: "/dentalplan", search: { treatmentPlanId: activePlan.id } });
     const plan = addPlan(
@@ -216,7 +228,11 @@ function PatientWorkspace() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={createOrOpenPlan}>
-            {activePlan ? "Open Treatment Plan" : "Create Treatment Plan"}
+            {activePlan
+              ? activePlan.share_token && ["sent", "viewed"].includes(activePlan.status ?? "")
+                ? "Open Patient View"
+                : "Continue Planning"
+              : "Create Treatment Plan"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -503,7 +519,9 @@ function PatientWorkspace() {
                         <p className="mt-1 text-xs text-muted-foreground">
                           {assigned?.name ?? "Dentist not assigned"} · Updated{" "}
                           {formatCrmDate(plan.updated_at)} ·{" "}
-                          {formatQuoteMoney(totals.total, plan.currency ?? "EUR")}
+                          {totals.total > 0
+                            ? formatQuoteMoney(totals.total, plan.currency ?? "EUR")
+                            : "Not priced"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -511,11 +529,23 @@ function PatientWorkspace() {
                         <Badge variant="outline">
                           {plan.share_token ? "Patient View prepared" : "Not shared"}
                         </Badge>
-                        <Button asChild variant="outline" size="sm">
-                          <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
-                            Open Treatment Plan
-                          </Link>
-                        </Button>
+                        {plan.share_token && ["sent", "viewed"].includes(plan.status ?? "") ? (
+                          <Button asChild variant="outline" size="sm">
+                            <Link
+                              to="/shared/treatment-plan/$token"
+                              params={{ token: plan.share_token }}
+                              search={{ preview: true }}
+                            >
+                              Open Patient View
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button asChild variant="outline" size="sm">
+                            <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
+                              {plan === activePlan ? "Continue Planning" : "Open Plan"}
+                            </Link>
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

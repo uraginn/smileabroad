@@ -29,6 +29,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { LogContactDialog, ScheduleFollowUpDialog } from "@/components/lead-actions";
 import { useAuth } from "@/lib/auth/mock-auth";
+import { treatmentLabel } from "@/lib/dental";
+import { formatCrmDate } from "@/lib/format";
 import {
   deriveLeadOperationalStage,
   getFollowUpState,
@@ -36,6 +38,7 @@ import {
   LEAD_PIPELINE_STAGES,
 } from "@/lib/lead-workflow";
 import { useMockStore, useMockStoreHydrated } from "@/lib/mock/store";
+import type { TreatmentPlan } from "@/types/models";
 
 export const Route = createFileRoute("/pro/leads/$id")({ component: LeadWorkspace });
 
@@ -123,16 +126,56 @@ function LeadWorkspace() {
   const openPlan = () => {
     if (activePlan)
       return void navigate({ to: "/dentalplan", search: { treatmentPlanId: activePlan.id } });
-    if (!patient) return toast.error("A clinic patient record is required before planning");
+    let linkedPatient = patient;
+    if (!linkedPatient && assessment?.personal.email) {
+      const email = assessment.personal.email.trim().toLowerCase();
+      linkedPatient = patients.find(
+        (item) => item.clinic_id === clinicId && item.email?.trim().toLowerCase() === email,
+      );
+    }
+    if (!linkedPatient) {
+      const name = splitLeadName(lead.patient_name);
+      linkedPatient = addPatient(
+        {
+          clinic_id: clinicId,
+          user_id: lead.patient_user_id,
+          first_name: assessment?.personal.first_name || name.firstName,
+          last_name: assessment?.personal.last_name || name.lastName,
+          email: assessment?.personal.email || undefined,
+          phone: assessment?.personal.phone,
+          whatsapp: assessment?.personal.whatsapp,
+          country: assessment?.personal.country || lead.patient_country || undefined,
+          city: assessment?.personal.city,
+          language: assessment?.personal.preferred_language,
+          source: lead.source === "assessment" ? "smileabroad" : lead.source,
+          assessment_id: assessment?.id,
+          roadmap_id: roadmap?.id,
+          treatment_interest: assessment?.dental.treatment_interest || lead.treatment,
+          coordinator_id: lead.assigned_to,
+        },
+        actor?.id,
+      );
+    }
+    if (lead.clinic_patient_id !== linkedPatient.id) {
+      updateLead(lead.id, clinicId, { clinic_patient_id: linkedPatient.id }, actor?.id);
+    }
+    const defaultDentist = users.find(
+      (item) =>
+        item.clinic_id === clinicId &&
+        item.role === "dentist" &&
+        item.active !== false &&
+        item.default_planner_dentist,
+    );
     const plan = addPlan(
       {
         clinic_id: clinicId,
-        patient_user_id: patient.user_id ?? patient.id,
-        clinic_patient_id: patient.id,
+        patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
+        clinic_patient_id: linkedPatient.id,
         lead_id: lead.id,
         clinic_application_id: application?.id,
         assessment_id: assessment?.id,
         roadmap_id: roadmap?.id,
+        dentist_id: linkedPatient.dentist_id ?? defaultDentist?.id,
         coordinator_id: lead.assigned_to,
         title: `${lead.treatment || "Dental"} Treatment Plan`,
         summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
@@ -234,6 +277,34 @@ function LeadWorkspace() {
             }
           />
           <Meta label="Source" value={lead.source.replace(/_/g, " ")} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1">
+            <CardTitle>Treatment Plan</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {activePlan
+                ? `${planStatusLabel(activePlan.status)} · Last edited ${formatCrmDate(activePlan.updated_at)}`
+                : "No Treatment Plan has been prepared."}
+            </p>
+          </div>
+          {activePlan && <StatusBadge status={activePlan.status ?? "draft"} />}
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end justify-between gap-4 pt-0">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {activePlan ? compactPlanSummary(activePlan) : "Start the confirmed clinical plan."}
+            </p>
+            {activePlan && (
+              <p className="text-xs text-muted-foreground">
+                Assigned to {dentist?.name ?? "an unassigned dentist"}
+              </p>
+            )}
+          </div>
+          <Button onClick={openPlan}>
+            {activePlan ? "Continue Planning" : "Create Treatment Plan"}
+          </Button>
         </CardContent>
       </Card>
       <Tabs defaultValue="overview">
@@ -562,6 +633,31 @@ function LeadWorkspace() {
       </AlertDialog>
     </div>
   );
+}
+
+function splitLeadName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] || "Patient", lastName: parts.slice(1).join(" ") };
+}
+
+function compactPlanSummary(plan: TreatmentPlan) {
+  const counts = new Map<string, number>();
+  for (const item of Array.isArray(plan.items) ? plan.items : []) {
+    const label = treatmentLabel(item.treatment);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  if (!counts.size) return "Clinical plan not started";
+  return Array.from(counts.entries())
+    .slice(0, 3)
+    .map(([label, count]) => `${label} ×${count}`)
+    .join(" · ");
+}
+
+function planStatusLabel(status: TreatmentPlan["status"]) {
+  return (status ?? "draft")
+    .replace("doctor_review", "Doctor Review")
+    .replace(/_/g, " ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function ActivityTimeline({

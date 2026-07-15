@@ -4,6 +4,7 @@ import {
   AlertCircle,
   CalendarCheck,
   CheckSquare,
+  CircleCheckBig,
   ClipboardList,
   Eye,
   FileCheck2,
@@ -66,6 +67,7 @@ function ProDashboard() {
   const awaitingReview = plans.filter((item) => item.status === "doctor_review");
   const approvedNotSent = plans.filter((item) => item.status === "approved");
   const viewedPlans = plans.filter((item) => item.status === "viewed");
+  const acceptedPlans = plans.filter((item) => item.status === "accepted");
   const upcomingAppointments = appointments
     .filter(
       (item) =>
@@ -73,7 +75,7 @@ function ProDashboard() {
         new Date(item.starts_at) >= now,
     )
     .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at));
-  const actionablePlans = [...awaitingReview, ...approvedNotSent, ...viewedPlans]
+  const actionablePlans = [...awaitingReview, ...approvedNotSent, ...viewedPlans, ...acceptedPlans]
     .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))
     .slice(0, 5);
   const recentApplications = newApplications
@@ -121,14 +123,14 @@ function ProDashboard() {
       label: "Awaiting doctor review",
       count: awaitingReview.length,
       icon: ClipboardList,
-      to: "/pro/treatment-plans",
+      to: "/pro/treatment-plans?status=doctor_review",
       tone: "text-warning-foreground",
     },
     {
-      label: "Approved, not sent",
+      label: "Ready to share",
       count: approvedNotSent.length,
       icon: FileCheck2,
-      to: "/pro/treatment-plans",
+      to: "/pro/treatment-plans?status=approved",
       tone: "text-success",
     },
     {
@@ -142,8 +144,15 @@ function ProDashboard() {
       label: "Patient viewed plans",
       count: viewedPlans.length,
       icon: Eye,
-      to: "/pro/treatment-plans",
+      to: "/pro/treatment-plans?status=viewed",
       tone: "text-accent",
+    },
+    {
+      label: "Accepted, follow up",
+      count: acceptedPlans.length,
+      icon: CircleCheckBig,
+      to: "/pro/treatment-plans?status=accepted",
+      tone: "text-success",
     },
   ];
 
@@ -260,7 +269,9 @@ function ProDashboard() {
                   ? "Doctor review required"
                   : plan.status === "approved"
                     ? "Copy link and mark sent"
-                    : "Patient follow-up recommended";
+                    : plan.status === "accepted"
+                      ? "Acceptance follow-up recommended"
+                      : "Patient follow-up recommended";
               return (
                 <WorkRow
                   key={plan.id}

@@ -38,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,7 @@ import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { canUser } from "@/lib/auth/permissions";
 import { formatCrmDate } from "@/lib/format";
+import { treatmentLabel } from "@/lib/dental";
 import { selectClinicPlans, useMockStore } from "@/lib/mock/store";
 import { formatQuoteMoney } from "@/lib/quote";
 import { calculateTreatmentPlanTotals } from "@/lib/treatment-plan-commercial";
@@ -64,19 +66,33 @@ import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import { cn } from "@/lib/utils";
 import type { Assessment, Lead, Patient, TreatmentPlan } from "@/types/models";
 
+const PLAN_FILTERS = [
+  "all",
+  "draft",
+  "doctor_review",
+  "approved",
+  "sent",
+  "viewed",
+  "accepted",
+] as const;
+type PlanFilter = (typeof PLAN_FILTERS)[number];
+
 export const Route = createFileRoute("/pro/treatment-plans")({
-  validateSearch: (search: Record<string, unknown>): { create?: boolean } => ({
+  validateSearch: (search: Record<string, unknown>): { create?: boolean; status?: PlanFilter } => ({
     create:
       search.create === true || search.create === "true" || search.create === "1"
         ? true
         : undefined,
+    status: PLAN_FILTERS.includes(search.status as PlanFilter)
+      ? (search.status as PlanFilter)
+      : undefined,
   }),
   component: Plans,
 });
 
 function Plans() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { create } = Route.useSearch();
+  const { create, status = "all" } = Route.useSearch();
   const activeUser = useAuth((state) => state.user);
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
@@ -87,6 +103,9 @@ function Plans() {
   const [dentistId, setDentistId] = useState("");
   const [coordinatorId, setCoordinatorId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [dentistFilter, setDentistFilter] = useState("all");
+  const [coordinatorFilter, setCoordinatorFilter] = useState("all");
   const creatingRef = useRef(false);
   const clinicId = activeUser?.clinic_id ?? "clinic_istanbul";
   const canCreate = canUser(activeUser, "treatment_plans.create");
@@ -98,8 +117,10 @@ function Plans() {
   const leads = useMockStore((state) => state.leads);
   const assessments = useMockStore((state) => state.assessments);
   const addPatient = useMockStore((state) => state.addPatient);
+  const updateLead = useMockStore((state) => state.updateLead);
   const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
+  const markSent = useMockStore((state) => state.markTreatmentPlanSent);
   const clinicLeads = useMemo(
     () => leads.filter((lead) => lead.clinic_id === clinicId),
     [leads, clinicId],
@@ -122,6 +143,27 @@ function Plans() {
     [clinicUsers],
   );
   const defaultDentist = activeDentists.find((member) => member.default_planner_dentist);
+  const filteredPlans = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return plans
+      .filter((plan) => status === "all" || (plan.status ?? "draft") === status)
+      .filter((plan) => dentistFilter === "all" || plan.dentist_id === dentistFilter)
+      .filter((plan) => coordinatorFilter === "all" || plan.coordinator_id === coordinatorFilter)
+      .filter((plan) => {
+        if (!normalizedQuery) return true;
+        const patient = patients.find((item) => item.id === plan.clinic_patient_id);
+        return [
+          plan.title,
+          plan.summary,
+          patient?.first_name,
+          patient?.last_name,
+          patient?.email,
+          patient?.phone,
+          patient?.country,
+        ].some((value) => value?.toLowerCase().includes(normalizedQuery));
+      })
+      .sort((a, b) => safeDate(b.updated_at) - safeDate(a.updated_at));
+  }, [coordinatorFilter, dentistFilter, patients, plans, query, status]);
 
   useEffect(() => {
     if (create && canCreate) setCreateOpen(true);
@@ -181,6 +223,9 @@ function Plans() {
           );
         if (!resolvedPatient) throw new Error("Select a valid clinic Patient or Lead.");
         patient = resolvedPatient;
+        if (lead && lead.clinic_patient_id !== patient.id) {
+          updateLead(lead.id, clinicId, { clinic_patient_id: patient.id }, activeUser.id);
+        }
         lead ??= latestPatientLead(patient, clinicLeads);
         const plan = addTreatmentPlan(
           createPlanRecord(patient, lead, resolvedDentistId, resolvedCoordinatorId, clinicId),
@@ -223,7 +268,7 @@ function Plans() {
     <div className="space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Treatment Plans"
-        description="Prepare clinical care, travel, pricing, review and sharing in one patient-document workspace."
+        description="Prepare, review and share patient treatment plans."
         actions={
           canCreate ? (
             <CreatePlanMenu
@@ -235,6 +280,71 @@ function Plans() {
           ) : undefined
         }
       />
+      {plans.length > 0 && (
+        <div className="space-y-3 rounded-xl border bg-card p-3">
+          <div className="overflow-x-auto">
+            <ToggleGroup
+              type="single"
+              value={status}
+              onValueChange={(value) => {
+                if (!value) return;
+                void navigate({
+                  to: "/pro/treatment-plans",
+                  search: { status: value === "all" ? undefined : (value as PlanFilter) },
+                });
+              }}
+              className="w-max justify-start"
+              aria-label="Filter Treatment Plans by status"
+            >
+              {PLAN_FILTERS.map((filter) => (
+                <ToggleGroupItem key={filter} value={filter} className="whitespace-nowrap px-3">
+                  {planFilterLabel(filter)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search patient, country or plan"
+              aria-label="Search Treatment Plans"
+            />
+            <Select value={dentistFilter} onValueChange={setDentistFilter}>
+              <SelectTrigger aria-label="Filter by dentist">
+                <SelectValue placeholder="All dentists" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All dentists</SelectItem>
+                {clinicUsers
+                  .filter((member) => member.role === "dentist")
+                  .map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Select value={coordinatorFilter} onValueChange={setCoordinatorFilter}>
+              <SelectTrigger aria-label="Filter by coordinator">
+                <SelectValue placeholder="All coordinators" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All coordinators</SelectItem>
+                {clinicUsers
+                  .filter((member) =>
+                    ["coordinator", "clinic_owner", "clinic_admin"].includes(member.role),
+                  )
+                  .map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
       {plans.length === 0 ? (
         <EmptyState
           title="No treatment plans"
@@ -252,65 +362,90 @@ function Plans() {
         />
       ) : (
         <Card>
-          <CardContent className="overflow-x-auto p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Dentist</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sharing</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plans.map((plan) => {
-                  const patient = patients.find((item) => item.id === plan.clinic_patient_id);
-                  const dentist = users.find((item) => item.id === plan.dentist_id);
-                  const totals = calculateTreatmentPlanTotals(plan);
-                  return (
-                    <TableRow key={plan.id}>
-                      <TableCell>
-                        <p className="font-medium">{plan.title}</p>
-                        <p className="max-w-64 truncate text-xs text-muted-foreground">
-                          {plan.summary}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        {patient ? `${patient.first_name} ${patient.last_name}` : "Not linked"}
-                      </TableCell>
-                      <TableCell>{dentist?.name ?? "Not assigned"}</TableCell>
-                      <TableCell>
-                        {formatQuoteMoney(totals.total, plan.currency ?? "EUR")}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={plan.status ?? "draft"} />
-                      </TableCell>
-                      <TableCell>
-                        {plan.share_token
-                          ? isTreatmentPlanPubliclyViewable(plan.status)
-                            ? "Public link ready"
-                            : "Private preview"
-                          : "Not prepared"}
-                      </TableCell>
-                      <TableCell>{formatCrmDate(plan.updated_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <PlanActions
-                          plan={plan}
-                          clinicId={clinicId}
-                          actorId={activeUser?.id}
-                          role={activeUser?.role}
-                          updateStatus={updateStatus}
-                        />
-                      </TableCell>
+          <CardContent className="p-0">
+            {filteredPlans.length === 0 ? (
+              <EmptyState
+                title="No matching Treatment Plans"
+                description="Adjust the search or filters to see other plans."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Plan summary</TableHead>
+                      <TableHead>Assigned team</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last activity</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPlans.map((plan) => {
+                      const patient = patients.find((item) => item.id === plan.clinic_patient_id);
+                      const dentist = users.find((item) => item.id === plan.dentist_id);
+                      const coordinator = users.find((item) => item.id === plan.coordinator_id);
+                      const totals = calculateTreatmentPlanTotals(plan);
+                      return (
+                        <TableRow key={plan.id}>
+                          <TableCell>
+                            <p className="font-medium">
+                              {patient
+                                ? `${patient.first_name} ${patient.last_name}`
+                                : "Not linked"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {patient?.country ?? "Country unavailable"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="max-w-72 text-sm">{planClinicalSummary(plan)}</p>
+                            <p className="max-w-72 truncate text-xs text-muted-foreground">
+                              {plan.title}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{dentist?.name ?? "Dentist unassigned"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {coordinator?.name ?? "Coordinator unassigned"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={plan.status ?? "draft"} />
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{planActivityLabel(plan)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCrmDate(plan.updated_at)}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            {totals.total > 0
+                              ? formatQuoteMoney(totals.total, plan.currency ?? "EUR")
+                              : "Not priced"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <PlanPrimaryAction plan={plan} role={activeUser?.role} />
+                              <PlanActions
+                                plan={plan}
+                                clinicId={clinicId}
+                                actorId={activeUser?.id}
+                                role={activeUser?.role}
+                                updateStatus={updateStatus}
+                                markSent={markSent}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -700,18 +835,105 @@ function patientName(patient: Patient) {
   return `${patient.first_name} ${patient.last_name}`.trim();
 }
 
+function safeDate(value?: string) {
+  const parsed = Date.parse(value ?? "");
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function planFilterLabel(filter: PlanFilter) {
+  const labels: Record<PlanFilter, string> = {
+    all: "All",
+    draft: "Draft",
+    doctor_review: "Doctor Review",
+    approved: "Ready to Share",
+    sent: "Sent",
+    viewed: "Viewed",
+    accepted: "Accepted",
+  };
+  return labels[filter];
+}
+
+function planClinicalSummary(plan: TreatmentPlan) {
+  const counts = new Map<string, number>();
+  for (const item of Array.isArray(plan.items) ? plan.items : []) {
+    const label = treatmentLabel(item.treatment);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  if (counts.size === 0) return "Clinical plan not started";
+  return Array.from(counts.entries())
+    .slice(0, 3)
+    .map(([label, count]) => `${label} ×${count}`)
+    .join(" · ");
+}
+
+function planActivityLabel(plan: TreatmentPlan) {
+  switch (plan.status ?? "draft") {
+    case "doctor_review":
+      return "Sent for Doctor Review";
+    case "approved":
+      return "Approved";
+    case "sent":
+      return "Sent to patient";
+    case "viewed":
+      return "Viewed by patient";
+    case "accepted":
+      return "Accepted by patient";
+    case "declined":
+      return "Declined by patient";
+    case "expired":
+      return "Expired";
+    default:
+      return "Last edited";
+  }
+}
+
+function PlanPrimaryAction({ plan, role }: { plan: TreatmentPlan; role?: string }) {
+  const status = plan.status ?? "draft";
+  if (["sent", "viewed"].includes(status) && plan.share_token) {
+    return (
+      <Button asChild size="sm" variant="outline">
+        <Link
+          to="/shared/treatment-plan/$token"
+          params={{ token: plan.share_token }}
+          search={{ preview: true }}
+        >
+          Open Patient View
+        </Link>
+      </Button>
+    );
+  }
+  const label =
+    status === "draft"
+      ? "Continue Planning"
+      : status === "doctor_review"
+        ? "Open Review"
+        : status === "approved" &&
+            ["clinic_owner", "clinic_admin", "coordinator"].includes(role ?? "")
+          ? "Open & Share"
+          : "Open Plan";
+  return (
+    <Button asChild size="sm" variant={status === "draft" ? "default" : "outline"}>
+      <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
+        {label}
+      </Link>
+    </Button>
+  );
+}
+
 function PlanActions({
   plan,
   clinicId,
   actorId,
   role,
   updateStatus,
+  markSent,
 }: {
   plan: ReturnType<typeof useMockStore.getState>["treatmentPlans"][number];
   clinicId: string;
   actorId?: string;
   role?: string;
   updateStatus: ReturnType<typeof useMockStore.getState>["updateTreatmentPlanStatus"];
+  markSent: ReturnType<typeof useMockStore.getState>["markTreatmentPlanSent"];
 }) {
   const copyLink = () => {
     if (!plan.share_token) return;
@@ -720,9 +942,8 @@ function PlanActions({
     );
     toast.success("Share link copied");
   };
-  const canSubmitReview = ["clinic_owner", "clinic_admin", "coordinator", "dentist"].includes(
-    role ?? "",
-  );
+  const canSubmitReview = ["clinic_owner", "clinic_admin", "coordinator"].includes(role ?? "");
+  const canShare = ["clinic_owner", "clinic_admin", "coordinator"].includes(role ?? "");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -731,11 +952,13 @@ function PlanActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem asChild>
-          <Link to="/dentalplan" search={{ treatmentPlanId: plan.id }}>
-            Open Treatment Plan
-          </Link>
-        </DropdownMenuItem>
+        {plan.clinic_patient_id && (
+          <DropdownMenuItem asChild>
+            <Link to="/pro/patients/$id" params={{ id: plan.clinic_patient_id }}>
+              Open Patient
+            </Link>
+          </DropdownMenuItem>
+        )}
         {plan.share_token && (
           <DropdownMenuItem asChild>
             <Link
@@ -747,7 +970,7 @@ function PlanActions({
             </Link>
           </DropdownMenuItem>
         )}
-        {plan.share_token && isTreatmentPlanPubliclyViewable(plan.status) && (
+        {plan.share_token && isTreatmentPlanPubliclyViewable(plan.status) && canShare && (
           <DropdownMenuItem onClick={copyLink}>Copy Share Link</DropdownMenuItem>
         )}
         {(plan.status ?? "draft") === "draft" && canSubmitReview && (
@@ -763,6 +986,16 @@ function PlanActions({
               Mark Approved
             </DropdownMenuItem>
           )}
+        {(plan.status ?? "draft") === "approved" && canShare && (
+          <DropdownMenuItem
+            onClick={() => {
+              markSent(plan.id, clinicId, actorId);
+              toast.success("Treatment Plan marked as sent");
+            }}
+          >
+            Mark as Sent
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

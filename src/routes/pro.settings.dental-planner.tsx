@@ -439,7 +439,7 @@ function DentalPlannerSettings() {
         <TabsContent value="hotels">
           <Section
             title="Hotels"
-            description="Hotels configured here become selectable in the planner Travel step."
+            description="Hotels configured here become selectable in the planner Package step."
             action={() => setHotel(blankHotel(clinicId, user.id))}
           >
             <div className="grid gap-2 border-b p-4 sm:grid-cols-[1fr_16rem_10rem_auto]">
