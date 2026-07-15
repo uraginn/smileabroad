@@ -18,8 +18,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { treatmentByType } from "../data/treatmentDefinitions";
-import type { ToothTreatment } from "../types/dental-plan.types";
+import type { ClinicalTreatmentStage, ToothTreatment } from "../types/dental-plan.types";
+import { orderedByArch } from "../utils/toothNumbers";
 
 type TreatmentGroup = ReturnType<typeof groupTreatments>[number];
 
@@ -28,17 +37,21 @@ export function TreatmentSummary({
   readOnly,
   onDelete,
   onEdit,
+  onEditBridge,
   onHighlight,
 }: {
   treatments: ToothTreatment[];
   readOnly?: boolean;
   onDelete: (ids: string[]) => void;
-  onEdit: (ids: string[], notes: string) => void;
+  onEdit: (ids: string[], patch: Pick<ToothTreatment, "notes" | "stage" | "material">) => void;
+  onEditBridge: (id: string) => void;
   onHighlight: (teeth: number[]) => void;
 }) {
   const groups = useMemo(() => groupTreatments(treatments), [treatments]);
   const [editing, setEditing] = useState<TreatmentGroup>();
   const [notes, setNotes] = useState("");
+  const [stage, setStage] = useState<ClinicalTreatmentStage>("follow-up");
+  const [material, setMaterial] = useState<ToothTreatment["material"]>();
 
   return (
     <section className="border-t pt-4" aria-labelledby="applied-treatments-heading">
@@ -54,6 +67,7 @@ export function TreatmentSummary({
             <TableHeader>
               <TableRow>
                 <TableHead>Treatment</TableHead>
+                <TableHead>Clinical context</TableHead>
                 <TableHead>Affected teeth</TableHead>
                 <TableHead className="w-20">Units</TableHead>
                 <TableHead className="w-64 text-right">Actions</TableHead>
@@ -63,6 +77,9 @@ export function TreatmentSummary({
               {groups.map((group) => (
                 <TableRow key={group.key}>
                   <TableCell className="font-medium">{group.label}</TableCell>
+                  <TableCell className="text-xs capitalize text-muted-foreground">
+                    {group.context || "Tooth-level procedure"}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {group.teeth.length > 8
                       ? `${group.teeth.length} teeth`
@@ -85,8 +102,14 @@ export function TreatmentSummary({
                         variant="ghost"
                         disabled={readOnly}
                         onClick={() => {
+                          if (group.bridgeId) {
+                            onEditBridge(group.bridgeId);
+                            return;
+                          }
                           setEditing(group);
                           setNotes(group.notes);
+                          setStage(group.stage ?? "follow-up");
+                          setMaterial(group.material);
                         }}
                       >
                         Edit
@@ -128,12 +151,67 @@ export function TreatmentSummary({
             rows={4}
             placeholder="Clinical note"
           />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Treatment stage</Label>
+              <Select
+                value={stage}
+                onValueChange={(value) => setStage(value as ClinicalTreatmentStage)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "disease-control",
+                    "surgical-preparation",
+                    "grafting",
+                    "implant-placement",
+                    "healing",
+                    "temporary-restoration",
+                    "final-restoration",
+                    "cosmetic-finishing",
+                    "follow-up",
+                  ].map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value.replace(/-/g, " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(editing?.material || editing?.label.toLowerCase().includes("crown")) && (
+              <div className="space-y-1.5">
+                <Label>Material</Label>
+                <Select
+                  value={material ?? "unspecified"}
+                  onValueChange={(value) =>
+                    setMaterial(
+                      value === "unspecified" ? undefined : (value as ToothTreatment["material"]),
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unspecified">Not specified</SelectItem>
+                    <SelectItem value="zirconium">Zirconium</SelectItem>
+                    <SelectItem value="emax">E-max</SelectItem>
+                    <SelectItem value="porcelain-metal">Porcelain-metal</SelectItem>
+                    <SelectItem value="temporary">Temporary</SelectItem>
+                    <SelectItem value="composite">Composite</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
           <DialogFooter>
             <Button
               type="button"
               onClick={() => {
                 if (!editing) return;
-                onEdit(editing.ids, notes);
+                onEdit(editing.ids, { notes, stage, material });
                 setEditing(undefined);
               }}
             >
@@ -149,18 +227,49 @@ export function TreatmentSummary({
 function groupTreatments(treatments: ToothTreatment[]) {
   const groups = new Map<
     string,
-    { key: string; label: string; ids: string[]; teeth: number[]; quantity: number; notes: string }
+    {
+      key: string;
+      label: string;
+      ids: string[];
+      teeth: number[];
+      quantity: number;
+      notes: string;
+      bridgeId?: string;
+      context: string;
+      stage?: ClinicalTreatmentStage;
+      material?: ToothTreatment["material"];
+      sequence: number;
+    }
   >();
   treatments.forEach((treatment) => {
     const key =
-      treatment.treatmentDefinitionId ?? treatment.treatmentKey ?? treatment.treatmentType;
+      treatment.treatmentType === "bridge"
+        ? (treatment.treatmentGroupId ?? treatment.id)
+        : (treatment.treatmentDefinitionId ?? treatment.treatmentKey ?? treatment.treatmentType);
+    const orderedTeeth = orderedByArch(treatment.toothNumbers);
+    const bridgeLabel =
+      treatment.treatmentType === "bridge"
+        ? `Bridge ${formatRange(orderedTeeth)} · ${orderedTeeth.length} units`
+        : undefined;
     const current = groups.get(key) ?? {
       key,
-      label: treatment.displayName ?? treatmentByType(treatment.treatmentType).label,
+      label: bridgeLabel ?? treatment.displayName ?? treatmentByType(treatment.treatmentType).label,
       ids: [],
       teeth: [],
       quantity: 0,
       notes: treatment.notes ?? "",
+      bridgeId: treatment.treatmentType === "bridge" ? treatment.id : undefined,
+      stage: treatment.stage,
+      material: treatment.material,
+      sequence: treatment.sequence ?? 99,
+      context: [
+        treatment.bridgeType?.replace(/-/g, " "),
+        treatment.supportType ? `${treatment.supportType} support` : undefined,
+        treatment.material?.replace(/-/g, " "),
+        treatment.stage?.replace(/-/g, " "),
+      ]
+        .filter(Boolean)
+        .join(" · "),
     };
     current.ids.push(treatment.id);
     current.teeth = [...new Set([...current.teeth, ...treatment.toothNumbers])];
@@ -168,5 +277,16 @@ function groupTreatments(treatments: ToothTreatment[]) {
     if (!current.notes && treatment.notes) current.notes = treatment.notes;
     groups.set(key, current);
   });
-  return [...groups.values()];
+  return [...groups.values()].sort(
+    (a, b) => a.sequence - b.sequence || a.label.localeCompare(b.label),
+  );
+}
+
+function formatRange(teeth: number[]) {
+  const first = teeth[0];
+  const last = teeth.at(-1);
+  if (!first || !last) return "";
+  if (Math.floor(first / 10) === Math.floor(last / 10))
+    return `${Math.min(first, last)}–${Math.max(first, last)}`;
+  return `${first}–${last}`;
 }

@@ -37,6 +37,7 @@ export const Route = createFileRoute("/dentalplan")({
 });
 const treatmentMap: Partial<Record<TreatmentType, ToothTreatment>> = {
   "dental-implant": "implant",
+  "implant-abutment": "implant",
   "implant-crown": "crown",
   "zirconium-crown": "crown",
   "emax-crown": "crown",
@@ -49,6 +50,7 @@ const treatmentMap: Partial<Record<TreatmentType, ToothTreatment>> = {
   "composite-bonding": "composite",
   "composite-filling": "filling",
   "root-canal-treatment": "root_canal",
+  "post-core": "root_canal",
   "bone-graft": "bone_graft",
   "sinus-lift": "sinus_lift",
   whitening: "whitening",
@@ -489,6 +491,7 @@ function DentalPlanRoute() {
         id: `dpi_${treatment.id}_${tooth}`,
         tooth,
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
+        material: treatment.material,
         notes: treatment.notes,
         unit_price: priceForTreatment(treatment, value.commercial.items),
       })),
@@ -529,12 +532,21 @@ function DentalPlanRoute() {
               patient_facing_notes: value.travel.patientFacingNotes,
               currency: value.commercial.currency,
               price_items: value.commercial.items.map((item) => {
+                const treatment = value.proposedTreatments.find(
+                  (candidate) =>
+                    candidate.treatmentDefinitionId === item.treatmentDefinitionId ||
+                    candidate.treatmentKey === item.treatmentKey ||
+                    candidate.id === item.treatmentId,
+                );
                 return {
                   id: `price_${item.treatmentId}`,
                   label: item.label,
                   quantity: item.qty,
                   unit_price: item.unitPrice,
                   treatment_key: item.treatmentKey,
+                  treatment_definition_id: item.treatmentDefinitionId,
+                  treatment_group_id: treatment?.treatmentGroupId,
+                  category: item.category,
                   manually_overridden: item.priceOverridden,
                 };
               }),
@@ -639,6 +651,7 @@ function DentalPlanRoute() {
         id: `dpi_${treatment.id}_${tooth}`,
         tooth,
         treatment: treatmentMap[treatment.treatmentType] ?? "crown",
+        material: treatment.material,
         notes: treatment.notes,
         unit_price: priceForTreatment(treatment, finalValue.commercial.items),
       })),
@@ -666,6 +679,12 @@ function DentalPlanRoute() {
         arch: group.arch,
         affected_teeth: group.affectedTeeth,
         generated_item_ids: group.generatedTreatmentIds,
+        bridge_type: group.bridgeType,
+        support_type: group.supportType,
+        material: group.material,
+        abutments: group.abutments,
+        pontics: group.pontics,
+        implant_positions: group.implantPositions,
       })),
     };
     const plan = existingPlan
@@ -761,12 +780,21 @@ function DentalPlanRoute() {
         {
           currency: commercialPatch.currency,
           price_items: finalValue.commercial.items.map((item) => {
+            const treatment = finalValue.proposedTreatments.find(
+              (candidate) =>
+                candidate.treatmentDefinitionId === item.treatmentDefinitionId ||
+                candidate.treatmentKey === item.treatmentKey ||
+                candidate.id === item.treatmentId,
+            );
             return {
               id: `price_${item.treatmentId}`,
               label: item.label,
               quantity: item.qty,
               unit_price: item.unitPrice,
               treatment_key: item.treatmentKey,
+              treatment_definition_id: item.treatmentDefinitionId,
+              treatment_group_id: treatment?.treatmentGroupId,
+              category: item.category,
               manually_overridden: item.priceOverridden,
             };
           }),

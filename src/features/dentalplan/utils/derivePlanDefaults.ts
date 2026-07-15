@@ -17,13 +17,20 @@ const RESTORATIVE = new Set([
   "composite-bonding",
   "composite-filling",
   "root-canal-treatment",
+  "post-core",
+  "implant-abutment",
   "whitening",
 ]);
 export function derivePlanDefaults(plan: DentalPlan): DerivedPlanDefaults {
   const treatments = plan.proposedTreatments.map((item) => item.treatmentType);
-  const allOn4 = plan.treatmentGroups.some((group) => group.type === "all-on-4");
+  const allOn4 = plan.treatmentGroups.some(
+    (group) => group.type === "all-on-4" || group.type === "all-on-6",
+  );
   const implant =
-    allOn4 || treatments.some((item) => ["dental-implant", "implant-crown"].includes(item));
+    allOn4 ||
+    treatments.some((item) =>
+      ["dental-implant", "implant-abutment", "implant-crown"].includes(item),
+    );
   const graft = treatments.some((item) => ["bone-graft", "sinus-lift"].includes(item));
   const restorative = treatments.length > 0 && treatments.every((item) => RESTORATIVE.has(item));
   const reasons: string[] = [];

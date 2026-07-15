@@ -341,12 +341,14 @@ function resolvePatientCategory(
 function legacyTreatmentForKey(key: string): ToothTreatment | undefined {
   const matches: Partial<Record<TreatmentType, ToothTreatment>> = {
     "dental-implant": "implant",
+    "implant-abutment": "implant",
     "implant-crown": "crown",
     "zirconium-crown": "crown",
     "emax-crown": "crown",
     "porcelain-crown": "crown",
     "temporary-crown": "crown",
     "root-canal-treatment": "root_canal",
+    "post-core": "root_canal",
     "composite-bonding": "composite",
     "composite-filling": "filling",
     "bone-graft": "bone_graft",

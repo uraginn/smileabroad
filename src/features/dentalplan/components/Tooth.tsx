@@ -159,6 +159,9 @@ function ToothSvg({
         {visual.currentConditions.includes("extraction-required") && <Cross color="#ef4444" />}
         {visual.proposedTreatments.includes("extraction") && <Cross color="#ef4444" />}
         {visual.proposedTreatments.includes("dental-implant") && <Implant color="#4f46e5" />}
+        {visual.proposedTreatments.includes("implant-abutment") && (
+          <rect x={16} y={23} width={8} height={7} rx={1.5} fill="#6366f1" opacity={0.9} />
+        )}
         {visual.proposedTreatments.includes("implant-crown") && <Crown color="#7c3aed" />}
         {visual.proposedTreatments.includes("zirconium-crown") && <Crown color="#0284c7" />}
         {visual.proposedTreatments.includes("emax-crown") && <Crown color="#0891b2" />}
@@ -178,6 +181,9 @@ function ToothSvg({
             <line x1={17} y1={28} x2={16} y2={50} stroke="#e11d48" strokeWidth={2} />
             <line x1={23} y1={28} x2={24} y2={50} stroke="#e11d48" strokeWidth={2} />
           </>
+        )}
+        {visual.proposedTreatments.includes("post-core") && (
+          <path d="M18 13 H22 V36 H18 Z" fill="#be123c" opacity={0.8} />
         )}
         {visual.proposedTreatments.includes("pontic") && <Pontic />}
         {visual.bridgeRole === "pontic" && <Pontic />}

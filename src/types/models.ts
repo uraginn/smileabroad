@@ -528,6 +528,12 @@ export interface TreatmentPlan extends BaseRecord {
     arch: string;
     affected_teeth: number[];
     generated_item_ids: string[];
+    bridge_type?: string;
+    support_type?: string;
+    material?: string;
+    abutments?: number[];
+    pontics?: number[];
+    implant_positions?: number[];
   }>;
   preliminary_suggestions?: RoadmapTreatmentEstimate[];
   selected_hotel_id?: string;

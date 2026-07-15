@@ -146,7 +146,7 @@ function normalizeConditions(value: DentalPlan["currentConditions"] | undefined)
 
 function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined) {
   if (!Array.isArray(value)) return [];
-  return value
+  const normalized = value
     .filter((item) => item && typeof item === "object")
     .map(
       (item, index) =>
@@ -155,8 +155,69 @@ function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined
           id: text(item.id) || `legacy-treatment-${index}`,
           toothNumbers: numberArray(item.toothNumbers) as ToothNumber[],
           treatmentType: item.treatmentType ?? "other",
+          sequence: finite(item.sequence, legacyTreatmentSequence(item.treatmentType ?? "other")),
+          stage: item.stage ?? legacyTreatmentStage(item.treatmentType ?? "other"),
+          material: item.material ?? legacyTreatmentMaterial(item.treatmentType ?? "other"),
         }) satisfies ToothTreatment,
     );
+  return normalized.map((item) => {
+    if (item.supportType) return item;
+    const implantSupported =
+      ["implant-abutment", "implant-crown"].includes(item.treatmentType) ||
+      normalized.some(
+        (candidate) =>
+          candidate.treatmentType === "dental-implant" &&
+          candidate.toothNumbers.some((tooth) => item.toothNumbers.includes(tooth)),
+      );
+    if (implantSupported && item.treatmentType.endsWith("crown"))
+      return { ...item, supportType: "implant" as const };
+    return item;
+  });
+}
+
+function legacyTreatmentMaterial(type: ToothTreatment["treatmentType"]) {
+  if (type === "zirconium-crown") return "zirconium" as const;
+  if (type === "emax-crown") return "emax" as const;
+  if (type === "porcelain-crown") return "porcelain-metal" as const;
+  if (type === "temporary-crown") return "temporary" as const;
+  return undefined;
+}
+
+function legacyTreatmentSequence(type: ToothTreatment["treatmentType"]) {
+  if (["root-canal-treatment", "post-core", "composite-filling", "inlay-onlay"].includes(type))
+    return 1;
+  if (["extraction", "sinus-lift"].includes(type)) return 2;
+  if (type === "bone-graft") return 3;
+  if (["dental-implant", "all-on-4", "all-on-6"].includes(type)) return 4;
+  if (["temporary-crown", "denture"].includes(type)) return 6;
+  if (
+    [
+      "implant-abutment",
+      "implant-crown",
+      "zirconium-crown",
+      "emax-crown",
+      "porcelain-crown",
+      "bridge",
+      "pontic",
+    ].includes(type)
+  )
+    return 7;
+  if (["veneer", "composite-bonding", "whitening"].includes(type)) return 8;
+  return 9;
+}
+
+function legacyTreatmentStage(type: ToothTreatment["treatmentType"]): ToothTreatment["stage"] {
+  const stages: Record<number, NonNullable<ToothTreatment["stage"]>> = {
+    1: "disease-control",
+    2: "surgical-preparation",
+    3: "grafting",
+    4: "implant-placement",
+    6: "temporary-restoration",
+    7: "final-restoration",
+    8: "cosmetic-finishing",
+    9: "follow-up",
+  };
+  return stages[legacyTreatmentSequence(type)];
 }
 
 function normalizePreferences(

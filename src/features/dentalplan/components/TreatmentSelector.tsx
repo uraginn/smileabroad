@@ -79,14 +79,13 @@ export function TreatmentSelector({
                       (item) => item.type === treatment.visualKey,
                     );
                     const relationship = treatmentRelationship(treatment.baseTreatmentKey);
-                    const displayName =
-                      treatment.baseTreatmentKey === "implant-crown"
-                        ? "Implant + Final Crown"
-                        : treatment.displayName;
+                    const displayName = treatment.displayName;
                     const subtitle =
                       treatment.baseTreatmentKey === "implant-crown"
-                        ? "Completes the implant site and adds the implant when needed"
-                        : relationship.role.replace(/-/g, " ");
+                        ? "Final restoration for an existing or proposed implant"
+                        : treatment.baseTreatmentKey === "implant-abutment"
+                          ? "Implant restoration component"
+                          : relationship.role.replace(/-/g, " ");
                     return (
                       <CommandItem
                         key={treatment.id}

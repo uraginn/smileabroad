@@ -50,6 +50,7 @@ export function validateTreatment(
       "composite-bonding",
       "inlay-onlay",
       "root-canal-treatment",
+      "post-core",
     ].includes(treatment) &&
     missing
   )
@@ -59,10 +60,13 @@ export function validateTreatment(
     };
   if (treatment === "extraction" && hasCondition(conditions, tooth, "missing"))
     return { ok: false, message: `Tooth ${tooth} is already missing — extraction not applicable.` };
-  if (treatment === "implant-crown" && !hasImplant(conditions, treatments, tooth))
+  if (
+    ["implant-abutment", "implant-crown"].includes(treatment) &&
+    !hasImplant(conditions, treatments, tooth)
+  )
     return {
       ok: false,
-      message: `Implant Crown on tooth ${tooth} requires an existing or proposed implant.`,
+      message: `${treatment === "implant-abutment" ? "Implant Abutment" : "Implant Crown"} on tooth ${tooth} requires an existing or proposed implant.`,
     };
   return { ok: true };
 }

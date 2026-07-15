@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { calculateCommercial } from "../utils/commercial";
 import { derivePlanDefaults } from "../utils/derivePlanDefaults";
+import { validateClinicalTreatment, validatePlanForFinalize } from "../rules/clinicalRules";
 
 export function FinalReviewStep({
   plan,
@@ -32,8 +33,22 @@ export function FinalReviewStep({
     { label: "Commercial", ready: totals.total > 0, step: 3 },
     { label: "Payment", ready: totals.total > 0 && scheduled === totals.total, step: 3 },
   ];
-  const missing = readiness.filter((item) => !item.ready);
+  const clinicalErrors = validatePlanForFinalize(plan);
+  const clinicalWarnings = [
+    ...new Set(
+      plan.proposedTreatments.flatMap((treatment) =>
+        validateClinicalTreatment(plan, treatment.treatmentType, treatment.toothNumbers)
+          .filter((result) => result.allowed && result.severity === "warning")
+          .map((result) => result.message),
+      ),
+    ),
+  ];
+  const missing = [
+    ...readiness.filter((item) => !item.ready),
+    ...clinicalErrors.map((label) => ({ label, step: 1 })),
+  ];
   const warningItems = [
+    ...clinicalWarnings.map((label) => ({ label, step: 1 })),
     ...defaults.warnings.map((label) => ({ label, step: 1 })),
     ...(!plan.patient.dentistId
       ? [{ label: "No dentist is assigned to this case.", step: 0 }]

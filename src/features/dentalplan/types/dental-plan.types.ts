@@ -51,6 +51,7 @@ export type ConditionType =
 export type TreatmentType =
   | "extraction"
   | "dental-implant"
+  | "implant-abutment"
   | "implant-crown"
   | "zirconium-crown"
   | "emax-crown"
@@ -61,6 +62,7 @@ export type TreatmentType =
   | "composite-bonding"
   | "composite-filling"
   | "root-canal-treatment"
+  | "post-core"
   | "veneer"
   | "inlay-onlay"
   | "whitening"
@@ -72,6 +74,18 @@ export type TreatmentType =
   | "other";
 
 export type BridgeUnitRole = "abutment-crown" | "pontic" | "implant-abutment";
+export type TreatmentSupport = "natural" | "implant" | "soft-tissue" | "arch";
+export type ClinicalTreatmentStage =
+  | "disease-control"
+  | "surgical-preparation"
+  | "grafting"
+  | "implant-placement"
+  | "healing"
+  | "temporary-restoration"
+  | "final-restoration"
+  | "cosmetic-finishing"
+  | "follow-up";
+export type BridgeType = "conventional" | "cantilever" | "implant-supported";
 export type ToothCondition = {
   toothNumber: ToothNumber;
   conditions: ConditionType[];
@@ -87,12 +101,17 @@ export type ToothTreatment = {
   displayName?: string;
   treatmentGroupId?: string;
   sequence?: number;
+  stage?: ClinicalTreatmentStage;
+  supportType?: TreatmentSupport;
+  material?: "zirconium" | "emax" | "porcelain-metal" | "temporary" | "composite";
+  bridgeType?: BridgeType;
+  clinicianOverrideReason?: string;
   notes?: string;
   bridgeRoles?: Partial<Record<ToothNumber, BridgeUnitRole>>;
 };
 export type DentalTreatmentGroup = {
   id: string;
-  type: "bridge" | "all-on-4" | "full-arch" | "implant-restoration";
+  type: "bridge" | "all-on-4" | "all-on-6" | "full-arch" | "implant-restoration";
   arch: "upper" | "lower";
   affectedTeeth: ToothNumber[];
   generatedTreatmentIds: string[];
@@ -100,6 +119,8 @@ export type DentalTreatmentGroup = {
   pontics?: ToothNumber[];
   implantPositions?: ToothNumber[];
   supportType?: "natural" | "implant" | "mixed";
+  bridgeType?: BridgeType;
+  material?: ToothTreatment["material"];
 };
 export type DentalPlannerPatient = {
   patientId?: string;
