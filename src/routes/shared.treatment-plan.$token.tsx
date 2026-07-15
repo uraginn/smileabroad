@@ -29,6 +29,10 @@ import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import { mapTreatmentPlanToPatientDocument, type PatientTreatmentGroup } from "@/lib/care-plan";
 import { formatQuoteMoney } from "@/lib/quote";
 import { DentalChart } from "@/features/dentalplan/components/DentalChart";
+import {
+  usePlannerAssetUrl,
+  usePlannerAssetUrlMap,
+} from "@/features/dentalplan/adapters/plannerAssetStorage";
 import type { ToothNumber } from "@/features/dentalplan";
 import type { ToothTreatment } from "@/types/models";
 import {
@@ -91,6 +95,14 @@ function SharedPlan() {
   const branding = useMockStore((s) =>
     plan ? s.branding.find((x) => x.clinic_id === plan.clinic_id) : undefined,
   );
+  const brandingLogoUrl = usePlannerAssetUrl(
+    branding?.logo_asset_id,
+    branding?.logo_url ?? branding?.shared_view_logo_url,
+  );
+  const resolvedBranding = useMemo(
+    () => (branding ? { ...branding, logo_url: brandingLogoUrl ?? branding.logo_url } : undefined),
+    [branding, brandingLogoUrl],
+  );
   const patient = useMockStore((s) =>
     plan
       ? s.patients.find(
@@ -139,12 +151,12 @@ function SharedPlan() {
             plan,
             clinic,
             patient,
-            branding,
+            resolvedBranding,
             coordinator,
             treatmentDefinitions,
           )
         : undefined,
-    [plan, clinic, patient, branding, coordinator, treatmentDefinitions],
+    [plan, clinic, patient, resolvedBranding, coordinator, treatmentDefinitions],
   );
   const faqs = useMemo(
     () => (document ? buildTreatmentFaq(document.treatment_groups) : []),
@@ -171,9 +183,9 @@ function SharedPlan() {
   if (!hydrated || (preview && !authHydrated))
     return <PageLoading label="Loading Treatment Plan" />;
   if (!plan || !document) return <SafeNotFound />;
-  const accent = document.clinic?.accent_color ?? "#0f766e";
+  const accent = document.clinic?.accent_color ?? "#C8A46A";
   const primary = document.clinic?.primary_color ?? accent;
-  const secondary = document.clinic?.secondary_color ?? "#334155";
+  const secondary = document.clinic?.secondary_color ?? "#415469";
   const hasAdditionalCosts =
     (document.price.hotel_total ?? 0) > 0 ||
     (document.price.transfer_total ?? 0) > 0 ||
@@ -1253,12 +1265,13 @@ function HotelCarousel({
   images,
   hotelName,
 }: {
-  images: Array<{ id: string; name: string; data_url?: string }>;
+  images: Array<{ id: string; name: string; storage_key?: string; data_url?: string }>;
   hotelName: string;
 }) {
-  const visibleImages = images.filter(
-    (image): image is { id: string; name: string; data_url: string } => Boolean(image.data_url),
-  );
+  const assetUrls = usePlannerAssetUrlMap(images);
+  const visibleImages = images
+    .map((image) => ({ ...image, url: image.data_url ?? assetUrls[image.id] }))
+    .filter((image): image is typeof image & { url: string } => Boolean(image.url));
   if (!visibleImages.length) return null;
   return (
     <Carousel opts={{ loop: visibleImages.length > 1 }} aria-label={`${hotelName} photos`}>
@@ -1266,7 +1279,7 @@ function HotelCarousel({
         {visibleImages.map((image, index) => (
           <CarouselItem key={image.id} className="pl-0">
             <img
-              src={image.data_url}
+              src={image.url}
               alt={`${hotelName}, photo ${index + 1}`}
               className="aspect-[4/3] w-full object-cover sm:aspect-[16/7]"
             />

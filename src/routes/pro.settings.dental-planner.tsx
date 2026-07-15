@@ -51,6 +51,7 @@ import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import { Tooth } from "@/features/dentalplan/components/Tooth";
 import type { TreatmentType } from "@/features/dentalplan/types/dental-plan.types";
 import { LocalPlannerAssetAdapter } from "@/features/dentalplan/adapters/LocalPlannerAssetAdapter";
+import { usePlannerAssetUrl } from "@/features/dentalplan/adapters/plannerAssetStorage";
 import {
   HOTEL_CATEGORY_DEFAULTS,
   normalizedTreatmentCategory,
@@ -493,6 +494,7 @@ function DentalPlannerSettings() {
                   key={item.id}
                   title={item.name}
                   thumbnail={item.images[0]?.data_url}
+                  thumbnailStorageKey={item.images[0]?.storage_key}
                   description={`${item.images.length}/4 photos`}
                   badges={[
                     item.is_default ? "Default" : "Hotel",
@@ -673,6 +675,7 @@ function Section({
 function Row({
   title,
   thumbnail,
+  thumbnailStorageKey,
   description,
   badges,
   onEdit,
@@ -685,6 +688,7 @@ function Row({
 }: {
   title: string;
   thumbnail?: string;
+  thumbnailStorageKey?: string;
   description: string;
   badges: string[];
   onEdit: () => void;
@@ -695,10 +699,11 @@ function Row({
   secondaryLabel?: string;
   onDuplicate?: () => void;
 }) {
+  const thumbnailUrl = usePlannerAssetUrl(thumbnailStorageKey, thumbnail);
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-      {thumbnail && (
-        <img src={thumbnail} alt="" className="h-14 w-20 rounded-md border object-cover" />
+      {thumbnailUrl && (
+        <img src={thumbnailUrl} alt="" className="h-14 w-20 rounded-md border object-cover" />
       )}
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
@@ -1161,6 +1166,7 @@ function HotelDialog({
             id: image.id,
             name: image.name,
             dataUrl: image.data_url,
+            storageKey: image.storage_key,
           }))}
           onAdd={addImage}
           onRemove={(id) => patch({ images: draft.images.filter((image) => image.id !== id) })}

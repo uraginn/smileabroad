@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DentalPlan } from "../types/dental-plan.types";
 import type { DentalPlanRepository } from "../adapters/DentalPlanRepository";
+import { toast } from "sonner";
 
 export type AutoSaveStatus = "saved" | "unsaved" | "saving";
 
@@ -22,9 +23,14 @@ export function useAutoSave(plan: DentalPlan, repository: DentalPlanRepository, 
   const persist = useCallback(
     (value: DentalPlan) => {
       const saved = { ...value, updatedAt: new Date().toISOString() };
-      repository.savePlan(saved);
-      setLastSavedAt(saved.updatedAt);
-      setStatus("saved");
+      try {
+        repository.savePlan(saved);
+        setLastSavedAt(saved.updatedAt);
+        setStatus("saved");
+      } catch (error) {
+        setStatus("unsaved");
+        toast.error(error instanceof Error ? error.message : "The plan could not be saved.");
+      }
       return saved;
     },
     [repository],

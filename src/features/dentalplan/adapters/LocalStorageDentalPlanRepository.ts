@@ -8,9 +8,12 @@ const LEGACY_KEYS = [
   "smileabroad.dentalplan.dev.v2",
 ];
 export class LocalStorageDentalPlanRepository implements DentalPlanRepository {
-  constructor(private storageKey = DENTALPLAN_STORAGE_KEY) {}
+  constructor(
+    private storageKey = DENTALPLAN_STORAGE_KEY,
+    private enabled = true,
+  ) {}
   getPlan(): DentalPlan | null {
-    if (typeof window === "undefined") return null;
+    if (!this.enabled || typeof window === "undefined") return null;
     try {
       const currentRaw = window.localStorage.getItem(this.storageKey);
       const legacyEntry = LEGACY_KEYS.map((key) => ({
@@ -39,10 +42,22 @@ export class LocalStorageDentalPlanRepository implements DentalPlanRepository {
     }
   }
   savePlan(plan: DentalPlan) {
-    if (typeof window !== "undefined")
+    if (!this.enabled || typeof window === "undefined") return;
+    try {
       window.localStorage.setItem(this.storageKey, JSON.stringify(plan));
+    } catch (error) {
+      if (import.meta.env.DEV) console.error("DentalPlan standalone persistence failed", error);
+      throw new Error("The plan could not be saved because browser storage is full.", {
+        cause: error,
+      });
+    }
   }
   deletePlan() {
-    if (typeof window !== "undefined") window.localStorage.removeItem(this.storageKey);
+    if (!this.enabled || typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem(this.storageKey);
+    } catch (error) {
+      if (import.meta.env.DEV) console.error("DentalPlan standalone storage cleanup failed", error);
+    }
   }
 }

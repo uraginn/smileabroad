@@ -116,9 +116,9 @@ function Plans() {
   const users = useMockStore((state) => state.users);
   const leads = useMockStore((state) => state.leads);
   const assessments = useMockStore((state) => state.assessments);
-  const addPatient = useMockStore((state) => state.addPatient);
-  const updateLead = useMockStore((state) => state.updateLead);
-  const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
+  const createPatientAndTreatmentPlan = useMockStore(
+    (state) => state.createPatientAndTreatmentPlan,
+  );
   const updateStatus = useMockStore((state) => state.updateTreatmentPlanStatus);
   const markSent = useMockStore((state) => state.markTreatmentPlanSent);
   const clinicLeads = useMemo(
@@ -200,7 +200,6 @@ function Plans() {
     creatingRef.current = true;
     setCreating(true);
     try {
-      let patient: Patient;
       let lead: Lead | undefined;
       if (selectedCaseId) {
         const selected = resolveSelectedCase(selectedCaseId, patients, clinicLeads);
@@ -210,25 +209,23 @@ function Plans() {
           selected.lead?.assigned_to ??
           selected.patient?.coordinator_id ??
           (activeUser.role === "coordinator" ? activeUser.id : "");
-        const resolvedPatient =
+        const patientDraft =
           selected.patient ??
-          createPatientFromLead(
-            lead,
-            assessments,
-            clinicId,
-            resolvedDentistId,
-            resolvedCoordinatorId,
-            activeUser.id,
-            addPatient,
-          );
-        if (!resolvedPatient) throw new Error("Select a valid clinic Patient or Lead.");
-        patient = resolvedPatient;
-        if (lead && lead.clinic_patient_id !== patient.id) {
-          updateLead(lead.id, clinicId, { clinic_patient_id: patient.id }, activeUser.id);
-        }
-        lead ??= latestPatientLead(patient, clinicLeads);
-        const plan = addTreatmentPlan(
-          createPlanRecord(patient, lead, resolvedDentistId, resolvedCoordinatorId, clinicId),
+          patientFromLead(lead, assessments, clinicId, resolvedDentistId, resolvedCoordinatorId);
+        if (!patientDraft) throw new Error("Select a valid clinic Patient or Lead.");
+        lead ??= selected.patient ? latestPatientLead(selected.patient, clinicLeads) : undefined;
+        const { plan } = createPatientAndTreatmentPlan(
+          {
+            patient_id: selected.patient?.id,
+            patient: selected.patient ? undefined : patientDraft,
+            plan: createPlanRecord(
+              patientDraft,
+              lead,
+              resolvedDentistId,
+              resolvedCoordinatorId,
+              clinicId,
+            ),
+          },
           activeUser.id,
         );
         toast.success("Treatment Plan ready");
@@ -237,25 +234,25 @@ function Plans() {
         return;
       } else {
         const name = splitFullName(fullName);
-        patient = addPatient(
+        const patientDraft = {
+          clinic_id: clinicId,
+          first_name: name.firstName,
+          last_name: name.lastName,
+          source: "manual" as const,
+          dentist_id: dentistId || undefined,
+          coordinator_id: coordinatorId || undefined,
+        };
+        const { plan } = createPatientAndTreatmentPlan(
           {
-            clinic_id: clinicId,
-            first_name: name.firstName,
-            last_name: name.lastName,
-            source: "manual",
-            dentist_id: dentistId || undefined,
-            coordinator_id: coordinatorId || undefined,
+            patient: patientDraft,
+            plan: createPlanRecord(patientDraft, undefined, dentistId, coordinatorId, clinicId),
           },
           activeUser.id,
         );
+        toast.success("Treatment Plan ready");
+        closeCreation();
+        void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
       }
-      const plan = addTreatmentPlan(
-        createPlanRecord(patient, lead, dentistId, coordinatorId, clinicId),
-        activeUser.id,
-      );
-      toast.success("Treatment Plan ready");
-      closeCreation();
-      void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Treatment Plan creation failed");
       creatingRef.current = false;
@@ -757,52 +754,58 @@ function latestPatientLead(patient: Patient, leads: Lead[]) {
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
 }
 
-function createPatientFromLead(
+function patientFromLead(
   lead: Lead | undefined,
   assessments: Assessment[],
   clinicId: string,
   dentistId: string,
   coordinatorId: string,
-  actorId: string,
-  addPatient: ReturnType<typeof useMockStore.getState>["addPatient"],
 ) {
   if (!lead) return undefined;
   const assessment = assessments.find((item) => item.id === lead.assessment_id);
   const name = splitFullName(lead.patient_name);
-  return addPatient(
-    {
-      clinic_id: clinicId,
-      user_id: lead.patient_user_id,
-      first_name: assessment?.personal.first_name || name.firstName,
-      last_name: assessment?.personal.last_name || name.lastName,
-      email: assessment?.personal.email || undefined,
-      phone: assessment?.personal.phone,
-      whatsapp: assessment?.personal.whatsapp,
-      country: assessment?.personal.country || lead.patient_country || undefined,
-      city: assessment?.personal.city,
-      language: assessment?.personal.preferred_language,
-      source: lead.source === "assessment" ? "smileabroad" : lead.source,
-      assessment_id: lead.assessment_id,
-      roadmap_id: lead.roadmap_id,
-      treatment_interest: lead.treatment,
-      dentist_id: dentistId || undefined,
-      coordinator_id: coordinatorId || lead.assigned_to,
-    },
-    actorId,
-  );
+  return {
+    clinic_id: clinicId,
+    user_id: lead.patient_user_id,
+    first_name: assessment?.personal.first_name || name.firstName,
+    last_name: assessment?.personal.last_name || name.lastName,
+    email: assessment?.personal.email || undefined,
+    phone: assessment?.personal.phone,
+    whatsapp: assessment?.personal.whatsapp,
+    country: assessment?.personal.country || lead.patient_country || undefined,
+    city: assessment?.personal.city,
+    language: assessment?.personal.preferred_language,
+    source: lead.source === "assessment" ? ("smileabroad" as const) : lead.source,
+    assessment_id: lead.assessment_id,
+    roadmap_id: lead.roadmap_id,
+    treatment_interest: lead.treatment,
+    dentist_id: dentistId || undefined,
+    coordinator_id: coordinatorId || lead.assigned_to,
+  };
 }
 
+type PlanPatient = Pick<
+  Patient,
+  | "first_name"
+  | "last_name"
+  | "treatment_interest"
+  | "assessment_id"
+  | "roadmap_id"
+  | "dentist_id"
+  | "coordinator_id"
+>;
+
 function createPlanRecord(
-  patient: Patient,
+  patient: PlanPatient,
   lead: Lead | undefined,
   dentistId: string,
   coordinatorId: string,
   clinicId: string,
-): Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by"> {
+): Parameters<
+  ReturnType<typeof useMockStore.getState>["createPatientAndTreatmentPlan"]
+>[0]["plan"] {
   return {
     clinic_id: clinicId,
-    patient_user_id: patient.user_id ?? patient.id,
-    clinic_patient_id: patient.id,
     lead_id: lead?.id,
     clinic_application_id: lead?.clinic_application_id,
     assessment_id: lead?.assessment_id ?? patient.assessment_id,
@@ -834,7 +837,7 @@ function splitFullName(value: string) {
   return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
 }
 
-function patientName(patient: Patient) {
+function patientName(patient: Pick<Patient, "first_name" | "last_name">) {
   return `${patient.first_name} ${patient.last_name}`.trim();
 }
 

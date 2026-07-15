@@ -54,7 +54,9 @@ function PatientWorkspace() {
   const activities = useMockStore((state) => state.activities);
   const followUps = useMockStore((state) => state.followUps);
   const users = useMockStore((state) => state.users);
-  const addPlan = useMockStore((state) => state.addTreatmentPlan);
+  const createPatientAndTreatmentPlan = useMockStore(
+    (state) => state.createPatientAndTreatmentPlan,
+  );
   const completeFollowUp = useMockStore((state) => state.completeFollowUp);
   const patient = patients.find((item) => item.id === id && item.clinic_id === actor?.clinic_id);
   const patientLeads = useMemo(
@@ -172,28 +174,30 @@ function PatientWorkspace() {
     }
     if (activePlan)
       return void navigate({ to: "/dentalplan", search: { treatmentPlanId: activePlan.id } });
-    const plan = addPlan(
-      {
-        clinic_id: patient.clinic_id,
-        patient_user_id: patient.user_id ?? patient.id,
-        clinic_patient_id: patient.id,
-        lead_id: lead?.id,
-        clinic_application_id: application?.id,
-        assessment_id: assessment?.id,
-        roadmap_id: roadmap?.id,
-        dentist_id: patient.dentist_id,
-        coordinator_id: patient.coordinator_id ?? lead?.assigned_to,
-        title: `${patient.treatment_interest ?? assessment?.dental.treatment_interest ?? "Dental"} Treatment Plan`,
-        summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
-        items: [],
-        visits: 1,
-        healing_weeks: 0,
-        preliminary_suggestions: roadmap?.treatment_estimates ?? [],
-        status: "draft",
-      },
-      actor.id,
-    );
-    void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    try {
+      const { plan } = createPatientAndTreatmentPlan(
+        {
+          patient_id: patient.id,
+          plan: {
+            clinic_id: patient.clinic_id,
+            lead_id: lead?.id,
+            clinic_application_id: application?.id,
+            assessment_id: assessment?.id,
+            roadmap_id: roadmap?.id,
+            dentist_id: patient.dentist_id,
+            coordinator_id: patient.coordinator_id ?? lead?.assigned_to,
+            title: `${patient.treatment_interest ?? assessment?.dental.treatment_interest ?? "Dental"} Treatment Plan`,
+            summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
+            preliminary_suggestions: roadmap?.treatment_estimates ?? [],
+            status: "draft",
+          },
+        },
+        actor.id,
+      );
+      void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Treatment Plan could not be created");
+    }
   };
   const warnings = [
     nextFollowUp && getFollowUpState(nextFollowUp) === "overdue"

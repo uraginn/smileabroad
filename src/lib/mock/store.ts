@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type {
   Clinic,
   Lead,
@@ -56,6 +57,37 @@ import {
   makeId,
   now,
 } from "./seed";
+import { migrateLegacyPlannerAssets } from "@/features/dentalplan/adapters/plannerAssetStorage";
+
+const MOCK_STORAGE_KEY = "smileabroad-mock-v1";
+const MOCK_STORAGE_VERSION = 24;
+const DTKURT_CLINIC_ID = "clinic_istanbul";
+const OBSOLETE_PLANNER_DRAFT_KEYS = [
+  "smileabroad.dentalplan.dev.v2",
+  "smileabroad.dentalplan.dev.v3",
+  "smileabroad.dentalplan.dev.v4",
+  "smileabroad.dentalplan.dev.v5",
+];
+
+type AtomicTreatmentPlanInput = Pick<TreatmentPlan, "clinic_id"> &
+  Partial<
+    Omit<
+      TreatmentPlan,
+      | "id"
+      | "created_at"
+      | "updated_at"
+      | "created_by"
+      | "clinic_id"
+      | "patient_user_id"
+      | "clinic_patient_id"
+    >
+  >;
+
+type AtomicPatientPlanInput = {
+  patient_id?: string;
+  patient?: Omit<Patient, "id" | "created_at" | "updated_at" | "created_by">;
+  plan: AtomicTreatmentPlanInput;
+};
 
 interface Store {
   clinics: Clinic[];
@@ -125,6 +157,10 @@ interface Store {
     tp: Omit<TreatmentPlan, "id" | "created_at" | "updated_at" | "created_by">,
     createdBy?: string,
   ) => TreatmentPlan;
+  createPatientAndTreatmentPlan: (
+    input: AtomicPatientPlanInput,
+    createdBy?: string,
+  ) => { patient: Patient; plan: TreatmentPlan };
   updateTreatmentPlan: (id: string, patch: Partial<TreatmentPlan>, changedBy?: string) => void;
   upsertTreatmentPlanPriceItems: (
     id: string,
@@ -217,6 +253,264 @@ interface Store {
     record: Omit<RoadmapTreatmentContent, "created_at" | "updated_at" | "created_by">,
     changedBy?: string,
   ) => void;
+}
+
+type PersistedStore = Partial<Store>;
+
+let lastPersistenceError: Error | undefined;
+let storageErrorToastShown = false;
+
+function isEmbeddedMedia(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("data:") ||
+    normalized.startsWith("blob:") ||
+    normalized.includes("data:image/")
+  );
+}
+
+function stripEmbeddedMedia<T>(value: T): T {
+  if (typeof value === "string") return (isEmbeddedMedia(value) ? undefined : value) as T;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripEmbeddedMedia(item)).filter((item) => item !== undefined) as T;
+  }
+  if (!value || typeof value !== "object") return value;
+  const source = value as Record<string, unknown>;
+  const sanitized = Object.fromEntries(
+    Object.entries(source)
+      .map(([key, item]) => [key, stripEmbeddedMedia(item)] as const)
+      .filter(([, item]) => item !== undefined),
+  );
+  return sanitized as T;
+}
+
+function removeDtkurtPatientJourneyRecords(state: PersistedStore): PersistedStore {
+  const dtkurtUserIds = new Set(
+    (state.users ?? [])
+      .filter((user) => user.clinic_id === DTKURT_CLINIC_ID)
+      .map((user) => user.id),
+  );
+  const belongsToDtkurt = (record: { clinic_id?: string; created_by?: string }) => {
+    const createdBy = record.created_by;
+    return (
+      record.clinic_id === DTKURT_CLINIC_ID || Boolean(createdBy && dtkurtUserIds.has(createdBy))
+    );
+  };
+  const dtkurtPatients = (state.patients ?? []).filter((patient) => belongsToDtkurt(patient));
+  const dtkurtApplications = (state.applications ?? []).filter((application) =>
+    belongsToDtkurt(application),
+  );
+  const dtkurtLeads = (state.leads ?? []).filter((lead) => belongsToDtkurt(lead));
+  const dtkurtPlans = (state.treatmentPlans ?? []).filter((plan) => belongsToDtkurt(plan));
+
+  const patientUserIds = new Set(
+    [
+      ...dtkurtPatients.flatMap((patient) => [patient.id, patient.user_id]),
+      ...dtkurtApplications.map((application) => application.patient_user_id),
+      ...dtkurtLeads.map((lead) => lead.patient_user_id),
+      ...dtkurtPlans.map((plan) => plan.patient_user_id),
+    ].filter((id): id is string => Boolean(id)),
+  );
+  const assessmentIds = new Set(
+    [
+      ...dtkurtPatients.map((patient) => patient.assessment_id),
+      ...dtkurtApplications.map((application) => application.assessment_id),
+      ...dtkurtLeads.map((lead) => lead.assessment_id),
+      ...dtkurtPlans.map((plan) => plan.assessment_id),
+    ].filter((id): id is string => Boolean(id)),
+  );
+  const roadmapIds = new Set(
+    [
+      ...dtkurtPatients.map((patient) => patient.roadmap_id),
+      ...dtkurtApplications.map((application) => application.roadmap_id),
+      ...dtkurtLeads.map((lead) => lead.roadmap_id),
+      ...dtkurtPlans.map((plan) => plan.roadmap_id),
+    ].filter((id): id is string => Boolean(id)),
+  );
+
+  return {
+    ...state,
+    patients: (state.patients ?? []).filter((patient) => !belongsToDtkurt(patient)),
+    leads: (state.leads ?? []).filter((lead) => !belongsToDtkurt(lead)),
+    treatmentPlans: (state.treatmentPlans ?? []).filter((plan) => !belongsToDtkurt(plan)),
+    tasks: (state.tasks ?? []).filter((task) => !belongsToDtkurt(task)),
+    appointments: (state.appointments ?? []).filter((appointment) => !belongsToDtkurt(appointment)),
+    applications: (state.applications ?? []).filter((application) => !belongsToDtkurt(application)),
+    activities: (state.activities ?? []).filter((activity) => !belongsToDtkurt(activity)),
+    notifications: (state.notifications ?? []).filter(
+      (notification) => !belongsToDtkurt(notification),
+    ),
+    followUps: (state.followUps ?? []).filter((followUp) => !belongsToDtkurt(followUp)),
+    assessments: (state.assessments ?? []).filter(
+      (assessment) =>
+        !dtkurtUserIds.has(assessment.created_by) &&
+        !patientUserIds.has(assessment.patient_user_id) &&
+        !assessmentIds.has(assessment.id),
+    ),
+    roadmaps: (state.roadmaps ?? []).filter(
+      (roadmap) =>
+        !dtkurtUserIds.has(roadmap.created_by) &&
+        !patientUserIds.has(roadmap.patient_user_id) &&
+        !roadmapIds.has(roadmap.id),
+    ),
+    files: (state.files ?? []).filter(
+      (file) => !belongsToDtkurt(file) && !patientUserIds.has(file.patient_user_id),
+    ),
+  };
+}
+
+const initialPatientJourneyState = removeDtkurtPatientJourneyRecords({
+  users: seedUsers,
+  patients: seedPatients,
+  leads: seedLeads,
+  treatmentPlans: seedTreatmentPlans,
+  tasks: seedTasks,
+  appointments: seedAppointments,
+  applications: seedApplications,
+  roadmaps: seedRoadmaps,
+  assessments: seedAssessments,
+  files: seedFiles,
+  activities: seedActivities,
+});
+
+function canonicalStoreState(state: Store): PersistedStore {
+  const canonical: PersistedStore = {
+    clinics: state.clinics,
+    branding: state.branding,
+    users: state.users,
+    patients: state.patients,
+    leads: state.leads,
+    treatmentPlans: state.treatmentPlans,
+    tasks: state.tasks,
+    appointments: state.appointments,
+    applications: state.applications,
+    roadmaps: state.roadmaps,
+    assessments: state.assessments,
+    files: state.files,
+    activities: state.activities,
+    notifications: [...state.notifications]
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      .slice(0, 100),
+    followUps: state.followUps,
+    communicationTemplates: state.communicationTemplates,
+    crmSettings: state.crmSettings,
+    clinicTreatmentDefinitions: state.clinicTreatmentDefinitions,
+    dentalPlanTemplates: state.dentalPlanTemplates,
+    clinicHotels: state.clinicHotels,
+    roadmapCountryPrices: state.roadmapCountryPrices,
+    roadmapTreatmentContent: state.roadmapTreatmentContent,
+  };
+  return stripEmbeddedMedia(canonical);
+}
+
+function reportPersistenceError(error: unknown) {
+  lastPersistenceError = error instanceof Error ? error : new Error(String(error));
+  if (import.meta.env.DEV)
+    console.error("SmileAbroad mock persistence failed", lastPersistenceError);
+  if (typeof window !== "undefined" && typeof document !== "undefined" && !storageErrorToastShown) {
+    storageErrorToastShown = true;
+    toast.error("Storage limit reached. Large uploaded media has not been saved locally.");
+  }
+}
+
+function serializePersistedState(state: Store) {
+  return JSON.stringify({ state: canonicalStoreState(state), version: MOCK_STORAGE_VERSION });
+}
+
+function persistCanonicalStateOrThrow(state: Store) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MOCK_STORAGE_KEY, serializePersistedState(state));
+    lastPersistenceError = undefined;
+    storageErrorToastShown = false;
+  } catch (error) {
+    reportPersistenceError(error);
+    throw new Error(
+      "The Patient and Treatment Plan could not be saved because browser storage is full.",
+      { cause: error },
+    );
+  }
+}
+
+const safePersistStorage: PersistStorage<PersistedStore> = {
+  getItem: async (name) => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(name);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as StorageValue<PersistedStore>;
+      parsed.state = stripEmbeddedMedia(
+        (await migrateLegacyPlannerAssets(parsed.state)) as PersistedStore,
+      );
+      OBSOLETE_PLANNER_DRAFT_KEYS.forEach((key) => {
+        try {
+          window.localStorage.removeItem(key);
+        } catch (error) {
+          reportPersistenceError(error);
+        }
+      });
+      const reduced = JSON.stringify(parsed);
+      if (reduced.length < raw.length) {
+        try {
+          window.localStorage.setItem(name, reduced);
+        } catch (error) {
+          reportPersistenceError(error);
+        }
+      }
+      return parsed;
+    } catch (error) {
+      reportPersistenceError(error);
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(name, JSON.stringify(stripEmbeddedMedia(value)));
+      lastPersistenceError = undefined;
+      storageErrorToastShown = false;
+    } catch (error) {
+      reportPersistenceError(error);
+    }
+  },
+  removeItem: (name) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem(name);
+    } catch (error) {
+      reportPersistenceError(error);
+    }
+  },
+};
+
+export function getMockStorageDiagnostics() {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(MOCK_STORAGE_KEY) ?? "";
+    const parsed = raw ? (JSON.parse(raw) as StorageValue<Record<string, unknown>>) : undefined;
+    const collectionBytes = Object.fromEntries(
+      Object.entries(parsed?.state ?? {})
+        .filter(([, value]) => Array.isArray(value))
+        .map(([key, value]) => [key, new TextEncoder().encode(JSON.stringify(value)).length])
+        .sort((a, b) => Number(b[1]) - Number(a[1])),
+    );
+    return {
+      key: MOCK_STORAGE_KEY,
+      version: parsed?.version,
+      bytes: new TextEncoder().encode(raw).length,
+      collectionBytes,
+      lastError: lastPersistenceError?.message,
+    };
+  } catch (error) {
+    reportPersistenceError(error);
+    return {
+      key: MOCK_STORAGE_KEY,
+      version: undefined,
+      bytes: 0,
+      collectionBytes: {},
+      lastError: lastPersistenceError?.message,
+    };
+  }
 }
 
 type LegacyPersistedStore = Store & { quotes?: LegacyQuote[] };
@@ -330,16 +624,16 @@ export const useMockStore = create<Store>()(
       clinics: seedClinics,
       branding: seedBranding,
       users: seedUsers,
-      patients: seedPatients,
-      leads: seedLeads,
-      treatmentPlans: seedTreatmentPlans,
-      tasks: seedTasks,
-      appointments: seedAppointments,
-      applications: seedApplications,
-      roadmaps: seedRoadmaps,
-      assessments: seedAssessments,
-      files: seedFiles,
-      activities: seedActivities,
+      patients: initialPatientJourneyState.patients ?? [],
+      leads: initialPatientJourneyState.leads ?? [],
+      treatmentPlans: initialPatientJourneyState.treatmentPlans ?? [],
+      tasks: initialPatientJourneyState.tasks ?? [],
+      appointments: initialPatientJourneyState.appointments ?? [],
+      applications: initialPatientJourneyState.applications ?? [],
+      roadmaps: initialPatientJourneyState.roadmaps ?? [],
+      assessments: initialPatientJourneyState.assessments ?? [],
+      files: initialPatientJourneyState.files ?? [],
+      activities: initialPatientJourneyState.activities ?? [],
       notifications: [],
       followUps: [],
       communicationTemplates: [],
@@ -775,6 +1069,190 @@ export const useMockStore = create<Store>()(
               : item,
           ),
         }));
+      },
+      createPatientAndTreatmentPlan: (input, createdBy = "system") => {
+        const state = get();
+        const actor = state.users.find((user) => user.id === createdBy);
+        if (!actor && createdBy !== "system")
+          throw new Error("Treatment Plan actor is unavailable.");
+        if (
+          actor &&
+          !["clinic_owner", "clinic_admin", "coordinator", "platform_admin"].includes(actor.role)
+        )
+          throw new Error("Treatment Plan creation is not permitted.");
+        if (actor && actor.role !== "platform_admin" && actor.clinic_id !== input.plan.clinic_id)
+          throw new Error("Treatment plan clinic ownership mismatch.");
+
+        let patient = input.patient_id
+          ? state.patients.find(
+              (item) => item.id === input.patient_id && item.clinic_id === input.plan.clinic_id,
+            )
+          : undefined;
+        let patientWasCreated = false;
+        if (!patient) {
+          if (!input.patient) throw new Error("Select a valid clinic Patient or Lead.");
+          if (input.patient.clinic_id !== input.plan.clinic_id)
+            throw new Error("Patient clinic ownership mismatch.");
+          const normalizedEmail = input.patient.email?.trim().toLowerCase() ?? "";
+          const normalizedPhone = (input.patient.phone ?? input.patient.whatsapp ?? "").replace(
+            /\D/g,
+            "",
+          );
+          patient = state.patients.find(
+            (item) =>
+              item.clinic_id === input.plan.clinic_id &&
+              ((normalizedEmail && item.email?.trim().toLowerCase() === normalizedEmail) ||
+                (normalizedPhone &&
+                  (item.phone ?? item.whatsapp ?? "").replace(/\D/g, "") === normalizedPhone)),
+          );
+          if (!patient) {
+            const timestamp = now();
+            patient = {
+              ...input.patient,
+              id: makeId("pt"),
+              created_at: timestamp,
+              updated_at: timestamp,
+              created_by: createdBy,
+            };
+            patientWasCreated = true;
+          }
+        }
+
+        for (const assignedUserId of [
+          input.plan.dentist_id ?? patient.dentist_id,
+          input.plan.coordinator_id ?? patient.coordinator_id,
+        ].filter(Boolean)) {
+          const assignedUser = state.users.find((item) => item.id === assignedUserId);
+          if (!assignedUser || assignedUser.clinic_id !== input.plan.clinic_id)
+            throw new Error("Treatment Plan assignment is unavailable for this clinic.");
+        }
+        const lead = state.leads.find(
+          (item) =>
+            item.clinic_id === input.plan.clinic_id &&
+            (item.id === input.plan.lead_id ||
+              item.clinic_patient_id === patient.id ||
+              (!!patient.user_id && item.patient_user_id === patient.user_id)),
+        );
+        if (input.plan.lead_id && lead?.id !== input.plan.lead_id)
+          throw new Error("Treatment Plan lead is unavailable for this clinic.");
+        const existingPlan = state.treatmentPlans.find(
+          (plan) =>
+            plan.clinic_id === input.plan.clinic_id &&
+            ((lead &&
+              plan.lead_id === lead.id &&
+              !["declined", "expired"].includes(plan.status ?? "draft")) ||
+              (plan.clinic_patient_id === patient.id &&
+                (plan.status ?? "draft") === "draft" &&
+                (plan.items ?? []).length === 0)),
+        );
+        if (existingPlan) return { patient, plan: existingPlan };
+
+        const timestamp = now();
+        const application = state.applications.find(
+          (item) =>
+            item.clinic_id === input.plan.clinic_id &&
+            (item.id === input.plan.clinic_application_id ||
+              item.id === lead?.clinic_application_id),
+        );
+        const roadmap = state.roadmaps.find(
+          (item) =>
+            item.id === (input.plan.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id),
+        );
+        const plan: TreatmentPlan = {
+          ...input.plan,
+          clinic_id: input.plan.clinic_id,
+          patient_user_id: patient.user_id ?? patient.id,
+          clinic_patient_id: patient.id,
+          lead_id: input.plan.lead_id ?? lead?.id,
+          clinic_application_id: input.plan.clinic_application_id ?? application?.id,
+          assessment_id:
+            input.plan.assessment_id ?? lead?.assessment_id ?? application?.assessment_id,
+          roadmap_id: input.plan.roadmap_id ?? lead?.roadmap_id ?? application?.roadmap_id,
+          title:
+            input.plan.title ??
+            (patient.treatment_interest
+              ? `${patient.treatment_interest} treatment plan`
+              : `Treatment plan for ${`${patient.first_name} ${patient.last_name}`.trim()}`),
+          summary: input.plan.summary ?? "Draft clinical treatment plan.",
+          items: Array.isArray(input.plan.items) ? input.plan.items : [],
+          visits: input.plan.visits ?? 1,
+          healing_weeks: input.plan.healing_weeks ?? 0,
+          status: normalizeTreatmentPlanStatus(input.plan.status),
+          dentist_id: input.plan.dentist_id ?? patient.dentist_id,
+          coordinator_id: input.plan.coordinator_id ?? lead?.assigned_to ?? patient.coordinator_id,
+          clinical_findings: input.plan.clinical_findings ?? [],
+          treatment_objectives: input.plan.treatment_objectives ?? [],
+          alternatives: input.plan.alternatives ?? [],
+          risks: input.plan.risks ?? [],
+          exclusions: input.plan.exclusions ?? [],
+          materials: input.plan.materials ?? [],
+          implant_systems: input.plan.implant_systems ?? [],
+          treatment_stages: input.plan.treatment_stages ?? [],
+          visit_plan: input.plan.visit_plan ?? [],
+          preliminary_suggestions:
+            input.plan.preliminary_suggestions ??
+            roadmap?.treatment_estimates?.map((item) => ({ ...item })),
+          price_items: dedupeTreatmentPlanPriceItems(input.plan.price_items ?? []),
+          included_services: input.plan.included_services ?? [],
+          excluded_services: input.plan.excluded_services ?? [],
+          payment_schedule: normalizePlanPaymentSchedule(input.plan.payment_schedule),
+          currency: input.plan.currency ?? "EUR",
+          hotel_total: input.plan.hotel_total ?? 0,
+          transfer_total: input.plan.transfer_total ?? 0,
+          optional_service_total: input.plan.optional_service_total ?? 0,
+          discount_type: input.plan.discount_type ?? "none",
+          discount_value: input.plan.discount_value ?? 0,
+          calculated_discount: input.plan.calculated_discount ?? 0,
+          patient_document_version: input.plan.patient_document_version ?? 1,
+          prepared_at: input.plan.prepared_at ?? timestamp,
+          id: makeId("tp"),
+          created_at: timestamp,
+          updated_at: timestamp,
+          created_by: createdBy,
+        };
+        const activity: LeadActivity | undefined = lead
+          ? {
+              id: makeId("activity"),
+              clinic_id: plan.clinic_id,
+              lead_id: lead.id,
+              kind: "note",
+              body: `Treatment plan created: ${plan.title}`,
+              internal: true,
+              created_at: timestamp,
+              updated_at: timestamp,
+              created_by: createdBy,
+            }
+          : undefined;
+        const shouldMoveLead =
+          lead &&
+          [
+            "new_lead",
+            "contacted",
+            "awaiting_images",
+            "doctor_review",
+            "assessment_submitted",
+            "awaiting_review",
+          ].includes(lead.status);
+        const patients = patientWasCreated ? [...state.patients, patient] : state.patients;
+        const treatmentPlans = [...state.treatmentPlans, plan];
+        const activities = activity ? [...state.activities, activity] : state.activities;
+        const leads = lead
+          ? state.leads.map((item) =>
+              item.id === lead.id
+                ? {
+                    ...item,
+                    clinic_patient_id: patient.id,
+                    status: shouldMoveLead ? "treatment_planning" : item.status,
+                    last_activity_at: timestamp,
+                    updated_at: timestamp,
+                  }
+                : item,
+            )
+          : state.leads;
+        const nextState = { ...state, patients, treatmentPlans, activities, leads };
+        persistCanonicalStateOrThrow(nextState);
+        set({ patients, treatmentPlans, activities, leads });
+        return { patient, plan };
       },
       addTreatmentPlan: (tp, createdBy = "system") => {
         const actor = get().users.find((user) => user.id === createdBy);
@@ -1839,8 +2317,17 @@ export const useMockStore = create<Store>()(
         }),
     }),
     {
-      name: "smileabroad-mock-v1",
-      version: 21,
+      name: MOCK_STORAGE_KEY,
+      version: MOCK_STORAGE_VERSION,
+      storage: safePersistStorage,
+      partialize: canonicalStoreState,
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) reportPersistenceError(error);
+        if (import.meta.env.DEV) {
+          const diagnostics = getMockStorageDiagnostics();
+          if (diagnostics) console.info("SmileAbroad mock storage", diagnostics);
+        }
+      },
       migrate: (persistedState) => {
         const state = persistedState as LegacyPersistedStore;
         const { quotes: legacyQuotes = [], ...stateWithoutLegacyQuotes } = state;
@@ -1980,152 +2467,162 @@ export const useMockStore = create<Store>()(
           seenTokens.add(uniqueToken);
           return { ...plan, share_token: uniqueToken };
         });
-        return {
-          ...stateWithoutLegacyQuotes,
-          notifications: state.notifications ?? [],
-          followUps:
-            state.followUps ??
-            (state.tasks ?? [])
-              .filter((task) => task.category === "follow_up" && task.due_at)
+        return removeDtkurtPatientJourneyRecords(
+          stripEmbeddedMedia({
+            ...stateWithoutLegacyQuotes,
+            notifications: state.notifications ?? [],
+            followUps:
+              state.followUps ??
+              (state.tasks ?? [])
+                .filter((task) => task.category === "follow_up" && task.due_at)
+                .map((task) => ({
+                  id: `followup_migrated_${task.id}`,
+                  clinic_id: task.clinic_id,
+                  lead_id: task.lead_id ?? "",
+                  patient_id: task.patient_user_id,
+                  assigned_user_id: task.assigned_to,
+                  due_at: task.due_at!,
+                  reason: task.title,
+                  status: task.done ? ("completed" as const) : ("pending" as const),
+                  completed_at: task.done ? task.updated_at : undefined,
+                  created_at: task.created_at,
+                  updated_at: task.updated_at,
+                  created_by: task.created_by,
+                }))
+                .filter((item) => item.lead_id),
+            tasks: (state.tasks ?? [])
+              .filter((task) => task.category !== "follow_up")
               .map((task) => ({
-                id: `followup_migrated_${task.id}`,
-                clinic_id: task.clinic_id,
-                lead_id: task.lead_id ?? "",
-                patient_id: task.patient_user_id,
-                assigned_user_id: task.assigned_to,
-                due_at: task.due_at!,
-                reason: task.title,
-                status: task.done ? ("completed" as const) : ("pending" as const),
-                completed_at: task.done ? task.updated_at : undefined,
-                created_at: task.created_at,
-                updated_at: task.updated_at,
-                created_by: task.created_by,
-              }))
-              .filter((item) => item.lead_id),
-          tasks: (state.tasks ?? [])
-            .filter((task) => task.category !== "follow_up")
-            .map((task) => ({
-              ...task,
-              patient_id: task.patient_id ?? task.patient_user_id,
-              assigned_user_id: task.assigned_user_id ?? task.assigned_to,
-              assigned_to: task.assigned_to ?? task.assigned_user_id,
-              type: task.type ?? "other",
-              priority: task.priority === "medium" ? "normal" : (task.priority ?? "normal"),
-              task_status: task.task_status ?? (task.done ? "completed" : "pending"),
-              completed_at: task.completed_at ?? (task.done ? task.updated_at : undefined),
+                ...task,
+                patient_id: task.patient_id ?? task.patient_user_id,
+                assigned_user_id: task.assigned_user_id ?? task.assigned_to,
+                assigned_to: task.assigned_to ?? task.assigned_user_id,
+                type: task.type ?? "other",
+                priority: task.priority === "medium" ? "normal" : (task.priority ?? "normal"),
+                task_status: task.task_status ?? (task.done ? "completed" : "pending"),
+                completed_at: task.completed_at ?? (task.done ? task.updated_at : undefined),
+              })),
+            appointments: (state.appointments ?? []).map((appointment) => ({
+              ...appointment,
+              patient_id: appointment.patient_id ?? appointment.patient_user_id,
+              type: appointment.type ?? "clinic_consultation",
+              start_at: appointment.start_at ?? appointment.starts_at,
+              end_at:
+                appointment.end_at ??
+                new Date(
+                  new Date(appointment.starts_at).getTime() +
+                    (appointment.duration_min ?? 30) * 60_000,
+                ).toISOString(),
+              duration_min: appointment.duration_min ?? 30,
+              appointment_status: appointment.appointment_status ?? "scheduled",
+              location_type: appointment.location_type ?? "clinic",
             })),
-          appointments: (state.appointments ?? []).map((appointment) => ({
-            ...appointment,
-            patient_id: appointment.patient_id ?? appointment.patient_user_id,
-            type: appointment.type ?? "clinic_consultation",
-            start_at: appointment.start_at ?? appointment.starts_at,
-            end_at:
-              appointment.end_at ??
-              new Date(
-                new Date(appointment.starts_at).getTime() +
-                  (appointment.duration_min ?? 30) * 60_000,
-              ).toISOString(),
-            duration_min: appointment.duration_min ?? 30,
-            appointment_status: appointment.appointment_status ?? "scheduled",
-            location_type: appointment.location_type ?? "clinic",
-          })),
-          communicationTemplates: state.communicationTemplates ?? [],
-          crmSettings: state.crmSettings ?? [],
-          clinics: (state.clinics ?? seedClinics).map((clinic) => ({
-            ...clinic,
-            ...(clinic.id === "clinic_istanbul"
-              ? { name: "DTKURT Aesthetic Dentistry", slug: "dtkurt-aesthetic-dentistry" }
-              : {}),
-            languages: Array.isArray(clinic.languages) ? clinic.languages : [],
-            supported_treatments: Array.isArray(clinic.supported_treatments)
-              ? clinic.supported_treatments
-              : (seedClinics.find((item) => item.id === clinic.id)?.supported_treatments ?? []),
-            directory_source:
-              clinic.directory_source ?? (clinic.id === "clinic_istanbul" ? "platform" : "curated"),
-            platform_tier:
-              clinic.platform_tier ?? (clinic.id === "clinic_istanbul" ? "pro" : undefined),
-            source_label:
-              clinic.source_label ??
-              (clinic.id === "clinic_istanbul" ? undefined : "Public clinic listing"),
-            website: clinic.website ?? seedClinics.find((item) => item.id === clinic.id)?.website,
-            last_reviewed_at:
-              clinic.last_reviewed_at ??
-              seedClinics.find((item) => item.id === clinic.id)?.last_reviewed_at,
-          })),
-          users: [
-            ...(state.users ?? seedUsers).map((member) => {
-              return member.id === "u_owner"
-                ? { ...member, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
-                : member;
-            }),
-            ...seedUsers.filter(
-              (seedUser) =>
-                ["dentist", "viewer", "sales", "clinic_admin"].includes(seedUser.role) &&
-                !(state.users ?? seedUsers).some((member) => member.id === seedUser.id),
-            ),
-          ],
-          branding: (state.branding ?? seedBranding).map((item) => ({
-            ...item,
-            doctors: Array.isArray(item.doctors) ? item.doctors : [],
-            guarantees: Array.isArray(item.guarantees) ? item.guarantees : [],
-          })),
-          assessments: (state.assessments ?? []).map((assessment) =>
-            migrateAssessment(assessment as LegacyAssessment),
-          ),
-          applications: linkedApplications,
-          leads,
-          treatmentPlans,
-          clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((legacy) => {
-            const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
-              svg_asset?: unknown;
-            };
-            const baseTreatmentKey =
-              item.base_treatment_key ?? (item.system ? item.treatment_key : "other");
-            return {
+            communicationTemplates: state.communicationTemplates ?? [],
+            crmSettings: state.crmSettings ?? [],
+            clinics: (state.clinics ?? seedClinics).map((clinic) => ({
+              ...clinic,
+              ...(clinic.id === "clinic_istanbul"
+                ? { name: "DTKURT Aesthetic Dentistry", slug: "dtkurt-aesthetic-dentistry" }
+                : {}),
+              languages: Array.isArray(clinic.languages) ? clinic.languages : [],
+              supported_treatments: Array.isArray(clinic.supported_treatments)
+                ? clinic.supported_treatments
+                : (seedClinics.find((item) => item.id === clinic.id)?.supported_treatments ?? []),
+              directory_source:
+                clinic.directory_source ??
+                (clinic.id === "clinic_istanbul" ? "platform" : "curated"),
+              platform_tier:
+                clinic.platform_tier ?? (clinic.id === "clinic_istanbul" ? "pro" : undefined),
+              source_label:
+                clinic.source_label ??
+                (clinic.id === "clinic_istanbul" ? undefined : "Public clinic listing"),
+              website: clinic.website ?? seedClinics.find((item) => item.id === clinic.id)?.website,
+              last_reviewed_at:
+                clinic.last_reviewed_at ??
+                seedClinics.find((item) => item.id === clinic.id)?.last_reviewed_at,
+            })),
+            users: [
+              ...(state.users ?? seedUsers).map((member) => {
+                return member.id === "u_owner"
+                  ? { ...member, name: "Dr. M. Yusuf Kurt", email: "owner@dtkurt.com" }
+                  : member;
+              }),
+              ...seedUsers.filter(
+                (seedUser) =>
+                  ["dentist", "viewer", "sales", "clinic_admin"].includes(seedUser.role) &&
+                  !(state.users ?? seedUsers).some((member) => member.id === seedUser.id),
+              ),
+            ],
+            branding: (state.branding ?? seedBranding).map((item) => ({
               ...item,
-              prices: item.prices ?? {},
+              ...(item.clinic_id === DTKURT_CLINIC_ID
+                ? {
+                    primary_color: "#0A1626",
+                    secondary_color: "#415469",
+                    shared_view_accent_color: "#C8A46A",
+                  }
+                : {}),
+              doctors: Array.isArray(item.doctors) ? item.doctors : [],
+              guarantees: Array.isArray(item.guarantees) ? item.guarantees : [],
+            })),
+            assessments: (state.assessments ?? []).map((assessment) =>
+              migrateAssessment(assessment as LegacyAssessment),
+            ),
+            applications: linkedApplications,
+            leads,
+            treatmentPlans,
+            clinicTreatmentDefinitions: (state.clinicTreatmentDefinitions ?? []).map((legacy) => {
+              const { svg_asset: _obsoleteSvg, ...item } = legacy as typeof legacy & {
+                svg_asset?: unknown;
+              };
+              const baseTreatmentKey =
+                item.base_treatment_key ?? (item.system ? item.treatment_key : "other");
+              return {
+                ...item,
+                prices: item.prices ?? {},
+                active: item.active !== false,
+                base_treatment_key: baseTreatmentKey,
+                visual_key: item.visual_key ?? (item.system ? baseTreatmentKey : "dental-implant"),
+                rule_profile_key: item.rule_profile_key ?? baseTreatmentKey,
+              };
+            }),
+            dentalPlanTemplates: (state.dentalPlanTemplates ?? []).map((item) => ({
+              ...item,
               active: item.active !== false,
-              base_treatment_key: baseTreatmentKey,
-              visual_key: item.visual_key ?? (item.system ? baseTreatmentKey : "dental-implant"),
-              rule_profile_key: item.rule_profile_key ?? baseTreatmentKey,
-            };
+            })),
+            clinicHotels: (state.clinicHotels ?? []).map((item) => ({
+              ...item,
+              categories: Array.isArray(item.categories)
+                ? item.categories
+                : [(item as typeof item & { category?: string }).category ?? "Standard"],
+              room_types: Array.isArray(item.room_types) ? item.room_types : [],
+              board_types: Array.isArray(item.board_types) ? item.board_types : [],
+              images: Array.isArray(item.images) ? item.images.slice(0, 4) : [],
+              active: item.active !== false,
+            })),
+            roadmapCountryPrices: Array.isArray(state.roadmapCountryPrices)
+              ? state.roadmapCountryPrices
+              : DEFAULT_ROADMAP_COUNTRY_PRICES,
+            roadmapTreatmentContent: Array.isArray(state.roadmapTreatmentContent)
+              ? state.roadmapTreatmentContent
+              : DEFAULT_ROADMAP_TREATMENT_CONTENT,
+            roadmaps: (state.roadmaps ?? []).map((roadmap) => ({
+              ...roadmap,
+              treatment_estimates: Array.isArray(roadmap.treatment_estimates)
+                ? roadmap.treatment_estimates
+                : [],
+              treatment_journey: Array.isArray(roadmap.treatment_journey)
+                ? roadmap.treatment_journey
+                : [],
+              missing_price_keys: Array.isArray(roadmap.missing_price_keys)
+                ? roadmap.missing_price_keys
+                : [],
+              recommended_clinic_ids: Array.isArray(roadmap.recommended_clinic_ids)
+                ? roadmap.recommended_clinic_ids
+                : [],
+            })),
           }),
-          dentalPlanTemplates: (state.dentalPlanTemplates ?? []).map((item) => ({
-            ...item,
-            active: item.active !== false,
-          })),
-          clinicHotels: (state.clinicHotels ?? []).map((item) => ({
-            ...item,
-            categories: Array.isArray(item.categories)
-              ? item.categories
-              : [(item as typeof item & { category?: string }).category ?? "Standard"],
-            room_types: Array.isArray(item.room_types) ? item.room_types : [],
-            board_types: Array.isArray(item.board_types) ? item.board_types : [],
-            images: Array.isArray(item.images) ? item.images.slice(0, 4) : [],
-            active: item.active !== false,
-          })),
-          roadmapCountryPrices: Array.isArray(state.roadmapCountryPrices)
-            ? state.roadmapCountryPrices
-            : DEFAULT_ROADMAP_COUNTRY_PRICES,
-          roadmapTreatmentContent: Array.isArray(state.roadmapTreatmentContent)
-            ? state.roadmapTreatmentContent
-            : DEFAULT_ROADMAP_TREATMENT_CONTENT,
-          roadmaps: (state.roadmaps ?? []).map((roadmap) => ({
-            ...roadmap,
-            treatment_estimates: Array.isArray(roadmap.treatment_estimates)
-              ? roadmap.treatment_estimates
-              : [],
-            treatment_journey: Array.isArray(roadmap.treatment_journey)
-              ? roadmap.treatment_journey
-              : [],
-            missing_price_keys: Array.isArray(roadmap.missing_price_keys)
-              ? roadmap.missing_price_keys
-              : [],
-            recommended_clinic_ids: Array.isArray(roadmap.recommended_clinic_ids)
-              ? roadmap.recommended_clinic_ids
-              : [],
-          })),
-        };
+        );
       },
     },
   ),

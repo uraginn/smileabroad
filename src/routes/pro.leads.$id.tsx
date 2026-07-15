@@ -62,7 +62,9 @@ function LeadWorkspace() {
   const updateStatus = useMockStore((state) => state.updateLeadStatus);
   const updateLead = useMockStore((state) => state.updateLead);
   const addPatient = useMockStore((state) => state.addPatient);
-  const addPlan = useMockStore((state) => state.addTreatmentPlan);
+  const createPatientAndTreatmentPlan = useMockStore(
+    (state) => state.createPatientAndTreatmentPlan,
+  );
   const completeFollowUp = useMockStore((state) => state.completeFollowUp);
   const lead = leads.find((item) => item.id === id && item.clinic_id === clinicId);
   const patient = patients.find(
@@ -133,10 +135,10 @@ function LeadWorkspace() {
         (item) => item.clinic_id === clinicId && item.email?.trim().toLowerCase() === email,
       );
     }
-    if (!linkedPatient) {
-      const name = splitLeadName(lead.patient_name);
-      linkedPatient = addPatient(
-        {
+    const name = splitLeadName(lead.patient_name);
+    const patientDraft = linkedPatient
+      ? undefined
+      : {
           clinic_id: clinicId,
           user_id: lead.patient_user_id,
           first_name: assessment?.personal.first_name || name.firstName,
@@ -147,18 +149,12 @@ function LeadWorkspace() {
           country: assessment?.personal.country || lead.patient_country || undefined,
           city: assessment?.personal.city,
           language: assessment?.personal.preferred_language,
-          source: lead.source === "assessment" ? "smileabroad" : lead.source,
+          source: lead.source === "assessment" ? ("smileabroad" as const) : lead.source,
           assessment_id: assessment?.id,
           roadmap_id: roadmap?.id,
           treatment_interest: assessment?.dental.treatment_interest || lead.treatment,
           coordinator_id: lead.assigned_to,
-        },
-        actor?.id,
-      );
-    }
-    if (lead.clinic_patient_id !== linkedPatient.id) {
-      updateLead(lead.id, clinicId, { clinic_patient_id: linkedPatient.id }, actor?.id);
-    }
+        };
     const defaultDentist = users.find(
       (item) =>
         item.clinic_id === clinicId &&
@@ -166,28 +162,31 @@ function LeadWorkspace() {
         item.active !== false &&
         item.default_planner_dentist,
     );
-    const plan = addPlan(
-      {
-        clinic_id: clinicId,
-        patient_user_id: linkedPatient.user_id ?? linkedPatient.id,
-        clinic_patient_id: linkedPatient.id,
-        lead_id: lead.id,
-        clinic_application_id: application?.id,
-        assessment_id: assessment?.id,
-        roadmap_id: roadmap?.id,
-        dentist_id: linkedPatient.dentist_id ?? defaultDentist?.id,
-        coordinator_id: lead.assigned_to,
-        title: `${lead.treatment || "Dental"} Treatment Plan`,
-        summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
-        items: [],
-        visits: 1,
-        healing_weeks: 0,
-        preliminary_suggestions: roadmap?.treatment_estimates ?? [],
-        status: "draft",
-      },
-      actor?.id,
-    );
-    void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    try {
+      const { plan } = createPatientAndTreatmentPlan(
+        {
+          patient_id: linkedPatient?.id,
+          patient: patientDraft,
+          plan: {
+            clinic_id: clinicId,
+            lead_id: lead.id,
+            clinic_application_id: application?.id,
+            assessment_id: assessment?.id,
+            roadmap_id: roadmap?.id,
+            dentist_id: linkedPatient?.dentist_id ?? defaultDentist?.id,
+            coordinator_id: lead.assigned_to,
+            title: `${lead.treatment || "Dental"} Treatment Plan`,
+            summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
+            preliminary_suggestions: roadmap?.treatment_estimates ?? [],
+            status: "draft",
+          },
+        },
+        actor?.id,
+      );
+      void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Treatment Plan could not be created");
+    }
   };
   const convert = () => {
     let linkedPatient = patient;

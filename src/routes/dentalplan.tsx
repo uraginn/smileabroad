@@ -10,6 +10,7 @@ import { derivePlanDefaults } from "@/features/dentalplan/utils/derivePlanDefaul
 import { calculateCommercial, priceForTreatment } from "@/features/dentalplan/utils/commercial";
 import { UnifiedPlanShareSection } from "@/features/dentalplan/components/UnifiedPlanShareSection";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
+import { usePlannerAssetUrlMap } from "@/features/dentalplan/adapters/plannerAssetStorage";
 import type { ToothTreatment, TreatmentPlanItem } from "@/types/models";
 import { PageLoading } from "@/components/ui-bits";
 
@@ -132,6 +133,11 @@ function DentalPlanRoute() {
   const canManageTemplates = canUser(user, "settings.dental_planner");
   const canManagePatients = canUser(user, "patients.manage");
   const canSharePlans = canUser(user, "treatment_plans.share");
+  const hotelAssets = useMemo(
+    () => hotels.flatMap((hotel) => (Array.isArray(hotel.images) ? hotel.images : [])),
+    [hotels],
+  );
+  const hotelAssetUrls = usePlannerAssetUrlMap(hotelAssets);
   const caseFiles = useMemo(
     () =>
       [
@@ -409,10 +415,10 @@ function DentalPlanRoute() {
             .map((image) => ({
               id: image.id,
               name: image.name,
-              dataUrl: image.data_url,
+              dataUrl: image.data_url ?? hotelAssetUrls[image.id],
             })),
         })),
-    [hotels, user?.clinic_id, initial?.travel.selectedHotelId],
+    [hotels, user?.clinic_id, initial?.travel.selectedHotelId, hotelAssetUrls],
   );
   const preliminarySuggestions = useMemo(
     () =>

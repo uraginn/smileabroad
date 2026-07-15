@@ -1,10 +1,19 @@
 import { Paperclip, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePlannerAssetUrl } from "@/features/dentalplan/adapters/plannerAssetStorage";
 
 export interface AttachmentItem {
   id: string;
   name: string;
   dataUrl?: string;
+  storageKey?: string;
+}
+
+function AttachmentPreview({ item }: { item: AttachmentItem }) {
+  const url = usePlannerAssetUrl(item.storageKey, item.dataUrl);
+  return url ? (
+    <img src={url} alt={item.name} className="aspect-video w-full rounded object-cover" />
+  ) : null;
 }
 
 export function Attachment({
@@ -36,13 +45,7 @@ export function Attachment({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {items.map((item, index) => (
           <div key={item.id} className="min-w-0 rounded-md border p-2">
-            {item.dataUrl && (
-              <img
-                src={item.dataUrl}
-                alt={item.name}
-                className="aspect-video w-full rounded object-cover"
-              />
-            )}
+            <AttachmentPreview item={item} />
             <p className="mt-1 truncate text-xs" title={item.name}>
               {item.name}
             </p>

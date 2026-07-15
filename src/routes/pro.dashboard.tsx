@@ -15,7 +15,7 @@ import { useShallow } from "zustand/react/shallow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, PageHeader, StatusBadge } from "@/components/ui-bits";
+import { EmptyState, PageHeader, PageLoading, StatusBadge } from "@/components/ui-bits";
 import { RecentActivityList, type ActivityItem } from "@/components/recent-activity-list";
 import { useAuth } from "@/lib/auth/mock-auth";
 import { formatCrmDate } from "@/lib/format";
@@ -27,12 +27,14 @@ import {
   selectClinicPlans,
   selectClinicTasks,
   useMockStore,
+  useMockStoreHydrated,
 } from "@/lib/mock/store";
 
 export const Route = createFileRoute("/pro/dashboard")({ component: ProDashboard });
 
 function ProDashboard() {
   const user = useAuth((state) => state.user);
+  const hydrated = useMockStoreHydrated();
   const clinicId = user?.clinic_id ?? "";
   const leads = useMockStore(useShallow(selectClinicLeads(clinicId)));
   const patients = useMockStore(useShallow(selectClinicPatients(clinicId)));
@@ -48,6 +50,7 @@ function ProDashboard() {
   const followUps = useMockStore((state) => state.followUps);
   const users = useMockStore((state) => state.users);
   const clinics = useMockStore((state) => state.clinics);
+  if (!hydrated) return <PageLoading label="Loading CRM dashboard" />;
   const clinic = clinics.find((item) => item.id === clinicId);
   const now = new Date();
   const overdueFollowUps = followUps.filter(

@@ -562,6 +562,7 @@ export type PlanCurrency = "GBP" | "EUR" | "USD" | "TRY";
 export interface ClinicBranding extends BaseRecord {
   clinic_id: string;
   logo_url?: string;
+  logo_asset_id?: string;
   shared_view_logo_url?: string;
   shared_view_banner_url?: string;
   shared_view_tagline?: string;
@@ -611,6 +612,7 @@ export interface PlannerAssetMetadata {
   name: string;
   mime_type: string;
   size: number;
+  storage_key?: string;
   data_url?: string;
 }
 

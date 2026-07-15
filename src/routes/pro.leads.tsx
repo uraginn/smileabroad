@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import {
   ArrowRight,
   CalendarCheck,
@@ -560,7 +561,9 @@ function LeadCard({
 }) {
   const navigate = useNavigate();
   const activeUser = useAuth((state) => state.user);
-  const addTreatmentPlan = useMockStore((state) => state.addTreatmentPlan);
+  const createPatientAndTreatmentPlan = useMockStore(
+    (state) => state.createPatientAndTreatmentPlan,
+  );
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const coordinator = users.find((user) => user.id === lead.assigned_to)?.name ?? "Unassigned";
@@ -588,25 +591,27 @@ function LeadCard({
       return;
     }
     if (!patient) return;
-    const plan = addTreatmentPlan(
-      {
-        clinic_id: lead.clinic_id,
-        patient_user_id: patient.user_id ?? lead.patient_user_id,
-        clinic_patient_id: patient.id,
-        lead_id: lead.id,
-        clinic_application_id: lead.clinic_application_id,
-        assessment_id: lead.assessment_id,
-        roadmap_id: lead.roadmap_id,
-        title: `${lead.treatment || "Dental"} Treatment Plan`,
-        summary: "Draft clinical Treatment Plan.",
-        items: [],
-        visits: 1,
-        healing_weeks: 0,
-        status: "draft",
-      },
-      activeUser?.id,
-    );
-    void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    try {
+      const { plan } = createPatientAndTreatmentPlan(
+        {
+          patient_id: patient.id,
+          plan: {
+            clinic_id: lead.clinic_id,
+            lead_id: lead.id,
+            clinic_application_id: lead.clinic_application_id,
+            assessment_id: lead.assessment_id,
+            roadmap_id: lead.roadmap_id,
+            title: `${lead.treatment || "Dental"} Treatment Plan`,
+            summary: "Draft clinical Treatment Plan.",
+            status: "draft",
+          },
+        },
+        activeUser?.id,
+      );
+      void navigate({ to: "/dentalplan", search: { treatmentPlanId: plan.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Treatment Plan could not be created");
+    }
   };
   return (
     <Card className="p-3 hover:shadow-md transition-shadow">

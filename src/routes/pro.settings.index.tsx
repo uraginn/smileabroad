@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/mock-auth";
@@ -40,8 +40,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/ui-bits";
+import { LocalPlannerAssetAdapter } from "@/features/dentalplan/adapters/LocalPlannerAssetAdapter";
+import { usePlannerAssetUrl } from "@/features/dentalplan/adapters/plannerAssetStorage";
 
 export const Route = createFileRoute("/pro/settings/")({ component: ClinicSettings });
+const settingsAssetAdapter = new LocalPlannerAssetAdapter();
 const DEFAULT_SOURCES: CrmSourceDefinition[] = [
   { key: "assessment", label: "SmileAbroad Application", active: true },
   { key: "manual", label: "Manual", active: true },
@@ -299,6 +302,14 @@ function Profile({
   const [sharedLogo, setSharedLogo] = useState(
     brand?.logo_url ?? brand?.shared_view_logo_url ?? "",
   );
+  const [sharedLogoAssetId, setSharedLogoAssetId] = useState(brand?.logo_asset_id);
+  const storedLogoUrl = usePlannerAssetUrl(
+    brand?.logo_asset_id,
+    brand?.logo_url ?? brand?.shared_view_logo_url,
+  );
+  useEffect(() => {
+    if (!sharedLogo && storedLogoUrl) setSharedLogo(storedLogoUrl);
+  }, [sharedLogo, storedLogoUrl]);
   const [logoUploadError, setLogoUploadError] = useState("");
   const [sharedBanner, setSharedBanner] = useState(
     clinic.cover_image || brand?.shared_view_banner_url || "",
@@ -307,12 +318,12 @@ function Profile({
   const [sharedIntroduction, setSharedIntroduction] = useState(
     brand?.shared_view_introduction ?? "",
   );
-  const [primaryColor, setPrimaryColor] = useState(brand?.primary_color ?? "#0f766e");
-  const [secondaryColor, setSecondaryColor] = useState(brand?.secondary_color ?? "#334155");
+  const [primaryColor, setPrimaryColor] = useState(brand?.primary_color ?? "#0A1626");
+  const [secondaryColor, setSecondaryColor] = useState(brand?.secondary_color ?? "#415469");
   const [sharedAccent, setSharedAccent] = useState(
-    brand?.shared_view_accent_color ?? brand?.primary_color ?? "#0f766e",
+    brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A",
   );
-  const logoIsSvg = !sharedLogo || isSvgLogoUrl(sharedLogo);
+  const logoIsSvg = !sharedLogo || !!sharedLogoAssetId || isSvgLogoUrl(sharedLogo);
   return (
     <Card>
       <CardHeader>
@@ -353,7 +364,10 @@ function Profile({
             value={sharedLogo}
             placeholder="https://example.com/clinic-logo.svg"
             aria-invalid={!logoIsSvg}
-            onChange={(e) => setSharedLogo(e.target.value)}
+            onChange={(e) => {
+              setSharedLogo(e.target.value);
+              setSharedLogoAssetId(undefined);
+            }}
           />
           {!logoIsSvg && (
             <p className="mt-1 text-xs text-destructive">
@@ -365,23 +379,20 @@ function Profile({
               type="file"
               accept=".svg,image/svg+xml"
               aria-label="Upload clinic SVG logo"
-              onChange={(event) => {
+              onChange={async (event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
-                if (file.type !== "image/svg+xml" || !file.name.toLowerCase().endsWith(".svg")) {
-                  setLogoUploadError("Choose an SVG file with the image/svg+xml MIME type.");
+                try {
+                  const asset = await settingsAssetAdapter.readSvgLogo(file);
+                  setSharedLogo(asset.data_url ?? "");
+                  setSharedLogoAssetId(asset.storage_key);
+                  setLogoUploadError("");
+                } catch (error) {
+                  setLogoUploadError(
+                    error instanceof Error ? error.message : "The SVG logo could not be saved.",
+                  );
                   event.target.value = "";
-                  return;
                 }
-                const reader = new FileReader();
-                reader.onload = () => {
-                  if (typeof reader.result === "string") {
-                    setSharedLogo(reader.result);
-                    setLogoUploadError("");
-                  }
-                };
-                reader.onerror = () => setLogoUploadError("The SVG logo could not be read.");
-                reader.readAsDataURL(file);
               }}
             />
             {logoUploadError && <p className="mt-1 text-xs text-destructive">{logoUploadError}</p>}
@@ -455,7 +466,8 @@ function Profile({
                 website,
                 phone,
                 email,
-                logo_url: sharedLogo || undefined,
+                logo_url: sharedLogoAssetId ? undefined : sharedLogo || undefined,
+                logo_asset_id: sharedLogoAssetId,
                 shared_view_tagline: sharedTagline || undefined,
                 shared_view_introduction: sharedIntroduction.trim() || undefined,
                 primary_color: primaryColor,

@@ -60,7 +60,11 @@ import {
 } from "@/components/ui/alert-dialog";
 const STEPS = ["Patient & Case", "Clinical Planning", "Package", "Commercial", "Review & Share"];
 export function DentalPlanStudio(props: DentalPlanStudioProps) {
-  const repository = useMemo(() => new LocalStorageDentalPlanRepository(), []);
+  const standalone = !props.context || props.context.mode === "standalone";
+  const repository = useMemo(
+    () => new LocalStorageDentalPlanRepository(undefined, standalone),
+    [standalone],
+  );
   const [plan, setPlan] = useState<DentalPlan | null>(null);
   const incomingInitial = useRef(props.initialValue);
   incomingInitial.current = props.initialValue;
