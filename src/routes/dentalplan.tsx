@@ -102,7 +102,8 @@ function DentalPlanRoute() {
       (item.id === search.patientId ||
         item.id === lead?.clinic_patient_id ||
         item.id === application?.clinic_patient_id ||
-        item.id === existingPlan?.clinic_patient_id),
+        item.id === existingPlan?.clinic_patient_id ||
+        (!!existingPlan?.patient_user_id && item.user_id === existingPlan.patient_user_id)),
   );
   const authorizedAssessmentId =
     lead?.assessment_id ?? patient?.assessment_id ?? application?.assessment_id;
@@ -172,7 +173,10 @@ function DentalPlanRoute() {
     const linkedPatient =
       patient ??
       patients.find(
-        (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user?.clinic_id,
+        (item) =>
+          item.clinic_id === user?.clinic_id &&
+          (item.id === existingPlan?.clinic_patient_id ||
+            (!!existingPlan?.patient_user_id && item.user_id === existingPlan.patient_user_id)),
       );
     const embedded =
       existingPlan?.dental_plan_data && typeof existingPlan.dental_plan_data === "object"
@@ -555,7 +559,10 @@ function DentalPlanRoute() {
     let linkedPatient =
       patient ??
       patients.find(
-        (item) => item.id === existingPlan?.clinic_patient_id && item.clinic_id === user.clinic_id,
+        (item) =>
+          item.clinic_id === user.clinic_id &&
+          (item.id === existingPlan?.clinic_patient_id ||
+            (!!existingPlan?.patient_user_id && item.user_id === existingPlan.patient_user_id)),
       );
     if (!linkedPatient) {
       if (!canManagePatients)

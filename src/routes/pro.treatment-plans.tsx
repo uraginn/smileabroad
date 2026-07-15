@@ -271,12 +271,9 @@ function Plans() {
         description="Prepare, review and share patient treatment plans."
         actions={
           canCreate ? (
-            <CreatePlanMenu
-              open={createOpen}
-              onOpenChange={setCreateOpen}
-              onNew={openNewPatient}
-              onExisting={openExistingPatient}
-            />
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" /> Create Treatment Plan
+            </Button>
           ) : undefined
         }
       />
@@ -351,12 +348,9 @@ function Plans() {
           description="Create a Treatment Plan from a patient or Lead to begin."
           action={
             canCreate ? (
-              <CreatePlanMenu
-                open={createOpen}
-                onOpenChange={setCreateOpen}
-                onNew={openNewPatient}
-                onExisting={openExistingPatient}
-              />
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" /> Create Treatment Plan
+              </Button>
             ) : undefined
           }
         />
@@ -449,6 +443,12 @@ function Plans() {
           </CardContent>
         </Card>
       )}
+      <CreatePlanDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onNew={openNewPatient}
+        onExisting={openExistingPatient}
+      />
       <Dialog
         open={newPatientOpen}
         onOpenChange={(open) => (open ? setNewPatientOpen(true) : closeCreation())}
@@ -531,7 +531,7 @@ function Plans() {
   );
 }
 
-function CreatePlanMenu({
+function CreatePlanDialog({
   open,
   onOpenChange,
   onNew,
@@ -543,33 +543,36 @@ function CreatePlanMenu({
   onExisting: () => void;
 }) {
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button>
-          <Plus className="size-4" /> Create Treatment Plan
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 space-y-1 p-2">
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-auto w-full justify-start gap-3 p-3 text-left"
-          onClick={onNew}
-        >
-          <UserRoundPlus className="size-5 shrink-0" />
-          <span className="font-medium">New patient</span>
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-auto w-full justify-start gap-3 p-3 text-left"
-          onClick={onExisting}
-        >
-          <UserRound className="size-5 shrink-0" />
-          <span className="font-medium">Existing patient</span>
-        </Button>
-      </PopoverContent>
-    </Popover>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Create Treatment Plan</DialogTitle>
+          <DialogDescription>
+            Start with a new patient or an existing clinic record.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-start gap-3 p-3 text-left"
+            onClick={onNew}
+          >
+            <UserRoundPlus className="size-5 shrink-0" />
+            <span className="font-medium">New patient</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-start gap-3 p-3 text-left"
+            onClick={onExisting}
+          >
+            <UserRound className="size-5 shrink-0" />
+            <span className="font-medium">Existing patient</span>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
