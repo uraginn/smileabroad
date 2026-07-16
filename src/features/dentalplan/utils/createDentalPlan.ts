@@ -21,10 +21,6 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
   const commercial = overrides.commercial;
   const legacyTravel = overrides.travel;
   const patient = overrides.patient;
-  const dentistIds = [
-    ...stringArray(patient?.dentistIds),
-    ...(text(patient?.dentistId) ? [text(patient?.dentistId)] : []),
-  ].filter((value, index, values) => values.indexOf(value) === index);
   const airportTransfer = !!(
     legacyTravel?.airportTransfer ||
     legacyTravel?.airportPickup ||
@@ -69,8 +65,6 @@ export function createDentalPlan(overrides: Partial<DentalPlan> = {}): DentalPla
       firstName: text(patient?.firstName),
       lastName: text(patient?.lastName),
       fullName: text(patient?.fullName) || text(overrides.patientName),
-      dentistId: dentistIds[0],
-      dentistIds,
       planTitle: text(patient?.planTitle) || text(overrides.name) || "Untitled Plan",
       preparationDate: validDate(patient?.preparationDate, now.slice(0, 10)),
       currency: currency(patient?.currency),

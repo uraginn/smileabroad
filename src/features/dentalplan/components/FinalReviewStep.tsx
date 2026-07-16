@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Check, Info } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
@@ -51,7 +50,7 @@ export function FinalReviewStep({
   const warningItems = [
     ...clinicalWarnings.map((label) => ({ label, step: 1 })),
     ...defaults.warnings.map((label) => ({ label, step: 1 })),
-    ...(!(plan.patient.dentistIds?.length || plan.patient.dentistId)
+    ...(!plan.patient.dentistId
       ? [{ label: "No dentist is assigned to this case.", step: 0 }]
       : []),
     ...(scheduled > totals.total
@@ -77,7 +76,7 @@ export function FinalReviewStep({
       </header>
       <div className="grid gap-3 lg:grid-cols-3">
         <ValidationGroup
-          title="Information"
+          title="Ready"
           icon={<Check className="size-4 text-success" />}
           items={readiness.filter((item) => item.ready)}
           empty="Nothing completed yet."
@@ -91,7 +90,7 @@ export function FinalReviewStep({
           onNavigate={onNavigate}
         />
         <ValidationGroup
-          title="Blocking errors"
+          title="Missing"
           icon={<AlertTriangle className="size-4 text-destructive" />}
           items={missing}
           empty="No required information is missing."
@@ -115,46 +114,32 @@ function ValidationGroup({
   empty: string;
   onNavigate?: (step: number) => void;
 }) {
-  const isBlocking = title === "Blocking errors";
-  const isWarning = title === "Warnings";
   return (
-    <Alert
-      variant={isBlocking ? "destructive" : "default"}
-      className={isWarning ? "border-amber-300 bg-amber-50/60" : ""}
-    >
-      {isWarning ? (
-        <AlertTriangle className="size-4" />
-      ) : isBlocking ? (
-        <AlertTriangle className="size-4" />
-      ) : (
-        <Info className="size-4" />
-      )}
-      <AlertTitle className="flex items-center gap-2">
+    <div className="rounded-lg border p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
         {icon}
         {title}
         <Badge variant="outline" className="ml-auto font-normal">
           {items.length}
         </Badge>
-      </AlertTitle>
-      <AlertDescription>
-        {items.length ? (
-          <div className="mt-2 space-y-1">
-            {items.map((item) => (
-              <Button
-                key={`${title}-${item.label}`}
-                type="button"
-                variant="ghost"
-                className="h-auto w-full justify-start whitespace-normal px-2 py-1.5 text-left text-sm"
-                onClick={() => onNavigate?.(item.step)}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">{empty}</p>
-        )}
-      </AlertDescription>
-    </Alert>
+      </div>
+      {items.length ? (
+        <div className="space-y-1">
+          {items.map((item) => (
+            <Button
+              key={`${title}-${item.label}`}
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-start whitespace-normal px-2 py-1.5 text-left text-sm"
+              onClick={() => onNavigate?.(item.step)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">{empty}</p>
+      )}
+    </div>
   );
 }

@@ -318,12 +318,6 @@ function Profile({
   const [sharedIntroduction, setSharedIntroduction] = useState(
     brand?.shared_view_introduction ?? "",
   );
-  const [sharedClinicImage, setSharedClinicImage] = useState(
-    brand?.shared_view_clinic_image_url ?? "",
-  );
-  const [sharedClinicDescription, setSharedClinicDescription] = useState(
-    brand?.shared_view_clinic_description ?? clinic.short_description,
-  );
   const [primaryColor, setPrimaryColor] = useState(brand?.primary_color ?? "#0A1626");
   const [secondaryColor, setSecondaryColor] = useState(brand?.secondary_color ?? "#415469");
   const [sharedAccent, setSharedAccent] = useState(
@@ -344,8 +338,6 @@ function Profile({
     banner: brand?.shared_view_banner_url || clinic.cover_image || "",
     tagline: brand?.shared_view_tagline ?? "",
     introduction: brand?.shared_view_introduction ?? "",
-    clinicImage: brand?.shared_view_clinic_image_url ?? "",
-    clinicDescription: brand?.shared_view_clinic_description ?? clinic.short_description,
     primaryColor: normalizeHex(brand?.primary_color ?? "#0A1626"),
     secondaryColor: normalizeHex(brand?.secondary_color ?? "#415469"),
     accent: normalizeHex(brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A"),
@@ -363,8 +355,6 @@ function Profile({
     banner: sharedBanner,
     tagline: sharedTagline,
     introduction: sharedIntroduction,
-    clinicImage: sharedClinicImage,
-    clinicDescription: sharedClinicDescription,
     primaryColor: normalizeHex(primaryColor),
     secondaryColor: normalizeHex(secondaryColor),
     accent: normalizeHex(sharedAccent),
@@ -389,8 +379,6 @@ function Profile({
         shared_view_banner_url: sharedBanner.trim() || undefined,
         shared_view_tagline: sharedTagline.trim() || undefined,
         shared_view_introduction: sharedIntroduction.trim() || undefined,
-        shared_view_clinic_image_url: sharedClinicImage.trim() || undefined,
-        shared_view_clinic_description: sharedClinicDescription.trim() || undefined,
         primary_color: normalizeHex(primaryColor),
         secondary_color: normalizeHex(secondaryColor),
         shared_view_accent_color: normalizeHex(sharedAccent),
@@ -531,25 +519,6 @@ function Profile({
             <p className="text-right text-xs text-muted-foreground">
               {sharedIntroduction.length}/250
             </p>
-            <Field label="Clinic image URL">
-              <Input
-                value={sharedClinicImage}
-                placeholder="https://example.com/clinic-interior.jpg"
-                onChange={(event) => setSharedClinicImage(event.target.value)}
-              />
-            </Field>
-            <Field label="About the clinic for patients">
-              <Textarea
-                value={sharedClinicDescription}
-                maxLength={400}
-                rows={6}
-                placeholder="Describe the clinic, care philosophy and patient experience."
-                onChange={(event) => setSharedClinicDescription(event.target.value)}
-              />
-            </Field>
-            <p className="text-right text-xs text-muted-foreground">
-              {sharedClinicDescription.length}/400
-            </p>
             <Alert>
               <AlertTitle>Automatic clinic details</AlertTitle>
               <AlertDescription>
@@ -633,10 +602,7 @@ function CompactPaletteEditor({
       </div>
       <div className="divide-y rounded-lg border">
         {rows.map(([label, value, onChange, fallback]) => (
-          <div
-            key={label}
-            className="grid grid-cols-[6rem_2.5rem_1fr_2.5rem] items-center gap-2 p-2"
-          >
+          <div key={label} className="grid grid-cols-[6rem_2.5rem_1fr] items-center gap-2 p-2">
             <span className="text-sm font-medium">{label}</span>
             <Input
               type="color"
@@ -645,16 +611,6 @@ function CompactPaletteEditor({
               aria-label={`${label} color swatch`}
               onChange={(event) => onChange(event.target.value.toUpperCase())}
             />
-            <span
-              className="grid size-9 place-items-center rounded-md text-xs font-semibold ring-1 ring-black/10"
-              style={{
-                background: isHexColor(value) ? value : fallback,
-                color: readableForeground(isHexColor(value) ? value : fallback),
-              }}
-              aria-label={`${label} color contrast preview`}
-            >
-              Aa
-            </span>
             <Input
               value={value}
               className="h-9 font-mono uppercase"
@@ -731,14 +687,6 @@ function isHexColor(value: string) {
 
 function normalizeHex(value: string) {
   return value.trim().toUpperCase();
-}
-
-function readableForeground(value: string) {
-  const hex = value.replace("#", "");
-  const red = Number.parseInt(hex.slice(0, 2), 16);
-  const green = Number.parseInt(hex.slice(2, 4), 16);
-  const blue = Number.parseInt(hex.slice(4, 6), 16);
-  return red * 0.299 + green * 0.587 + blue * 0.114 > 150 ? "#0A1626" : "#FFFFFF";
 }
 
 function isSvgLogoUrl(value: string) {

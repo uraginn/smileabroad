@@ -19,8 +19,6 @@ import { StatusBadge } from "@/components/ui-bits";
 import { useMockStore } from "@/lib/mock/store";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import type { Clinic, ClinicBranding, Patient, TreatmentPlan } from "@/types/models";
-import { createDentalPlan } from "../utils/createDentalPlan";
-import { validatePlanForFinalize } from "../rules/clinicalRules";
 
 export function UnifiedPlanShareSection({
   plan,
@@ -43,11 +41,6 @@ export function UnifiedPlanShareSection({
   const canSubmitReview = ["coordinator", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const canShare = ["coordinator", "clinic_owner", "clinic_admin"].includes(role ?? "");
   const [reviewNote, setReviewNote] = useState("");
-  const blockingErrors =
-    plan.dental_plan_data && typeof plan.dental_plan_data === "object"
-      ? validatePlanForFinalize(createDentalPlan(plan.dental_plan_data))
-      : [];
-  const sharingBlocked = blockingErrors.length > 0;
   const publicLinkReady = Boolean(plan.share_token && isTreatmentPlanPubliclyViewable(plan.status));
   const preview = () => {
     const token =
@@ -97,7 +90,7 @@ export function UnifiedPlanShareSection({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                disabled={!publicLinkReady || !canShare || sharingBlocked}
+                disabled={!publicLinkReady || !canShare}
                 onClick={() => void copyLink()}
               >
                 Copy Patient Link
@@ -105,7 +98,6 @@ export function UnifiedPlanShareSection({
               {status === "draft" && canSubmitReview && (
                 <Button
                   variant="outline"
-                  disabled={sharingBlocked}
                   onClick={() => updateStatus(plan.id, plan.clinic_id, "doctor_review", actorId)}
                 >
                   Send for Doctor Review
@@ -115,9 +107,7 @@ export function UnifiedPlanShareSection({
                 <>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="outline" disabled={sharingBlocked}>
-                        Approve Treatment Plan
-                      </Button>
+                      <Button variant="outline">Approve Treatment Plan</Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -226,12 +216,6 @@ export function UnifiedPlanShareSection({
               <p className="text-xs text-muted-foreground">
                 Copy Link becomes available after clinical approval. Private preview does not
                 publish or change the plan status.
-              </p>
-            )}
-            {sharingBlocked && (
-              <p className="text-xs font-medium text-destructive">
-                Resolve {blockingErrors.length} blocking clinical{" "}
-                {blockingErrors.length === 1 ? "error" : "errors"} before sharing.
               </p>
             )}
           </section>

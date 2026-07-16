@@ -504,7 +504,6 @@ export interface TreatmentPlan extends BaseRecord {
   healing_weeks: number;
   status?: TreatmentPlanStatus;
   dentist_id?: string;
-  dentist_ids?: string[];
   coordinator_id?: string;
   clinical_notes?: string;
   clinical_summary?: string;
@@ -575,8 +574,6 @@ export interface ClinicBranding extends BaseRecord {
   shared_view_banner_url?: string;
   shared_view_tagline?: string;
   shared_view_introduction?: string;
-  shared_view_clinic_image_url?: string;
-  shared_view_clinic_description?: string;
   shared_view_accent_color?: string;
   primary_color: string;
   secondary_color: string;

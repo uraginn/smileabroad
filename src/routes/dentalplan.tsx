@@ -270,14 +270,6 @@ function DentalPlanRoute() {
             embedded.patient.dentistId ??
             linkedPatient?.dentist_id ??
             defaultDentist?.id,
-          dentistIds: [
-            ...(existingPlan?.dentist_ids ?? []),
-            ...(embedded.patient.dentistIds ?? []),
-            ...(existingPlan?.dentist_id ? [existingPlan.dentist_id] : []),
-            ...(embedded.patient.dentistId ? [embedded.patient.dentistId] : []),
-            ...(linkedPatient?.dentist_id ? [linkedPatient.dentist_id] : []),
-            ...(defaultDentist?.id ? [defaultDentist.id] : []),
-          ].filter((id, index, ids) => ids.indexOf(id) === index),
           coordinatorId:
             existingPlan?.coordinator_id ??
             embedded.patient.coordinatorId ??
@@ -320,12 +312,6 @@ function DentalPlanRoute() {
         leadId: lead?.id,
         uploadedFiles: caseFiles,
         dentistId: existingPlan?.dentist_id ?? linkedPatient?.dentist_id ?? defaultDentist?.id,
-        dentistIds: [
-          ...(existingPlan?.dentist_ids ?? []),
-          ...(existingPlan?.dentist_id ? [existingPlan.dentist_id] : []),
-          ...(linkedPatient?.dentist_id ? [linkedPatient.dentist_id] : []),
-          ...(defaultDentist?.id ? [defaultDentist.id] : []),
-        ].filter((id, index, ids) => ids.indexOf(id) === index),
         coordinatorId:
           existingPlan?.coordinator_id ??
           lead?.assigned_to ??
@@ -539,7 +525,6 @@ function DentalPlanRoute() {
           ? {
               title: value.patient.planTitle,
               dentist_id: value.patient.dentistId,
-              dentist_ids: value.patient.dentistIds ?? [],
               coordinator_id: value.patient.coordinatorId,
             }
           : {}),
@@ -681,7 +666,6 @@ function DentalPlanRoute() {
         ? {
             title: finalValue.patient.planTitle,
             dentist_id: finalValue.patient.dentistId,
-            dentist_ids: finalValue.patient.dentistIds ?? [],
             coordinator_id: finalValue.patient.coordinatorId,
           }
         : {}),
@@ -918,7 +902,6 @@ function sanitizeTemplatePlan(value: DentalPlanData): DentalPlanData {
       preparationDate: "",
       currency: value.commercial.currency,
       dentistId: value.patient.dentistId,
-      dentistIds: value.patient.dentistIds,
     },
     importedAssessment: { medicalConditions: [], preferredCities: [] },
     travel: {

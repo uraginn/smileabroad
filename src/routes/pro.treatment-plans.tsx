@@ -240,7 +240,6 @@ function Plans() {
           last_name: name.lastName,
           source: "manual" as const,
           dentist_id: dentistId || undefined,
-          dentist_ids: dentistId ? [dentistId] : [],
           coordinator_id: coordinatorId || undefined,
         };
         const { plan } = createPatientAndTreatmentPlan(
@@ -781,7 +780,6 @@ function patientFromLead(
     roadmap_id: lead.roadmap_id,
     treatment_interest: lead.treatment,
     dentist_id: dentistId || undefined,
-    dentist_ids: dentistId ? [dentistId] : [],
     coordinator_id: coordinatorId || lead.assigned_to,
   };
 }
@@ -813,7 +811,6 @@ function createPlanRecord(
     assessment_id: lead?.assessment_id ?? patient.assessment_id,
     roadmap_id: lead?.roadmap_id ?? patient.roadmap_id,
     dentist_id: dentistId || patient.dentist_id,
-    dentist_ids: dentistId || patient.dentist_id ? [dentistId || patient.dentist_id!] : [],
     coordinator_id: coordinatorId || lead?.assigned_to || patient.coordinator_id,
     title: patient.treatment_interest
       ? `${patient.treatment_interest} treatment plan`

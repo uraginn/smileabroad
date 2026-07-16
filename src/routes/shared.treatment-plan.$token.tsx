@@ -10,7 +10,6 @@ import {
   ChevronRight,
   CircleDot,
   Crown,
-  GraduationCap,
   ExternalLink,
   HeartHandshake,
   Link2,
@@ -121,16 +120,6 @@ function SharedPlan() {
         )
       : undefined,
   );
-  const users = useMockStore((s) => s.users);
-  const dentists = useMemo(() => {
-    if (!plan) return [];
-    const ids = [...(plan.dentist_ids ?? []), ...(plan.dentist_id ? [plan.dentist_id] : [])].filter(
-      (id, index, values) => values.indexOf(id) === index,
-    );
-    return ids
-      .map((id) => users.find((member) => member.id === id && member.clinic_id === plan.clinic_id))
-      .filter((member): member is NonNullable<typeof member> => Boolean(member));
-  }, [plan, users]);
   const configuredHotel = useMockStore((s) =>
     plan
       ? s.clinicHotels.find(
@@ -164,10 +153,9 @@ function SharedPlan() {
             resolvedBranding,
             coordinator,
             treatmentDefinitions,
-            dentists,
           )
         : undefined,
-    [plan, clinic, patient, resolvedBranding, coordinator, treatmentDefinitions, dentists],
+    [plan, clinic, patient, resolvedBranding, coordinator, treatmentDefinitions],
   );
   const faqs = useMemo(
     () => (document ? buildTreatmentFaq(document.treatment_groups) : []),
@@ -182,7 +170,6 @@ function SharedPlan() {
             { id: "journey", label: "Journey" },
             ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
             { id: "investment", label: "Investment" },
-            { id: "your-clinic", label: "Your Clinic" },
             ...(faqs.length ? [{ id: "faq", label: "FAQ" }] : []),
             ...(document.patient_notes.length
               ? [{ id: "important-information", label: "Important Information" }]
@@ -220,18 +207,18 @@ function SharedPlan() {
           id="introduction"
           className="shared-section -mx-4 scroll-mt-24 border-b border-slate-200/80 bg-white px-4 py-5 sm:-mx-6 sm:px-6 sm:py-6"
         >
-          <div className="mx-auto flex max-w-4xl flex-col-reverse gap-5 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="mx-auto flex max-w-4xl items-start gap-3 sm:items-center sm:gap-4">
             {document.coordinator?.avatar_url ? (
               <img
                 src={document.coordinator.avatar_url}
                 alt={`${document.coordinator.name}, your clinic coordinator`}
-                className="size-14 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm sm:size-16"
+                className="size-12 shrink-0 rounded-full object-cover ring-2 ring-slate-200 sm:size-14"
               />
             ) : document.clinic?.logo_url ? (
               <img
                 src={document.clinic.logo_url}
                 alt=""
-                className="size-14 shrink-0 object-contain sm:size-16"
+                className="size-12 shrink-0 object-contain sm:size-14"
                 aria-hidden="true"
               />
             ) : (
@@ -247,27 +234,13 @@ function SharedPlan() {
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 A personal note for you
               </p>
-              <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600">
+              <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm leading-6 text-slate-600 sm:line-clamp-3">
                 {document.clinic?.introduction ??
                   "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
-              </p>
-              <p className="mt-3 text-xs text-slate-500">
-                {document.coordinator?.name
-                  ? `${document.coordinator.name}${document.coordinator.title ? ` · ${document.coordinator.title}` : ""}`
-                  : document.clinic?.name}
-                {document.prepared_at
-                  ? ` · ${new Date(document.prepared_at).toLocaleDateString()}`
-                  : ""}
               </p>
             </div>
           </div>
         </section>
-        {document.clinical_team.length > 0 && (
-          <ClinicalTeam
-            team={document.clinical_team}
-            clinicName={document.clinic?.name ?? "Clinic"}
-          />
-        )}
       </div>
       <SectionNavigation items={nav} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -300,7 +273,7 @@ function SharedPlan() {
                 >
                   {index + 1}
                 </span>
-                <div className="rounded-2xl bg-slate-50/80 p-5 ring-1 ring-slate-200/70 md:h-full">
+                <div className="rounded-2xl bg-slate-50/80 p-5 ring-1 ring-slate-200/70 transition-colors hover:bg-white md:h-full">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Step {index + 1}
                   </p>
@@ -360,18 +333,10 @@ function SharedPlan() {
                         document.travel.hotel.room_type,
                         document.travel.hotel.board_type,
                         document.travel.nights ? `${document.travel.nights} nights` : undefined,
-                        configuredHotel?.distance_from_clinic
-                          ? `${configuredHotel.distance_from_clinic} from clinic`
-                          : undefined,
                       ]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
-                    {configuredHotel?.description && (
-                      <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600">
-                        {configuredHotel.description}
-                      </p>
-                    )}
                     {(configuredHotel?.website ?? document.travel.hotel.website) && (
                       <Button className="no-print mt-3" size="sm" variant="outline" asChild>
                         <a
@@ -558,7 +523,6 @@ function SharedPlan() {
             </p>
           ) : null}
         </section>
-        <ClinicProfileSection document={document} />
         {faqs.length > 0 && (
           <section
             id="faq"
@@ -700,12 +664,12 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-white via-white/95 to-white/75" />
       </div>
-      <div className="relative mx-auto flex min-h-72 max-w-6xl flex-col items-center justify-center px-4 py-12 text-center sm:min-h-96 sm:px-6">
+      <div className="relative mx-auto flex min-h-56 max-w-6xl flex-col items-center justify-center px-4 py-10 text-center sm:min-h-64 sm:px-6">
         {clinic.logo_url ? (
           <img
             src={clinic.logo_url}
             alt={`${clinic.name} logo`}
-            className="h-auto max-h-40 w-auto max-w-[min(100%,28rem)] object-contain sm:max-h-56 sm:max-w-[38rem]"
+            className="h-auto max-h-28 w-auto max-w-[min(100%,24rem)] object-contain sm:max-h-32 sm:max-w-[30rem]"
           />
         ) : (
           <span
@@ -724,113 +688,6 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
   );
 }
 
-function ClinicalTeam({
-  team,
-  clinicName,
-}: {
-  team: ReturnType<typeof mapTreatmentPlanToPatientDocument>["clinical_team"];
-  clinicName: string;
-}) {
-  return (
-    <section className="shared-section border-b border-slate-200/80 bg-white py-8 sm:py-10">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Your clinical team
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {team.map((dentist) => (
-            <article
-              key={`${dentist.name}-${dentist.title ?? "dentist"}`}
-              className="print-row flex items-start gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4"
-            >
-              {dentist.avatar_url ? (
-                <img
-                  src={dentist.avatar_url}
-                  alt={dentist.name}
-                  className="size-14 shrink-0 rounded-xl object-cover"
-                />
-              ) : (
-                <span
-                  className="grid size-14 shrink-0 place-items-center rounded-xl bg-slate-900 text-base font-semibold text-white"
-                  aria-hidden="true"
-                >
-                  {dentist.name.charAt(0)}
-                </span>
-              )}
-              <div className="min-w-0">
-                <h3 className="font-semibold text-slate-950">{dentist.name}</h3>
-                <p className="mt-0.5 text-sm text-slate-600">
-                  {[dentist.title, dentist.specialty].filter(Boolean).join(" · ") ||
-                    `Dentist at ${clinicName}`}
-                </p>
-                {dentist.patient_bio && (
-                  <p className="mt-2 line-clamp-3 text-sm leading-5 text-slate-500">
-                    {dentist.patient_bio}
-                  </p>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ClinicProfileSection({
-  document,
-}: {
-  document: ReturnType<typeof mapTreatmentPlanToPatientDocument>;
-}) {
-  const clinic = document.clinic!;
-  return (
-    <section
-      id="your-clinic"
-      className="shared-section -mx-4 scroll-mt-24 bg-slate-950 px-4 py-10 text-white sm:-mx-6 sm:px-6 sm:py-16"
-    >
-      <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10 md:grid-cols-[0.9fr_1.1fr]">
-        {clinic.patient_image_url ? (
-          <img
-            src={clinic.patient_image_url}
-            alt={`${clinic.name} clinic`}
-            className="h-64 w-full object-cover md:h-full md:min-h-80"
-          />
-        ) : (
-          <div className="grid min-h-48 place-items-center bg-white/5 p-8 md:min-h-80">
-            {clinic.logo_url ? (
-              <img src={clinic.logo_url} alt="" className="max-h-28 max-w-[80%] object-contain" />
-            ) : (
-              <GraduationCap className="size-12 text-white/50" aria-hidden="true" />
-            )}
-          </div>
-        )}
-        <div className="p-7 sm:p-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">
-            Your clinic
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{clinic.name}</h2>
-          <p className="mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 text-white/70">
-            {clinic.patient_description}
-          </p>
-          <dl className="mt-7 grid gap-3 border-t border-white/10 pt-5 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-white/50">Location</dt>
-              <dd className="mt-1 font-medium">
-                {[clinic.city, clinic.country].filter(Boolean).join(", ")}
-              </dd>
-            </div>
-            {clinic.website && (
-              <div>
-                <dt className="text-white/50">Website</dt>
-                <dd className="mt-1 truncate font-medium">{clinic.website}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      </div>
-    </section>
-  );
-}
 function SectionNavigation({ items }: { items: { id: string; label: string }[] }) {
   const [active, setActive] = useState(items[0]?.id);
   useEffect(() => {
@@ -1400,33 +1257,37 @@ function IncludedServicesPanel({ services, accent }: { services: string[]; accen
         description="Your confirmed services, grouped so you can see what is covered at a glance."
         compact
       />
-      <div className="mt-6 divide-y divide-slate-200/80 overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
-        {groupIncludedServices(services).flatMap((group) =>
-          group.services.map((service) => (
-            <div
-              key={`${group.label}-${service}`}
-              className="print-row flex items-start gap-4 p-4 sm:px-5"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-50 ring-1 ring-slate-200/70">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {groupIncludedServices(services).map((group) => (
+          <div
+            key={group.label}
+            className="print-row min-w-0 rounded-2xl bg-slate-50/70 p-5 ring-1 ring-slate-200/70 sm:p-6"
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
                 <ServiceGroupIcon label={group.label} />
               </span>
-              <div className="min-w-0 flex-1">
+              <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {group.label}
+                  Included
                 </p>
-                <h3 className="mt-0.5 font-medium text-slate-950">{service}</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Included in your confirmed clinic package.
-                </p>
+                <h3 className="mt-0.5 font-semibold">{group.label}</h3>
               </div>
-              <Check
-                className="mt-2 size-4 shrink-0"
-                style={{ color: accent }}
-                aria-hidden="true"
-              />
             </div>
-          )),
-        )}
+            <div className="mt-4 space-y-3">
+              {group.services.map((service) => (
+                <p key={service} className="flex gap-2.5 text-sm leading-6 text-slate-700">
+                  <span
+                    className="mt-2.5 size-1.5 shrink-0 rounded-full"
+                    style={{ background: accent }}
+                    aria-hidden="true"
+                  />
+                  {service}
+                </p>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
