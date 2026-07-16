@@ -43,6 +43,8 @@ export interface CarePlanClinicPresentation {
   banner_url?: string;
   tagline?: string;
   introduction?: string;
+  patient_image_url?: string;
+  patient_description?: string;
   primary_color?: string;
   secondary_color?: string;
   accent_color?: string;
@@ -116,6 +118,13 @@ export interface PatientTreatmentDocument extends CarePlanPresentation {
   patient_notes: string[];
   diagrams?: Pick<DentalPlanData, "currentConditions" | "proposedTreatments">;
   coordinator?: { name: string; title?: string; avatar_url?: string };
+  clinical_team: Array<{
+    name: string;
+    title?: string;
+    specialty?: string;
+    avatar_url?: string;
+    patient_bio?: string;
+  }>;
 }
 
 export function mapPreliminaryRoadmap(input: {
@@ -495,6 +504,7 @@ export function mapTreatmentPlanToPatientDocument(
   branding?: ClinicBranding,
   coordinator?: User,
   treatmentDefinitions: ClinicTreatmentDefinition[] = [],
+  dentists: User[] = [],
 ): PatientTreatmentDocument {
   const totals = calculateTreatmentPlanTotals(plan);
   const treatment_groups = buildPatientTreatmentTable(plan, treatmentDefinitions).map(
@@ -549,6 +559,8 @@ export function mapTreatmentPlanToPatientDocument(
       banner_url: branding?.shared_view_banner_url || clinic.cover_image,
       tagline: branding?.shared_view_tagline ?? clinic.short_description,
       introduction: branding?.shared_view_introduction,
+      patient_image_url: branding?.shared_view_clinic_image_url,
+      patient_description: branding?.shared_view_clinic_description ?? clinic.short_description,
       primary_color: branding?.primary_color,
       secondary_color: branding?.secondary_color,
       accent_color: branding?.shared_view_accent_color ?? branding?.primary_color,
@@ -559,6 +571,13 @@ export function mapTreatmentPlanToPatientDocument(
     coordinator: coordinator
       ? { name: coordinator.name, title: coordinator.title, avatar_url: coordinator.avatar_url }
       : undefined,
+    clinical_team: dentists.map((dentist) => ({
+      name: dentist.name,
+      title: dentist.title,
+      specialty: dentist.specialty,
+      avatar_url: dentist.avatar_url,
+      patient_bio: dentist.patient_bio,
+    })),
     price: {
       currency: plan.currency ?? "EUR",
       subtotal: totals.subtotal,

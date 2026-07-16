@@ -145,6 +145,7 @@ export type DentalPlannerPatient = {
   treatmentInterest?: string;
   source?: string;
   dentistId?: string;
+  dentistIds?: string[];
   coordinatorId?: string;
   assessmentId?: string;
   roadmapId?: string;

@@ -62,7 +62,7 @@ import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import type { DentalPlan } from "@/features/dentalplan/types/dental-plan.types";
 
 const MOCK_STORAGE_KEY = "smileabroad-mock-v1";
-const MOCK_STORAGE_VERSION = 29;
+const MOCK_STORAGE_VERSION = 30;
 const DTKURT_CLINIC_ID = "clinic_istanbul";
 const OBSOLETE_PLANNER_DRAFT_KEYS = [
   "smileabroad.dentalplan.dev.v2",
@@ -1181,6 +1181,11 @@ export const useMockStore = create<Store>()(
           healing_weeks: input.plan.healing_weeks ?? 0,
           status: normalizeTreatmentPlanStatus(input.plan.status),
           dentist_id: input.plan.dentist_id ?? patient.dentist_id,
+          dentist_ids: [
+            ...(input.plan.dentist_ids ?? []),
+            ...(input.plan.dentist_id ? [input.plan.dentist_id] : []),
+            ...(patient.dentist_id ? [patient.dentist_id] : []),
+          ].filter((value, index, values) => values.indexOf(value) === index),
           coordinator_id: input.plan.coordinator_id ?? lead?.assigned_to ?? patient.coordinator_id,
           clinical_findings: input.plan.clinical_findings ?? [],
           treatment_objectives: input.plan.treatment_objectives ?? [],
@@ -2413,6 +2418,10 @@ export const useMockStore = create<Store>()(
               ? plan.preliminary_suggestions
               : (roadmap?.treatment_estimates ?? []),
             status: normalizeTreatmentPlanStatus(plan.status),
+            dentist_ids: [
+              ...(Array.isArray(plan.dentist_ids) ? plan.dentist_ids : []),
+              ...(plan.dentist_id ? [plan.dentist_id] : []),
+            ].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index),
             items: Array.isArray(plan.items) ? plan.items : [],
             clinical_findings: Array.isArray(plan.clinical_findings) ? plan.clinical_findings : [],
             treatment_objectives: Array.isArray(plan.treatment_objectives)
@@ -2580,6 +2589,10 @@ export const useMockStore = create<Store>()(
                 shared_view_tagline: item.shared_view_tagline ?? fallback?.shared_view_tagline,
                 shared_view_introduction:
                   item.shared_view_introduction ?? fallback?.shared_view_introduction,
+                shared_view_clinic_image_url:
+                  item.shared_view_clinic_image_url ?? fallback?.shared_view_clinic_image_url,
+                shared_view_clinic_description:
+                  item.shared_view_clinic_description ?? fallback?.shared_view_clinic_description,
                 primary_color: item.primary_color || fallback?.primary_color || "#0A1626",
                 secondary_color: item.secondary_color || fallback?.secondary_color || "#415469",
                 shared_view_accent_color:

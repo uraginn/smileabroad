@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, LockKeyhole, X } from "lucide-react";
+import { Check, ChevronDown, LockKeyhole, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -837,15 +837,18 @@ export function TreatmentPlanner({
               </SelectContent>
             </Select>
           )}
-          <AssignmentSelect
-            label="Dentist"
-            value={history.state.patient.dentistId}
+          <MultiAssignmentSelect
+            label="Dentists"
+            values={
+              history.state.patient.dentistIds ??
+              (history.state.patient.dentistId ? [history.state.patient.dentistId] : [])
+            }
             users={clinicUsers.filter((user) => user.role === "dentist")}
             disabled={readOnly}
-            onChange={(dentistId) =>
+            onChange={(dentistIds) =>
               history.commit((plan) => ({
                 ...plan,
-                patient: { ...plan.patient, dentistId },
+                patient: { ...plan.patient, dentistId: dentistIds[0], dentistIds },
                 updatedAt: new Date().toISOString(),
               }))
             }
@@ -1319,6 +1322,67 @@ function AssignmentSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function MultiAssignmentSelect({
+  label,
+  values,
+  users,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  users: Array<{ id: string; name: string }>;
+  disabled?: boolean;
+  onChange: (values: string[]) => void;
+}) {
+  const selected = users.filter((user) => values.includes(user.id));
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="h-9 w-48 justify-between px-3 font-normal"
+          aria-label={`Assigned ${label.toLowerCase()}`}
+        >
+          <span className="truncate">
+            {selected.length
+              ? `${selected.length} ${selected.length === 1 ? "dentist" : "dentists"}`
+              : label}
+          </span>
+          <ChevronDown className="size-4 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 p-2">
+        <p className="px-2 pb-2 text-xs font-medium text-muted-foreground">Clinical team</p>
+        <div className="space-y-1">
+          {users.map((user) => {
+            const checked = values.includes(user.id);
+            return (
+              <Button
+                key={user.id}
+                type="button"
+                variant="ghost"
+                className="h-auto w-full justify-start gap-2 px-2 py-2 font-normal"
+                aria-pressed={checked}
+                onClick={() =>
+                  onChange(checked ? values.filter((id) => id !== user.id) : [...values, user.id])
+                }
+              >
+                <span className="grid size-4 shrink-0 place-items-center rounded border">
+                  {checked && <Check className="size-3" />}
+                </span>
+                <span className="truncate">{user.name}</span>
+              </Button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
