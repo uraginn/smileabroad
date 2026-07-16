@@ -80,6 +80,20 @@ export function validateClinicalTreatment(
       current.includes("extraction-required") || types.includes("extraction");
     const implantContext = hasImplantAt(plan, tooth);
 
+    const exactDuplicates = existing.filter((item) => item.treatmentType === treatment);
+    if (exactDuplicates.length) {
+      results.push({
+        allowed: false,
+        severity: "block",
+        outcome: "conflict",
+        code: "duplicate_treatment",
+        message: `Tooth ${tooth} already has this treatment. Click it again with the active tool to remove it.`,
+        affectedTeeth: [tooth],
+        conflictingTreatmentIds: exactDuplicates.map((item) => item.id),
+      });
+      continue;
+    }
+
     if (treatment === "extraction" && missing) {
       results.push(
         block(
@@ -148,7 +162,7 @@ export function validateClinicalTreatment(
         severity: "block",
         outcome: "replacement",
         code: "replace_restoration",
-        message: `Tooth ${tooth}: the selected treatment conflicts with an existing final restoration. Remove or replace that restoration first.`,
+        message: `Tooth ${tooth} already has a final restoration. Remove or replace it before adding another.`,
         affectedTeeth: [tooth],
         conflictingTreatmentIds: existing
           .filter((item) => conflictingTypes.includes(item.treatmentType))

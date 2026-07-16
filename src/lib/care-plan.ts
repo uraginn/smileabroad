@@ -497,9 +497,24 @@ export function mapTreatmentPlanToPatientDocument(
   treatmentDefinitions: ClinicTreatmentDefinition[] = [],
 ): PatientTreatmentDocument {
   const totals = calculateTreatmentPlanTotals(plan);
-  const treatment_groups = buildPatientTreatmentTable(plan, treatmentDefinitions);
+  const treatment_groups = buildPatientTreatmentTable(plan, treatmentDefinitions).map(
+    (group, index) => ({
+      ...group,
+      id: `patient-treatment-group-${index + 1}`,
+      treatment_key: undefined,
+    }),
+  );
   const journey = buildJourney(plan);
   const embedded = isDentalPlanData(plan.dental_plan_data) ? plan.dental_plan_data : undefined;
+  const patientGroupIds = new Map<string, string>();
+  const patientGroupId = (internalId?: string) => {
+    if (!internalId) return undefined;
+    const existing = patientGroupIds.get(internalId);
+    if (existing) return existing;
+    const safeId = `patient-group-${patientGroupIds.size + 1}`;
+    patientGroupIds.set(internalId, safeId);
+    return safeId;
+  };
   const travel = buildTravel(plan, branding);
   const statusLabel: { [key: string]: string } = {
     draft: "Clinic preview",
@@ -523,7 +538,7 @@ export function mapTreatmentPlanToPatientDocument(
     healing_information: plan.healing_weeks
       ? `${plan.healing_weeks} planned healing week${plan.healing_weeks === 1 ? "" : "s"}`
       : undefined,
-    reference: plan.id,
+    reference: "Patient Treatment Plan",
     prepared_at: plan.prepared_at ?? plan.created_at,
     status_label: statusLabel[plan.status ?? "draft"] ?? "Treatment Plan",
     clinic: {
@@ -578,8 +593,31 @@ export function mapTreatmentPlanToPatientDocument(
     ],
     diagrams: embedded
       ? {
-          currentConditions: embedded.currentConditions,
-          proposedTreatments: embedded.proposedTreatments,
+          currentConditions: Object.fromEntries(
+            Object.entries(embedded.currentConditions).map(([tooth, condition]) => [
+              tooth,
+              condition
+                ? { toothNumber: condition.toothNumber, conditions: condition.conditions }
+                : condition,
+            ]),
+          ),
+          proposedTreatments: embedded.proposedTreatments.map((treatment, index) => ({
+            id: `patient-treatment-${index + 1}`,
+            toothNumbers: treatment.toothNumbers,
+            treatmentType: treatment.treatmentType,
+            visualKey: treatment.visualKey,
+            displayName: treatment.displayName,
+            implantBrand: treatment.implantBrand,
+            treatmentGroupId: patientGroupId(treatment.treatmentGroupId),
+            layer: treatment.layer,
+            scope: treatment.scope,
+            sequence: treatment.sequence,
+            stage: treatment.stage,
+            supportType: treatment.supportType,
+            material: treatment.material,
+            bridgeType: treatment.bridgeType,
+            bridgeRoles: treatment.bridgeRoles,
+          })),
         }
       : undefined,
     disclaimer:

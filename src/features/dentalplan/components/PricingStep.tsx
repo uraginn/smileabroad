@@ -102,154 +102,156 @@ export function PricingStep({
           <h2 className="text-lg font-semibold">Commercial</h2>
           <p className="text-sm text-muted-foreground">Plan totals, discount and visit payments.</p>
         </header>
-        <div className="space-y-5">
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2">
-            <Label htmlFor="commercial-currency">Currency</Label>
-            <div className="w-32">
-              <Select
-                value={commercial.currency}
-                onValueChange={(currency) =>
-                  update({ currency: currency as typeof commercial.currency })
-                }
-              >
-                <SelectTrigger id="commercial-currency">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["GBP", "EUR", "USD", "TRY"].map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </section>
-          <Separator />
-          <section aria-labelledby="service-costs-heading" className="space-y-3">
-            <h3 id="service-costs-heading" className="font-semibold">
-              Package costs
-            </h3>
-            <div className="divide-y rounded-lg border">
-              <CostRow
-                label="Hotel"
-                enabled={plan.travel.hotelIncluded}
-                value={commercial.hotelTotal}
-                onChange={(hotelTotal) => update({ hotelTotal })}
-              />
-              <CostRow
-                label={transferCostLabel(plan)}
-                enabled={Boolean(billableCommercial.transferTotal || hasTransfers(plan))}
-                value={commercial.transferTotal}
-                onChange={(transferTotal) => update({ transferTotal })}
-              />
-              <CostRow
-                label="Other package costs"
-                enabled
-                value={commercial.otherServiceTotal}
-                onChange={(otherServiceTotal) => update({ otherServiceTotal })}
-              />
-            </div>
-          </section>
-          <Separator />
-          <section aria-labelledby="discount-heading" className="space-y-3">
-            <h3 id="discount-heading" className="font-semibold">
-              Discount
-            </h3>
-            <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-              <div className="space-y-1.5">
-                <Label>Discount type</Label>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+          <div className="space-y-5">
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2">
+              <Label htmlFor="commercial-currency">Currency</Label>
+              <div className="w-32">
                 <Select
-                  value={commercial.discountType}
-                  onValueChange={(discountType) =>
-                    update({
-                      discountType: discountType as typeof commercial.discountType,
-                      discountValue: 0,
-                    })
+                  value={commercial.currency}
+                  onValueChange={(currency) =>
+                    update({ currency: currency as typeof commercial.currency })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="commercial-currency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No discount</SelectItem>
-                    <SelectItem value="fixed">Fixed amount</SelectItem>
-                    <SelectItem value="percentage">Percentage</SelectItem>
+                    {["GBP", "EUR", "USD", "TRY"].map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Money
-                label={commercial.discountType === "percentage" ? "Percentage" : "Amount"}
-                value={commercial.discountValue}
-                disabled={commercial.discountType === "none"}
-                max={commercial.discountType === "percentage" ? 100 : undefined}
-                onChange={(discountValue) => update({ discountValue })}
-              />
-              <div className="min-w-36 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                <span className="block text-xs text-muted-foreground">Calculated discount</span>
-                <strong>{formatQuoteMoney(totals.discount, commercial.currency)}</strong>
-              </div>
-            </div>
-          </section>
-          <Separator />
-          <section aria-labelledby="payment-schedule-heading" className="space-y-3">
-            <h3 id="payment-schedule-heading" className="font-semibold">
-              Payment schedule
-            </h3>
-            {commercial.paymentSchedule.slice(0, 2).map((payment) => (
-              <div
-                key={payment.id}
-                className="grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[90px_150px_1fr] sm:items-center"
-              >
-                <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
-                <Input
-                  aria-label="Payment amount"
-                  type="number"
-                  min={0}
-                  value={payment.amount}
-                  onChange={(e) =>
-                    updatePayment(
-                      commercial,
-                      payment.id,
-                      { amount: Math.max(0, Number(e.target.value)) },
-                      update,
-                    )
-                  }
+            </section>
+            <Separator />
+            <section aria-labelledby="service-costs-heading" className="space-y-3">
+              <h3 id="service-costs-heading" className="font-semibold">
+                Package costs
+              </h3>
+              <div className="divide-y rounded-lg border">
+                <CostRow
+                  label="Hotel"
+                  enabled={plan.travel.hotelIncluded}
+                  value={commercial.hotelTotal}
+                  onChange={(hotelTotal) => update({ hotelTotal })}
                 />
-                <Input
-                  aria-label="Payment due description"
-                  value={payment.due}
-                  onChange={(e) =>
-                    updatePayment(commercial, payment.id, { due: e.target.value }, update)
-                  }
+                <CostRow
+                  label={transferCostLabel(plan)}
+                  enabled={Boolean(billableCommercial.transferTotal || hasTransfers(plan))}
+                  value={commercial.transferTotal}
+                  onChange={(transferTotal) => update({ transferTotal })}
+                />
+                <CostRow
+                  label="Other package costs"
+                  enabled
+                  value={commercial.otherServiceTotal}
+                  onChange={(otherServiceTotal) => update({ otherServiceTotal })}
                 />
               </div>
-            ))}
-            <div className="flex items-center justify-between border-t px-3 pt-3 text-sm font-semibold">
-              <span>Total</span>
-              <span>{formatQuoteMoney(totals.total, commercial.currency)}</span>
-            </div>
-            {scheduled > totals.total && (
-              <p className="rounded bg-warning/15 p-2 text-sm">
-                Scheduled payments exceed the current plan total.
-              </p>
-            )}
-            {scheduled <= totals.total && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2 text-sm">
-                <span>Remaining amount</span>
-                <span className="font-medium">
-                  {formatQuoteMoney(Math.max(0, totals.total - scheduled), commercial.currency)}
-                </span>
-                {totals.total > 0 && scheduled === totals.total && (
-                  <span className="text-success">Payment schedule matches the final total.</span>
-                )}
+            </section>
+            <Separator />
+            <section aria-labelledby="discount-heading" className="space-y-3">
+              <h3 id="discount-heading" className="font-semibold">
+                Discount
+              </h3>
+              <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                <div className="space-y-1.5">
+                  <Label>Discount type</Label>
+                  <Select
+                    value={commercial.discountType}
+                    onValueChange={(discountType) =>
+                      update({
+                        discountType: discountType as typeof commercial.discountType,
+                        discountValue: 0,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No discount</SelectItem>
+                      <SelectItem value="fixed">Fixed amount</SelectItem>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Money
+                  label={commercial.discountType === "percentage" ? "Percentage" : "Amount"}
+                  value={commercial.discountValue}
+                  disabled={commercial.discountType === "none"}
+                  max={commercial.discountType === "percentage" ? 100 : undefined}
+                  onChange={(discountValue) => update({ discountValue })}
+                />
+                <div className="min-w-36 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                  <span className="block text-xs text-muted-foreground">Calculated discount</span>
+                  <strong>{formatQuoteMoney(totals.discount, commercial.currency)}</strong>
+                </div>
               </div>
-            )}
-          </section>
-          <Separator />
-          <section
+            </section>
+            <Separator />
+            <section aria-labelledby="payment-schedule-heading" className="space-y-3">
+              <h3 id="payment-schedule-heading" className="font-semibold">
+                Payment schedule
+              </h3>
+              {commercial.paymentSchedule.slice(0, 2).map((payment) => (
+                <div
+                  key={payment.id}
+                  className="grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[90px_150px_1fr] sm:items-center"
+                >
+                  <div className="flex min-h-9 items-center font-medium">{payment.label}</div>
+                  <Input
+                    aria-label="Payment amount"
+                    type="number"
+                    min={0}
+                    value={payment.amount}
+                    onChange={(e) =>
+                      updatePayment(
+                        commercial,
+                        payment.id,
+                        { amount: Math.max(0, Number(e.target.value)) },
+                        update,
+                      )
+                    }
+                  />
+                  <Input
+                    aria-label="Payment due description"
+                    value={payment.due}
+                    onChange={(e) =>
+                      updatePayment(commercial, payment.id, { due: e.target.value }, update)
+                    }
+                  />
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t px-3 pt-3 text-sm font-semibold">
+                <span>Total</span>
+                <span>{formatQuoteMoney(totals.total, commercial.currency)}</span>
+              </div>
+              {scheduled !== totals.total && (
+                <p className="rounded bg-warning/15 p-2 text-sm">
+                  Scheduled payments {scheduled > totals.total ? "exceed" : "do not yet match"} the
+                  current plan total.
+                </p>
+              )}
+              {scheduled <= totals.total && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2 text-sm">
+                  <span>Remaining amount</span>
+                  <span className="font-medium">
+                    {formatQuoteMoney(Math.max(0, totals.total - scheduled), commercial.currency)}
+                  </span>
+                  {totals.total > 0 && scheduled === totals.total && (
+                    <span className="text-success">Payment schedule matches the final total.</span>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+          <aside
             aria-labelledby="commercial-summary-heading"
-            className="space-y-2 rounded-xl bg-primary px-4 py-4 text-primary-foreground"
+            className="space-y-2 rounded-xl bg-primary px-4 py-4 text-primary-foreground lg:sticky lg:top-24 lg:self-start"
           >
             <h3 id="commercial-summary-heading" className="mb-3 font-semibold">
               Commercial summary
@@ -265,7 +267,22 @@ export function PricingStep({
               value={formatQuoteMoney(totals.total, commercial.currency)}
               strong
             />
-          </section>
+            <Separator className="my-3 bg-primary-foreground/25" />
+            <Row
+              label="Visit 1"
+              value={formatQuoteMoney(
+                commercial.paymentSchedule[0]?.amount ?? 0,
+                commercial.currency,
+              )}
+            />
+            <Row
+              label="Visit 2"
+              value={formatQuoteMoney(
+                commercial.paymentSchedule[1]?.amount ?? 0,
+                commercial.currency,
+              )}
+            />
+          </aside>
         </div>
       </fieldset>
     </section>

@@ -103,6 +103,7 @@ export type ToothTreatment = {
   treatmentKey?: string;
   visualKey?: TreatmentType;
   displayName?: string;
+  implantBrand?: string;
   treatmentGroupId?: string;
   layer?: TreatmentLayer;
   scope?: TreatmentScope;
@@ -227,6 +228,7 @@ export type EffectiveTreatmentDefinition = {
   perTooth: boolean;
   clinicalBehavior: ClinicalTreatmentBehavior;
   defaultMaterial?: ToothTreatment["material"];
+  implantBrand?: string;
   system: boolean;
   prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
 };
@@ -288,6 +290,7 @@ export interface DentalPlanStudioProps {
     perTooth?: boolean;
     clinicalBehavior?: ClinicalTreatmentBehavior;
     defaultMaterial?: ToothTreatment["material"];
+    implantBrand?: string;
     prices: Partial<Record<"GBP" | "EUR" | "USD" | "TRY", number>>;
   }>;
   templates?: Array<{

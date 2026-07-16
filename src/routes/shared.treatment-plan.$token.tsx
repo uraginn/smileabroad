@@ -16,7 +16,6 @@ import {
   Mail,
   Phone,
   Plane,
-  Printer,
   ShieldCheck,
   Sparkles,
   Stethoscope,
@@ -206,43 +205,39 @@ function SharedPlan() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <section
           id="introduction"
-          className="shared-section -mx-4 scroll-mt-24 rounded-b-[2rem] bg-stone-100/70 px-4 py-12 sm:-mx-6 sm:px-6 sm:py-16"
+          className="shared-section -mx-4 scroll-mt-24 border-b border-slate-200/80 bg-white px-4 py-5 sm:-mx-6 sm:px-6 sm:py-6"
         >
-          <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:text-left">
+          <div className="mx-auto flex max-w-4xl items-start gap-3 sm:items-center sm:gap-4">
             {document.coordinator?.avatar_url ? (
               <img
                 src={document.coordinator.avatar_url}
                 alt={`${document.coordinator.name}, your clinic coordinator`}
-                className="size-24 shrink-0 rounded-full bg-white object-cover p-1 shadow-lg ring-4 ring-white sm:size-28"
-                style={{ outline: `2px solid ${accent}` }}
+                className="size-12 shrink-0 rounded-full object-cover ring-2 ring-slate-200 sm:size-14"
+              />
+            ) : document.clinic?.logo_url ? (
+              <img
+                src={document.clinic.logo_url}
+                alt=""
+                className="size-12 shrink-0 object-contain sm:size-14"
+                aria-hidden="true"
               />
             ) : (
               <span
-                className="grid size-24 shrink-0 place-items-center rounded-full text-3xl font-semibold text-white shadow-lg sm:size-28"
+                className="grid size-12 shrink-0 place-items-center rounded-full text-sm font-semibold text-white sm:size-14"
                 style={{ background: primary }}
                 aria-hidden="true"
               >
                 {document.coordinator?.name.charAt(0) ?? document.clinic?.name.charAt(0)}
               </span>
             )}
-            <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="min-w-0 max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 A personal note for you
               </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
-                Prepared specifically for {document.patient_name?.split(" ")[0] ?? "you"}
-              </h2>
-              <p className="mt-4 whitespace-pre-line text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+              <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm leading-6 text-slate-600 sm:line-clamp-3">
                 {document.clinic?.introduction ??
                   "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
               </p>
-              {document.coordinator && (
-                <p className="mt-5 text-sm text-slate-600">
-                  <span className="font-medium text-slate-900">{document.coordinator.name}</span>
-                  {document.coordinator.title ? ` · ${document.coordinator.title}` : ""}
-                  <span className="block text-muted-foreground">Your clinic contact</span>
-                </p>
-              )}
             </div>
           </div>
         </section>
@@ -655,7 +650,7 @@ function SharedPlan() {
 function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
   const clinic = document.clinic!;
   return (
-    <header className="shared-hero relative overflow-hidden bg-slate-950 text-white">
+    <header className="shared-hero relative overflow-hidden bg-white text-slate-950">
       <div
         className="absolute inset-x-0 top-0 z-20 h-1"
         style={{
@@ -665,69 +660,29 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
       />
       <div className="absolute inset-0">
         {clinic.banner_url && (
-          <img src={clinic.banner_url} alt="" className="size-full object-cover" />
+          <img src={clinic.banner_url} alt="" className="size-full object-cover opacity-55" />
         )}
-        <div className="absolute inset-x-0 top-0 h-[72%] bg-gradient-to-b from-white via-white/95 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/70" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-slate-950/55 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white via-white/95 to-white/75" />
       </div>
-      <div className="relative mx-auto flex min-h-80 max-w-6xl flex-col items-center justify-end px-4 py-10 text-center sm:min-h-96 sm:px-6 sm:py-14">
-        <div className="no-print absolute right-4 top-7 flex gap-2 sm:right-6">
-          <Button
-            size="sm"
-            className="border-slate-900/10 bg-slate-950/70 text-white shadow-lg backdrop-blur-md hover:bg-slate-950/85"
-            onClick={() => window.print()}
-          >
-            <Printer />
-            Print
-          </Button>
-          {clinic.website && (
-            <Button
-              size="sm"
-              className="border-slate-900/10 bg-slate-950/70 text-white shadow-lg backdrop-blur-md hover:bg-slate-950/85"
-              asChild
-            >
-              <a href={clinic.website} target="_blank" rel="noreferrer">
-                <ExternalLink />
-                Website
-              </a>
-            </Button>
-          )}
-        </div>
+      <div className="relative mx-auto flex min-h-56 max-w-6xl flex-col items-center justify-center px-4 py-10 text-center sm:min-h-64 sm:px-6">
         {clinic.logo_url ? (
           <img
             src={clinic.logo_url}
             alt={`${clinic.name} logo`}
-            className="mb-8 h-auto max-h-48 w-auto max-w-[min(100%,33rem)] object-contain sm:max-h-60 sm:max-w-[42rem]"
-            style={{ filter: "drop-shadow(0 2px 3px rgba(15,23,42,0.45))" }}
+            className="h-auto max-h-28 w-auto max-w-[min(100%,24rem)] object-contain sm:max-h-32 sm:max-w-[30rem]"
           />
         ) : (
           <span
-            className="mb-6 grid size-16 place-items-center rounded-full border border-white/25 text-2xl font-semibold text-white shadow-xl backdrop-blur-md sm:size-20"
-            style={{ background: "color-mix(in srgb, var(--shared-primary) 80%, transparent)" }}
+            className="grid size-14 place-items-center rounded-full text-xl font-semibold text-white sm:size-16"
+            style={{ background: "var(--shared-primary)" }}
             aria-label={`${clinic.name} logo fallback`}
           >
             {clinic.name.charAt(0)}
           </span>
         )}
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/75">
-            {clinic.name}
-          </p>
-          {clinic.tagline && (
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
-              {clinic.tagline}
-            </p>
-          )}
-          <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
-            Treatment Plan & Cost Estimate
-          </h1>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-white/70 sm:text-sm">
-            <span>{new Date(document.prepared_at).toLocaleDateString()}</span>
-            <span aria-hidden="true">•</span>
-            <span>Ref. {document.reference}</span>
-          </div>
-        </div>
+        <h1 className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-slate-700 sm:text-base">
+          {clinic.name}
+        </h1>
       </div>
     </header>
   );

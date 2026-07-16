@@ -102,6 +102,28 @@ export const BRIDGE_SYSTEM_DEFINITIONS = [
     prices: { GBP: 110, EUR: 125, USD: 140, TRY: 5_800 },
   },
 ] as const;
+export const IMPLANT_BRAND_DEFINITIONS = [
+  {
+    treatmentKey: "neodent-implant",
+    displayName: "Neodent by Straumann Group Implant",
+    implantBrand: "Neodent by Straumann Group",
+    baseTreatmentKey: "dental-implant" as const,
+    visualKey: "dental-implant" as const,
+    category: "Implant",
+    clinicalBehavior: "tooth" as const,
+    prices: { GBP: 350 },
+  },
+  {
+    treatmentKey: "straumann-implant",
+    displayName: "Straumann Implant",
+    implantBrand: "Straumann",
+    baseTreatmentKey: "dental-implant" as const,
+    visualKey: "dental-implant" as const,
+    category: "Implant",
+    clinicalBehavior: "tooth" as const,
+    prices: {},
+  },
+] as const;
 export const TREATMENT_DEFINITIONS: TreatmentDefinition[] = definitions.map(
   ([type, label, short, color, supported, perTooth]) => ({
     type,
@@ -206,7 +228,12 @@ export const TREATMENT_RELATIONSHIPS: Partial<Record<TreatmentType, TreatmentRel
   },
   "root-canal-treatment": { role: "procedure", target: "natural-tooth", scope: "tooth" },
   "post-core": { role: "support", target: "natural-tooth", scope: "tooth" },
-  bridge: { role: "prosthetic", target: "tooth-site", scope: "span" },
+  bridge: {
+    role: "prosthetic",
+    target: "tooth-site",
+    scope: "span",
+    conflictsWith: [...FINAL_CROWNS, "implant-crown", "veneer", "composite-bonding"],
+  },
   pontic: { role: "prosthetic", target: "tooth-site", scope: "tooth" },
   whitening: { role: "restoration", target: "arch", scope: "arch" },
   "bone-graft": {

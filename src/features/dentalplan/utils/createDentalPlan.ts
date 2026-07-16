@@ -202,6 +202,10 @@ function normalizeTreatments(value: DentalPlan["proposedTreatments"] | undefined
     const porcelainBridge = legacyBridge && item.material === "porcelain-metal";
     return {
       ...item,
+      implantBrand:
+        text(item.implantBrand) ||
+        text((item as ToothTreatment & { implant_brand?: string }).implant_brand) ||
+        undefined,
       treatmentType: type,
       treatmentDefinitionId: legacyBridge ? undefined : item.treatmentDefinitionId,
       treatmentKey: legacyBridge

@@ -47,6 +47,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   BRIDGE_SYSTEM_DEFINITIONS,
+  IMPLANT_BRAND_DEFINITIONS,
   TREATMENT_DEFINITIONS,
 } from "@/features/dentalplan/data/treatmentDefinitions";
 import { DEFAULT_CLINICAL_SERVICES } from "@/features/dentalplan/data/serviceDefinitions";
@@ -143,10 +144,24 @@ function DentalPlannerSettings() {
       </div>
     );
   const rows = [
-    ...TREATMENT_DEFINITIONS.filter((base) => base.type !== "bridge").map(
+    ...TREATMENT_DEFINITIONS.filter(
+      (base) => !["bridge", "dental-implant"].includes(base.type),
+    ).map(
       (base) =>
         clinicDefinitions.find((item) => item.treatment_key === base.type && item.system) ??
         systemTreatment(clinicId, base.type, base.label, base.perTooth),
+    ),
+    ...IMPLANT_BRAND_DEFINITIONS.map(
+      (base) =>
+        clinicDefinitions.find((item) => item.treatment_key === base.treatmentKey && item.system) ??
+        systemTreatment(clinicId, base.treatmentKey, base.displayName, true, {
+          category: base.category,
+          prices: { ...base.prices },
+          baseTreatmentKey: "dental-implant",
+          visualKey: "dental-implant",
+          clinicalBehavior: "tooth",
+          implantBrand: base.implantBrand,
+        }),
     ),
     ...BRIDGE_SYSTEM_DEFINITIONS.map(
       (base) =>
@@ -1397,6 +1412,7 @@ function systemTreatment(
     visualKey?: string;
     clinicalBehavior?: ClinicTreatmentDefinition["clinical_behavior"];
     defaultMaterial?: ClinicTreatmentDefinition["default_material"];
+    implantBrand?: string;
   } = {},
 ): ClinicTreatmentDefinition {
   const baseTreatmentKey = options.baseTreatmentKey ?? key;
@@ -1417,6 +1433,7 @@ function systemTreatment(
     rule_profile_key: baseTreatmentKey,
     clinical_behavior: options.clinicalBehavior ?? (perTooth ? "tooth" : "arch"),
     default_material: options.defaultMaterial,
+    implant_brand: options.implantBrand,
     created_at: "",
     updated_at: "",
     created_by: "system",

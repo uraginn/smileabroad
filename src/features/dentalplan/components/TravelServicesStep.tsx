@@ -1,11 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, ExternalLink, X } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Check, ChevronsUpDown, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
 import { DEFAULT_CLINICAL_SERVICES, TRAVEL_SERVICES } from "../data/serviceDefinitions";
 
@@ -107,30 +102,12 @@ export function TravelServicesStep({
             Accommodation, transfers and services included for the patient.
           </p>
         </div>
-        {!packageSelected && (
-          <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-            No package items selected. Open a section below to add accommodation, transfers or
-            clinic services.
-          </p>
-        )}
-        <Accordion type="multiple" className="border-y">
-          <AccordionItem value="accommodation">
-            <AccordionTrigger>
-              <SectionTitle
-                title="Accommodation"
-                detail={
-                  plan.travel.hotelIncluded ? plan.travel.hotelName || "Included" : "Not included"
-                }
-              />
-            </AccordionTrigger>
-            <AccordionContent className="space-y-4 pt-2">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="space-y-5 rounded-lg border p-4">
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">Accommodation</h3>
               <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                <span>
-                  <span className="block font-medium">Include accommodation</span>
-                  <span className="text-xs text-muted-foreground">
-                    Add a clinic-configured hotel to this package.
-                  </span>
-                </span>
+                <span className="font-medium">Accommodation included</span>
                 <Switch
                   checked={plan.travel.hotelIncluded}
                   onCheckedChange={(hotelIncluded) => {
@@ -174,19 +151,13 @@ export function TravelServicesStep({
                       />
                     </Field>
                   </div>
-                  {selectedHotel && (
-                    <HotelPreview hotel={selectedHotel} nights={plan.travel.hotelNights} />
-                  )}
                 </>
               )}
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="transfers">
-            <AccordionTrigger>
-              <SectionTitle title="Transfers" detail={transferSummary(plan)} />
-            </AccordionTrigger>
-            <AccordionContent className="pt-2">
-              <div className="grid gap-1 rounded-lg border p-2 sm:grid-cols-3">
+            </section>
+            <Separator />
+            <section>
+              <h3 className="mb-2 text-sm font-semibold">Transfers</h3>
+              <div className="space-y-1 rounded-lg border p-2">
                 <ServiceSwitch
                   label="Airport Transfer"
                   checked={plan.travel.includedServices.includes("Airport Transfer")}
@@ -203,27 +174,83 @@ export function TravelServicesStep({
                   onChange={(checked) => setService("Flight Included", checked)}
                 />
               </div>
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="services">
-            <AccordionTrigger>
-              <SectionTitle
-                title="Included Services"
-                detail={`${plan.travel.includedServices.filter((item) => !TRAVEL_SERVICES.includes(item)).length} selected`}
-              />
-            </AccordionTrigger>
-            <AccordionContent className="space-y-3 pt-2">
+            </section>
+            <Separator />
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">Included services</h3>
               <ServiceMultiSelect
                 options={selectableServices}
                 selected={plan.travel.includedServices}
                 onChange={setService}
               />
-              <p className="text-xs text-muted-foreground">
-                Service options are managed in Dental Planner Settings.
+            </section>
+          </div>
+          <aside className="space-y-4 rounded-lg border bg-muted/20 p-4 lg:sticky lg:top-24 lg:self-start">
+            <div>
+              <h3 className="font-semibold">Live package summary</h3>
+              <p className="text-xs text-muted-foreground">Updates as package options change.</p>
+            </div>
+            {!packageSelected ? (
+              <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                Build the patient package using the controls on the left.
               </p>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+            ) : (
+              <>
+                {selectedHotel && plan.travel.hotelIncluded && (
+                  <HotelPreview hotel={selectedHotel} nights={plan.travel.hotelNights} />
+                )}
+                <div className="divide-y rounded-lg border bg-background">
+                  <SummaryRow
+                    label="Accommodation"
+                    value={
+                      plan.travel.hotelIncluded
+                        ? `Included · ${plan.travel.hotelNights} nights`
+                        : "Not included"
+                    }
+                  />
+                  <SummaryRow
+                    label="Airport transfer"
+                    value={
+                      plan.travel.includedServices.includes("Airport Transfer")
+                        ? "Included"
+                        : "Not included"
+                    }
+                  />
+                  <SummaryRow
+                    label="Hotel transfer"
+                    value={
+                      plan.travel.includedServices.includes("Hotel Transfer")
+                        ? "Included"
+                        : "Not included"
+                    }
+                  />
+                  <SummaryRow
+                    label="Flight"
+                    value={
+                      plan.travel.includedServices.includes("Flight Included")
+                        ? "Included"
+                        : "Not included"
+                    }
+                  />
+                  <SummaryRow
+                    label="Included services"
+                    value={`${plan.travel.includedServices.filter((item) => !TRAVEL_SERVICES.includes(item)).length} selected`}
+                  />
+                </div>
+                <div className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                  {plan.travel.includedServices
+                    .filter((item) => !TRAVEL_SERVICES.includes(item))
+                    .map((service) => (
+                      <div key={service} className="flex items-center gap-2 py-1">
+                        <Check className="size-3.5 text-primary" />
+                        {service}
+                      </div>
+                    ))}
+                </div>
+              </>
+            )}
+          </aside>
+        </div>
       </fieldset>
     </section>
   );
@@ -242,7 +269,7 @@ function ServiceMultiSelect({
   const selectedOptions = options.filter((option) => selected.includes(option));
   const groups = groupServices(options);
   return (
-    <div className="space-y-3">
+    <div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button type="button" variant="outline" className="w-full justify-between sm:w-96">
@@ -277,18 +304,6 @@ function ServiceMultiSelect({
           </Command>
         </PopoverContent>
       </Popover>
-      <div className="flex flex-wrap gap-2">
-        {selectedOptions.map((service) => (
-          <Badge
-            key={service}
-            variant="secondary"
-            className="cursor-pointer"
-            onClick={() => onChange(service, false)}
-          >
-            {service} <X className="ml-1 size-3" />
-          </Badge>
-        ))}
-      </div>
     </div>
   );
 }
@@ -408,14 +423,12 @@ function ServiceSwitch({
   );
 }
 
-function SectionTitle({ title, detail }: { title: string; detail: string }) {
+function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <span className="flex min-w-0 items-center gap-3">
-      <span>{title}</span>
-      <Badge variant="outline" className="font-normal">
-        {detail}
-      </Badge>
-    </span>
+    <div className="flex items-center justify-between gap-4 px-3 py-2.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value}</span>
+    </div>
   );
 }
 
@@ -426,13 +439,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </div>
   );
-}
-
-function transferSummary(plan: DentalPlan) {
-  const count = TRAVEL_SERVICES.filter((service) =>
-    plan.travel.includedServices.includes(service),
-  ).length;
-  return count ? `${count} included` : "None";
 }
 
 function groupServices(options: string[]) {

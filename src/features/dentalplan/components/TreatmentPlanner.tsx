@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, LockKeyhole } from "lucide-react";
+import { ChevronDown, LockKeyhole, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
@@ -65,6 +72,7 @@ export type TreatmentPlannerProps = {
   readOnly?: boolean;
   pricingReadOnly?: boolean;
   definitions: EffectiveTreatmentDefinition[];
+  clinicUsers?: Array<{ id: string; name: string; role: string }>;
 };
 export function TreatmentPlanner({
   value,
@@ -72,6 +80,7 @@ export function TreatmentPlanner({
   readOnly,
   pricingReadOnly,
   definitions,
+  clinicUsers = [],
 }: TreatmentPlannerProps) {
   const history = useHistoryState(value);
   const initialized = useRef(false);
@@ -91,15 +100,14 @@ export function TreatmentPlanner({
   const [selectedTreatmentId, setSelectedTreatmentId] = useState<string>();
   const [message, setMessage] = useState<string | null>(null);
   const [advisory, setAdvisory] = useState<string | null>(null);
-  const [pendingWarning, setPendingWarning] = useState<{
-    definition: EffectiveTreatmentDefinition;
-    messages: string[];
-  }>();
-  const [overrideReason, setOverrideReason] = useState("");
   const [pendingRemoval, setPendingRemoval] = useState<{
     treatmentIds: string[];
     dependentIds: string[];
     implantTeeth: ToothNumber[];
+  }>();
+  const [pendingArchPlan, setPendingArchPlan] = useState<{
+    definition: EffectiveTreatmentDefinition;
+    tooth: ToothNumber;
   }>();
   const currentSelection = useToothSelection();
   const proposedSelection = useToothSelection();
@@ -123,6 +131,13 @@ export function TreatmentPlanner({
     return () => window.removeEventListener("keydown", clearSelectionShortcut);
   }, [clearCurrentSelection, clearProposedSelection, mode]);
   const selectedTreatment = definitions.find((item) => item.id === selectedTreatmentId);
+  const implantDefinitions = definitions.filter(
+    (item) => item.baseTreatmentKey === "dental-implant",
+  );
+  const activeImplantDefinitionId =
+    history.state.proposedTreatments.find(
+      (item) => item.treatmentType === "dental-implant" && item.treatmentDefinitionId,
+    )?.treatmentDefinitionId ?? implantDefinitions[0]?.id;
   const selectedConditionLabel = CONDITION_DEFINITIONS.find(
     (item) => item.type === selectedCondition,
   )?.label;
@@ -185,14 +200,14 @@ export function TreatmentPlanner({
     defaults.estimatedStaySummary,
   ]);
   const applyConditionToSelection = useCallback(
-    (condition: ConditionType) => {
-      if (!selection.selected.length) {
+    (condition: ConditionType, teeth = selection.selected) => {
+      if (!teeth.length) {
         setMessage("Select at least one tooth first.");
         return;
       }
       history.commit((previous) => {
         const next = { ...previous, currentConditions: { ...previous.currentConditions } };
-        for (const tooth of selection.selected) {
+        for (const tooth of teeth) {
           const existing = next.currentConditions[tooth]?.conditions ?? [];
           next.currentConditions[tooth] = {
             toothNumber: tooth,
@@ -203,6 +218,7 @@ export function TreatmentPlanner({
         return next;
       });
       setMessage(null);
+      setAdvisory(null);
     },
     [history, selection.selected],
   );
@@ -222,16 +238,20 @@ export function TreatmentPlanner({
     [history],
   );
   const applyTreatmentToSelection = useCallback(
-    (selectedDefinition: EffectiveTreatmentDefinition, warningConfirmed = false) => {
+    (
+      selectedDefinition: EffectiveTreatmentDefinition,
+      warningConfirmed = false,
+      teeth = selection.selected,
+    ) => {
       const treatment = selectedDefinition.baseTreatmentKey;
-      if (!selection.selected.length) {
+      if (!teeth.length) {
         setMessage("Select at least one tooth first.");
         return;
       }
       const evaluation = evaluateTreatmentApplication({
         plan: history.state,
         treatment,
-        selectedTeeth: selection.selected,
+        selectedTeeth: teeth,
       });
       const ruleResults = evaluation.results;
       if (evaluation.status === "blocked") {
@@ -242,16 +262,10 @@ export function TreatmentPlanner({
         (result) => result.severity === "warning" && result.outcome !== "suggestion",
       );
       const suggestions = ruleResults.filter((result) => result.outcome === "suggestion");
-      if (warnings.length && !warningConfirmed) {
-        setPendingWarning({
-          definition: selectedDefinition,
-          messages: warnings.map((result) => result.message),
-        });
-        setOverrideReason("");
-        return;
-      }
+      if (warnings.length && !warningConfirmed)
+        setAdvisory(warnings.map((result) => result.message).join(" "));
       if (treatment === "all-on-4" || treatment === "all-on-6") {
-        const arch = archForSelection(selection.selected);
+        const arch = archForSelection(teeth);
         if (
           history.state.treatmentGroups.some(
             (group) => group.type === treatment && group.arch === arch,
@@ -265,19 +279,63 @@ export function TreatmentPlanner({
         const preset = treatment === "all-on-4" ? ALL_ON_4_PRESETS[arch] : ALL_ON_6_PRESETS[arch];
         const groupId = crypto.randomUUID();
         history.commit((previous) => {
-          const generated = preset.implantPositions.map((tooth) => ({
+          const conflictingIds = new Set(
+            previous.proposedTreatments
+              .filter(
+                (item) =>
+                  item.toothNumbers.some((tooth) => preset.prostheticRange.includes(tooth)) &&
+                  ["restoration", "prosthetic"].includes(item.layer ?? ""),
+              )
+              .map((item) => item.id),
+          );
+          const conflictingGroupIds = new Set(
+            previous.proposedTreatments
+              .filter((item) => conflictingIds.has(item.id) && item.treatmentGroupId)
+              .map((item) => item.treatmentGroupId as string),
+          );
+          const implantDefinition = definitions.find(
+            (item) => item.id === activeImplantDefinitionId,
+          );
+          const bridgeDefinition = definitions.find((item) => item.clinicalBehavior === "bridge");
+          const implants = preset.implantPositions.map((tooth) => ({
             id: crypto.randomUUID(),
             toothNumbers: [tooth],
             treatmentType: "dental-implant" as const,
+            treatmentDefinitionId: implantDefinition?.id,
+            treatmentKey: implantDefinition?.treatmentKey,
+            visualKey: "dental-implant" as const,
+            displayName: implantDefinition?.displayName ?? "Dental Implant",
+            implantBrand: implantDefinition?.implantBrand,
             treatmentGroupId: groupId,
             layer: "foundation" as const,
             scope: "tooth" as const,
           }));
+          const bridge = {
+            id: crypto.randomUUID(),
+            toothNumbers: [...preset.prostheticRange],
+            treatmentType: "bridge" as const,
+            treatmentDefinitionId: bridgeDefinition?.id,
+            treatmentKey: bridgeDefinition?.treatmentKey,
+            visualKey: "bridge" as const,
+            displayName: bridgeDefinition?.displayName ?? "Zirconium Bridge",
+            treatmentGroupId: groupId,
+            layer: "prosthetic" as const,
+            scope: "span" as const,
+            bridgeRoles: automaticBridgeRoles(preset.prostheticRange, preset.implantPositions),
+            bridgeType: "implant-supported" as const,
+            material: bridgeDefinition?.defaultMaterial ?? ("zirconium" as const),
+            supportType: "implant" as const,
+            ...defaultTreatmentSequence("bridge"),
+          };
+          const generated = [...implants, bridge];
           return {
             ...previous,
-            proposedTreatments: [...previous.proposedTreatments, ...generated],
+            proposedTreatments: [
+              ...previous.proposedTreatments.filter((item) => !conflictingIds.has(item.id)),
+              ...generated,
+            ],
             treatmentGroups: [
-              ...previous.treatmentGroups,
+              ...previous.treatmentGroups.filter((group) => !conflictingGroupIds.has(group.id)),
               {
                 id: groupId,
                 type: treatment,
@@ -294,8 +352,8 @@ export function TreatmentPlanner({
         return;
       }
       if (treatment === "whitening") {
-        const arches = new Set(selection.selected.map((tooth) => archForSelection([tooth])));
-        const teeth = [
+        const arches = new Set(teeth.map((tooth) => archForSelection([tooth])));
+        const archTeeth = [
           ...(arches.has("upper") ? ALL_ON_4_PRESETS.upper.prostheticRange : []),
           ...(arches.has("lower") ? ALL_ON_4_PRESETS.lower.prostheticRange : []),
         ].filter(
@@ -310,7 +368,7 @@ export function TreatmentPlanner({
           history.state.proposedTreatments.some(
             (item) =>
               item.treatmentType === "whitening" &&
-              item.toothNumbers.some((tooth) => teeth.includes(tooth)),
+              item.toothNumbers.some((tooth) => archTeeth.includes(tooth)),
           )
         ) {
           setMessage("Whitening is already included for the selected arch.");
@@ -324,7 +382,7 @@ export function TreatmentPlanner({
             ...previous.proposedTreatments,
             {
               id,
-              toothNumbers: teeth,
+              toothNumbers: archTeeth,
               treatmentType: "whitening",
               treatmentGroupId: groupId,
               layer: "restoration",
@@ -337,7 +395,7 @@ export function TreatmentPlanner({
               id: groupId,
               type: "full-arch",
               arch: arches.has("lower") && !arches.has("upper") ? "lower" : "upper",
-              affectedTeeth: teeth,
+              affectedTeeth: archTeeth,
               generatedTreatmentIds: [id],
             },
           ],
@@ -347,7 +405,7 @@ export function TreatmentPlanner({
         return;
       }
       if (selectedDefinition.clinicalBehavior === "bridge") {
-        const resolved = resolveBridgeSelection(selection.selected);
+        const resolved = resolveBridgeSelection(teeth);
         if (!resolved.ok) {
           setMessage(resolved.message);
           return;
@@ -363,6 +421,24 @@ export function TreatmentPlanner({
         );
         if (hasBridgeOnExactSpan) {
           setMessage("A Bridge already exists on this exact span. Edit or remove it first.");
+          return;
+        }
+        const spanEvaluation = evaluateTreatmentApplication({
+          plan: editingBridgeId
+            ? {
+                ...history.state,
+                proposedTreatments: history.state.proposedTreatments.filter(
+                  (item) => item.id !== editingBridgeId,
+                ),
+              }
+            : history.state,
+          treatment: "bridge",
+          selectedTeeth: resolved.span,
+        });
+        if (spanEvaluation.status === "blocked") {
+          setMessage(
+            spanEvaluation.reason ?? "This span already contains a conflicting final restoration.",
+          );
           return;
         }
         const implantPositions = resolved.span.filter(
@@ -433,7 +509,7 @@ export function TreatmentPlanner({
         setAdvisory(null);
         return;
       }
-      const targetTeeth = selection.selected.filter(
+      const targetTeeth = teeth.filter(
         (tooth) =>
           !history.state.proposedTreatments.some(
             (item) =>
@@ -458,12 +534,13 @@ export function TreatmentPlanner({
               treatmentKey: selectedDefinition.treatmentKey,
               visualKey: selectedDefinition.visualKey,
               displayName: selectedDefinition.displayName,
+              implantBrand: selectedDefinition.implantBrand,
               toothNumbers: [tooth],
               layer: treatmentLayer(treatment),
               scope: treatmentScope(treatment),
               supportType: resolveTreatmentSupport(previous, treatment, tooth),
               material: selectedDefinition.defaultMaterial ?? treatmentMaterial(treatment),
-              clinicianOverrideReason: warningConfirmed ? overrideReason.trim() : undefined,
+              clinicianOverrideReason: undefined,
               ...sequence,
             });
         else
@@ -474,12 +551,13 @@ export function TreatmentPlanner({
             treatmentKey: selectedDefinition.treatmentKey,
             visualKey: selectedDefinition.visualKey,
             displayName: selectedDefinition.displayName,
+            implantBrand: selectedDefinition.implantBrand,
             toothNumbers: [...targetTeeth],
             layer: treatmentLayer(treatment),
             scope: treatmentScope(treatment),
             supportType: undefined,
             material: selectedDefinition.defaultMaterial ?? treatmentMaterial(treatment),
-            clinicianOverrideReason: warningConfirmed ? overrideReason.trim() : undefined,
+            clinicianOverrideReason: undefined,
             ...sequence,
           });
         next.updatedAt = new Date().toISOString();
@@ -488,7 +566,7 @@ export function TreatmentPlanner({
       setMessage(null);
       setAdvisory(suggestions.map((result) => result.message).join(" ") || null);
     },
-    [editingBridgeId, history, overrideReason, selection.selected],
+    [activeImplantDefinitionId, definitions, editingBridgeId, history, selection.selected],
   );
   const editBridge = useCallback(
     (id: string) => {
@@ -623,6 +701,13 @@ export function TreatmentPlanner({
     },
     [proposedSelection],
   );
+  const highlightCurrentTeeth = useCallback(
+    (teeth: ToothNumber[]) => {
+      currentSelection.setSelected(teeth);
+      setMode("current");
+    },
+    [currentSelection],
+  );
   const bridgeSelection =
     mode === "proposed" && selectedTreatment?.clinicalBehavior === "bridge"
       ? resolveBridgeSelection(selection.selected)
@@ -636,38 +721,34 @@ export function TreatmentPlanner({
   return (
     <section className="space-y-4 rounded-xl border bg-card p-3 sm:p-5">
       <AlertDialog
-        open={!!pendingWarning}
-        onOpenChange={(open) => !open && setPendingWarning(undefined)}
+        open={!!pendingArchPlan}
+        onOpenChange={(open) => !open && setPendingArchPlan(undefined)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clinical warning</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                {pendingWarning?.messages.map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-                <p>Continue only when the treating clinician has reviewed this exception.</p>
-                <Input
-                  value={overrideReason}
-                  onChange={(event) => setOverrideReason(event.target.value)}
-                  placeholder="Clinical override reason"
-                  aria-label="Clinical override reason"
-                />
-              </div>
+            <AlertDialogTitle>
+              {pendingArchPlan
+                ? `${archForSelection([pendingArchPlan.tooth]) === "upper" ? "Upper" : "Lower"} ${pendingArchPlan.definition.displayName}`
+                : "Full-arch treatment"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This creates the canonical implant positions and one implant-supported full-arch
+              bridge using the selected implant brand and default bridge material. Existing final
+              restorations on this arch will be replaced; support procedures are preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={!overrideReason.trim()}
               onClick={() => {
-                if (pendingWarning) applyTreatmentToSelection(pendingWarning.definition, true);
-                setPendingWarning(undefined);
-                setOverrideReason("");
+                if (pendingArchPlan)
+                  applyTreatmentToSelection(pendingArchPlan.definition, false, [
+                    pendingArchPlan.tooth,
+                  ]);
+                setPendingArchPlan(undefined);
               }}
             >
-              Continue with clinician override
+              Apply full-arch plan
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -714,7 +795,101 @@ export function TreatmentPlanner({
       </AlertDialog>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <h2 className="font-semibold">Clinical Planning</h2>
+        <div className="flex flex-wrap gap-2">
+          {implantDefinitions.length > 0 && (
+            <Select
+              value={activeImplantDefinitionId}
+              disabled={readOnly}
+              onValueChange={(id) => {
+                const definition = implantDefinitions.find((item) => item.id === id);
+                if (!definition) return;
+                history.commit((plan) => ({
+                  ...plan,
+                  proposedTreatments: plan.proposedTreatments.map((item) =>
+                    item.treatmentType === "dental-implant"
+                      ? {
+                          ...item,
+                          treatmentDefinitionId: definition.id,
+                          treatmentKey: definition.treatmentKey,
+                          displayName: definition.displayName,
+                          implantBrand: definition.implantBrand,
+                        }
+                      : item,
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }));
+                setSelectedTreatmentId(id);
+              }}
+            >
+              <SelectTrigger className="h-9 w-56" aria-label="Implant brand">
+                <SelectValue placeholder="Implant brand" />
+              </SelectTrigger>
+              <SelectContent>
+                {implantDefinitions.map((definition) => (
+                  <SelectItem key={definition.id} value={definition.id}>
+                    {definition.implantBrand ?? definition.displayName} ·{" "}
+                    {formatQuoteMoney(
+                      definition.prices[history.state.commercial.currency] ?? 0,
+                      history.state.commercial.currency,
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <AssignmentSelect
+            label="Dentist"
+            value={history.state.patient.dentistId}
+            users={clinicUsers.filter((user) => user.role === "dentist")}
+            disabled={readOnly}
+            onChange={(dentistId) =>
+              history.commit((plan) => ({
+                ...plan,
+                patient: { ...plan.patient, dentistId },
+                updatedAt: new Date().toISOString(),
+              }))
+            }
+          />
+          <AssignmentSelect
+            label="Coordinator"
+            value={history.state.patient.coordinatorId}
+            users={clinicUsers.filter((user) =>
+              ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role),
+            )}
+            disabled={readOnly}
+            onChange={(coordinatorId) =>
+              history.commit((plan) => ({
+                ...plan,
+                patient: { ...plan.patient, coordinatorId },
+                updatedAt: new Date().toISOString(),
+              }))
+            }
+          />
+        </div>
       </div>
+      {(selectedCondition || selectedTreatment) && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm">
+            <Badge variant="secondary">Active tool</Badge>
+            <span className="truncate font-medium">
+              {mode === "current" ? selectedConditionLabel : selectedTreatment?.displayName}
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0"
+            aria-label="Clear active tool"
+            onClick={() => {
+              setSelectedCondition(undefined);
+              setSelectedTreatmentId(undefined);
+            }}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ToggleGroup
           type="single"
@@ -845,15 +1020,25 @@ export function TreatmentPlanner({
                 if (mode === "current" && selectedCondition) {
                   applyConditionToSelection(selectedCondition);
                   setSelectedCondition(undefined);
-                } else if (mode === "proposed" && selectedTreatment) {
-                  applyTreatmentToSelection(selectedTreatment);
-                  setSelectedTreatmentId(undefined);
+                  return;
                 }
+                if (!selectedTreatment) return;
+                if (["all-on-4", "all-on-6"].includes(selectedTreatment.baseTreatmentKey)) {
+                  setPendingArchPlan({
+                    definition: selectedTreatment,
+                    tooth: selection.selected[0],
+                  });
+                } else {
+                  applyTreatmentToSelection(selectedTreatment);
+                }
+                setSelectedTreatmentId(undefined);
               }}
             >
               {mode === "current"
                 ? `Apply ${selectedConditionLabel ?? "condition"}`
-                : `Apply ${selectedTreatment?.displayName ?? "treatment"}`}
+                : selectedTreatment?.clinicalBehavior === "bridge"
+                  ? "Confirm bridge span"
+                  : `Apply ${selectedTreatment?.displayName ?? "treatment"}`}
             </Button>
           </div>
         </div>
@@ -901,9 +1086,8 @@ export function TreatmentPlanner({
       {mode === "current" ? (
         <ConditionSummary
           conditions={history.state.currentConditions}
-          onRemove={(tooth, condition) =>
-            !readOnly && removeConditionFromTooth(tooth, condition as ConditionType)
-          }
+          onRemove={(tooth, condition) => !readOnly && removeConditionFromTooth(tooth, condition)}
+          onHighlight={highlightCurrentTeeth}
         />
       ) : (
         <>
@@ -1106,6 +1290,35 @@ function ToolButton({
     >
       {children}
     </button>
+  );
+}
+
+function AssignmentSelect({
+  label,
+  value,
+  users,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  users: Array<{ id: string; name: string }>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-9 w-44" aria-label={`Assigned ${label.toLowerCase()}`}>
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
+      <SelectContent>
+        {users.map((user) => (
+          <SelectItem key={user.id} value={user.id}>
+            {user.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

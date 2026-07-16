@@ -62,7 +62,7 @@ import { createDentalPlan } from "@/features/dentalplan/utils/createDentalPlan";
 import type { DentalPlan } from "@/features/dentalplan/types/dental-plan.types";
 
 const MOCK_STORAGE_KEY = "smileabroad-mock-v1";
-const MOCK_STORAGE_VERSION = 28;
+const MOCK_STORAGE_VERSION = 29;
 const DTKURT_CLINIC_ID = "clinic_istanbul";
 const OBSOLETE_PLANNER_DRAFT_KEYS = [
   "smileabroad.dentalplan.dev.v2",
@@ -2706,6 +2706,7 @@ function normalizeClinicTreatmentDefinitions(
         clinical_behavior: clinicalBehavior,
         default_material:
           item.default_material ?? (clinicalBehavior === "bridge" ? "zirconium" : undefined),
+        implant_brand: item.implant_brand,
       } satisfies ClinicTreatmentDefinition;
     });
   const byClinicAndKey = new Map<string, ClinicTreatmentDefinition>();

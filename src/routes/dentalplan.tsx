@@ -390,6 +390,7 @@ function DentalPlanRoute() {
           clinicalBehavior: item.clinical_behavior,
           defaultMaterial:
             item.default_material as DentalPlanData["proposedTreatments"][number]["material"],
+          implantBrand: item.implant_brand,
           prices: item.prices ?? {},
         })),
     [treatmentDefinitions, user?.clinic_id],

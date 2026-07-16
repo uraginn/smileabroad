@@ -43,6 +43,7 @@ import type {
 } from "../types/dental-plan.types";
 import {
   BRIDGE_SYSTEM_DEFINITIONS,
+  IMPLANT_BRAND_DEFINITIONS,
   TREATMENT_CATEGORIES,
   TREATMENT_DEFINITIONS,
   treatmentScope,
@@ -116,35 +117,55 @@ function PlannerShell({
 } & DentalPlanStudioProps) {
   const { lastSavedAt, status: saveStatus, saveNow } = useAutoSave(plan, repository);
   const effectiveTreatments = useMemo<EffectiveTreatmentDefinition[]>(() => {
-    const system = TREATMENT_DEFINITIONS.filter((base) => base.type !== "bridge").flatMap(
-      (base) => {
-        const override = treatmentDefaults.find(
-          (item) => item.system !== false && item.treatmentKey === base.type,
-        );
-        if (override && !override.active) return [];
-        return [
-          {
-            id: override?.id ?? `system_${base.type}`,
-            treatmentKey: override?.treatmentKey ?? base.type,
-            displayName: override?.displayName ?? base.label,
-            category: TREATMENT_CATEGORIES.includes(
-              override?.category as (typeof TREATMENT_CATEGORIES)[number],
-            )
-              ? override!.category!
-              : base.category,
-            baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
-            visualKey: override?.visualKey ?? base.type,
-            perTooth: override?.perTooth ?? base.perTooth,
-            clinicalBehavior:
-              override?.clinicalBehavior ??
-              (treatmentScope(base.type) === "arch" ? "arch" : "tooth"),
-            defaultMaterial: override?.defaultMaterial,
-            system: true,
-            prices: override?.prices ?? {},
-          },
-        ];
-      },
-    );
+    const system = TREATMENT_DEFINITIONS.filter(
+      (base) => !["bridge", "dental-implant"].includes(base.type),
+    ).flatMap((base) => {
+      const override = treatmentDefaults.find(
+        (item) => item.system !== false && item.treatmentKey === base.type,
+      );
+      if (override && !override.active) return [];
+      return [
+        {
+          id: override?.id ?? `system_${base.type}`,
+          treatmentKey: override?.treatmentKey ?? base.type,
+          displayName: override?.displayName ?? base.label,
+          category: TREATMENT_CATEGORIES.includes(
+            override?.category as (typeof TREATMENT_CATEGORIES)[number],
+          )
+            ? override!.category!
+            : base.category,
+          baseTreatmentKey: override?.baseTreatmentKey ?? base.type,
+          visualKey: override?.visualKey ?? base.type,
+          perTooth: override?.perTooth ?? base.perTooth,
+          clinicalBehavior:
+            override?.clinicalBehavior ?? (treatmentScope(base.type) === "arch" ? "arch" : "tooth"),
+          defaultMaterial: override?.defaultMaterial,
+          system: true,
+          prices: override?.prices ?? {},
+        },
+      ];
+    });
+    const implants = IMPLANT_BRAND_DEFINITIONS.flatMap((base) => {
+      const override = treatmentDefaults.find(
+        (item) => item.system !== false && item.treatmentKey === base.treatmentKey,
+      );
+      if (override && !override.active) return [];
+      return [
+        {
+          id: override?.id ?? `system_${base.treatmentKey}`,
+          treatmentKey: base.treatmentKey,
+          displayName: override?.displayName ?? base.displayName,
+          category: override?.category ?? base.category,
+          baseTreatmentKey: base.baseTreatmentKey,
+          visualKey: override?.visualKey ?? base.visualKey,
+          perTooth: true,
+          clinicalBehavior: base.clinicalBehavior,
+          implantBrand: override?.implantBrand ?? base.implantBrand,
+          system: true,
+          prices: override?.prices ?? base.prices,
+        },
+      ];
+    });
     const bridges = BRIDGE_SYSTEM_DEFINITIONS.flatMap((base) => {
       const override = treatmentDefaults.find(
         (item) => item.system !== false && item.treatmentKey === base.treatmentKey,
@@ -182,10 +203,11 @@ function PlannerShell({
         perTooth: item.perTooth ?? true,
         clinicalBehavior: item.clinicalBehavior ?? "tooth",
         defaultMaterial: item.defaultMaterial,
+        implantBrand: item.implantBrand,
         system: false,
         prices: item.prices,
       }));
-    return [...system, ...bridges, ...custom];
+    return [...system, ...implants, ...bridges, ...custom];
   }, [treatmentDefaults]);
   const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState("");
@@ -385,12 +407,7 @@ function PlannerShell({
                 </CardContent>
               </Card>
             ) : (
-              <PatientStep
-                plan={plan}
-                change={change}
-                clinicUsers={clinicUsers}
-                readOnly={readOnly || caseReadOnly}
-              />
+              <PatientStep plan={plan} change={change} readOnly={readOnly || caseReadOnly} />
             )}
           </>
         )}{" "}
@@ -426,6 +443,7 @@ function PlannerShell({
               readOnly={readOnly}
               pricingReadOnly={commercialReadOnly}
               definitions={effectiveTreatments}
+              clinicUsers={clinicUsers}
             />
           </div>
         )}{" "}
@@ -548,12 +566,10 @@ function PlannerSkeleton() {
 function PatientStep({
   plan,
   change,
-  clinicUsers,
   readOnly,
 }: {
   plan: DentalPlan;
   change: (patch: Partial<DentalPlan>) => void;
-  clinicUsers: Array<{ id: string; name: string; role: string }>;
   readOnly?: boolean;
 }) {
   const update = (patch: Partial<DentalPlan["patient"]>) => {
@@ -578,7 +594,7 @@ function PatientStep({
         <h2 className="text-lg font-semibold">Patient & Case</h2>
         <p className="text-sm text-muted-foreground">Patient identity and case responsibility.</p>
       </div>
-      <div className="grid gap-8 lg:grid-cols-2 lg:divide-x">
+      <div>
         <section aria-labelledby="patient-information-heading" className="space-y-4">
           <div className="flex items-center gap-3">
             <Avatar className="size-10 border">
@@ -617,33 +633,6 @@ function PatientStep({
                 type="email"
                 value={plan.patient.email ?? ""}
                 onChange={(event) => update({ email: event.target.value })}
-              />
-            </Field>
-          </div>
-        </section>
-        <section aria-labelledby="assignment-heading" className="space-y-4 lg:pl-8">
-          <h3 id="assignment-heading" className="font-semibold">
-            Assignment
-          </h3>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <Field label="Assigned dentist">
-              <TeamSelect
-                value={plan.patient.dentistId}
-                users={clinicUsers.filter((user) => user.role === "dentist")}
-                placeholder="Select dentist"
-                disabled={readOnly}
-                onChange={(dentistId) => update({ dentistId })}
-              />
-            </Field>
-            <Field label="Assigned coordinator">
-              <TeamSelect
-                value={plan.patient.coordinatorId}
-                users={clinicUsers.filter((user) =>
-                  ["coordinator", "clinic_owner", "clinic_admin"].includes(user.role),
-                )}
-                placeholder="Select coordinator"
-                disabled={readOnly}
-                onChange={(coordinatorId) => update({ coordinatorId })}
               />
             </Field>
           </div>
