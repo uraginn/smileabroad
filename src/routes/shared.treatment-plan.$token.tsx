@@ -3,9 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BedDouble,
-  BookOpen,
   Building2,
-  CalendarDays,
   Bone,
   CalendarCheck,
   Check,
@@ -180,17 +178,17 @@ function SharedPlan() {
     () =>
       document
         ? [
-            { id: "treatment-plan", label: "Treatment Plan" },
-            ...(document.diagrams ? [{ id: "treatment-diagram", label: "Treatment Diagram" }] : []),
-            { id: "journey", label: "Journey" },
-            ...(document.travel ? [{ id: "travel", label: "Travel" }] : []),
-            { id: "investment", label: "Investment" },
-            { id: "your-clinic", label: "Your Clinic" },
-            ...(faqs.length ? [{ id: "faq", label: "FAQ" }] : []),
-            ...(document.patient_notes.length
-              ? [{ id: "important-information", label: "Important Information" }]
+            { id: "treatment-plan", label: "Your plan" },
+            { id: "journey", label: "Your journey" },
+            ...(document.travel || document.included_services.length
+              ? [{ id: "visit-package", label: "Your visit" }]
               : []),
-            { id: "next-steps", label: "Next Steps" },
+            { id: "investment", label: "Investment" },
+            { id: "your-clinic", label: "Your clinic" },
+            ...(faqs.length || document.patient_notes.length
+              ? [{ id: "questions", label: "Good to know" }]
+              : []),
+            { id: "next-steps", label: "Next step" },
           ]
         : [],
     [document, faqs.length],
@@ -223,16 +221,16 @@ function SharedPlan() {
           id="introduction"
           className="shared-section -mx-4 scroll-mt-24 border-b border-slate-200/80 bg-white px-4 py-5 sm:-mx-6 sm:px-6 sm:py-6"
         >
-          <PersonalCoordinatorNote document={document} primary={primary} />
+          <PatientWelcome document={document} primary={primary} />
         </section>
       </div>
       <SectionNavigation items={nav} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <section id="treatment-plan" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <SectionHeading
-            eyebrow="Your plan"
-            title="Your Treatment Plan"
-            description="A concise overview of the treatments your clinic has prepared for you."
+            eyebrow="Your personalized care"
+            title="Understand your treatment"
+            description="See what your clinic recommends, why it is included and which teeth are involved."
           />
           <TreatmentExperience document={document} />
         </section>
@@ -241,40 +239,51 @@ function SharedPlan() {
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <SectionHeading
-            eyebrow="How it works"
-            title="Treatment Journey"
-            description="The expected sequence of your confirmed clinic Treatment Plan."
+            eyebrow="How your care unfolds"
+            title="A clear journey, step by step"
+            description="Know what happens at each stage, including expected stays and healing time."
           />
-          <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="relative mt-9 space-y-4 before:absolute before:bottom-8 before:left-5 before:top-8 before:w-px before:bg-slate-200 sm:before:left-6 lg:grid lg:grid-cols-3 lg:gap-5 lg:space-y-0 lg:before:hidden">
             {document.journey.map((step, index) => (
               <TreatmentJourneyCard key={step.id} step={step} index={index} accent={accent} />
             ))}
           </div>
         </section>
-        {document.travel && (
+        {(document.travel || document.included_services.length > 0) && (
           <section
-            id="travel"
+            id="visit-package"
             className="shared-section -mx-4 scroll-mt-24 bg-stone-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
           >
             <SectionHeading
-              eyebrow="Your stay"
-              title="Travel & Accommodation"
-              description="The practical arrangements currently included with your Treatment Plan."
+              eyebrow="Your visit package"
+              title="Everything around your treatment"
+              description="Your accommodation, transfers and included support, brought together in one place."
             />
-            {document.travel.hotel ? (
-              <PatientHotelCard
-                hotel={document.travel.hotel}
-                nights={document.travel.nights}
-                configuredHotel={configuredHotel}
-                airportTransfer={plan.transfers_included === true}
-                hotelTransfer={Boolean(
-                  plan.included_services?.some((service) =>
-                    service.toLowerCase().includes("hotel transfer"),
-                  ),
-                )}
-                accent={accent}
-              />
-            ) : null}
+            <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.65fr)] lg:items-start">
+              {document.travel?.hotel ? (
+                <PatientHotelCard
+                  hotel={document.travel.hotel}
+                  nights={document.travel.nights}
+                  configuredHotel={configuredHotel}
+                  airportTransfer={plan.transfers_included === true}
+                  hotelTransfer={Boolean(
+                    plan.included_services?.some((service) =>
+                      service.toLowerCase().includes("hotel transfer"),
+                    ),
+                  )}
+                  accent={accent}
+                />
+              ) : (
+                <VisitSupportCard />
+              )}
+              {document.included_services.length > 0 && (
+                <IncludedServicesPanel
+                  services={document.included_services}
+                  accent={accent}
+                  image={document.clinic?.patient_image_url ?? document.clinic?.logo_url}
+                />
+              )}
+            </div>
           </section>
         )}
         <section
@@ -283,8 +292,8 @@ function SharedPlan() {
         >
           <SectionHeading
             eyebrow="Your investment"
-            title="Your Treatment Investment"
-            description="Your total, included services and payment schedule in one place."
+            title="A clear view of your investment"
+            description="Review your treatment total and when each payment is expected."
           />
           <div
             className={`print-grid mt-8 grid gap-8 lg:items-start ${hasAdditionalCosts ? "lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]" : "max-w-xl"}`}
@@ -370,13 +379,6 @@ function SharedPlan() {
               </div>
             </aside>
           </div>
-          {document.included_services.length > 0 && (
-            <IncludedServicesPanel
-              services={document.included_services}
-              accent={accent}
-              image={document.clinic?.patient_image_url ?? document.clinic?.logo_url}
-            />
-          )}
           {document.price.payment_schedule?.length ? (
             <div className="mt-12 border-t border-slate-200/80 pt-10">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -422,49 +424,49 @@ function SharedPlan() {
           ) : null}
         </section>
         <PatientClinicCard document={document} />
-        {faqs.length > 0 && (
+        {(faqs.length > 0 || document.patient_notes.length > 0) && (
           <section
-            id="faq"
+            id="questions"
             className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
           >
             <div className="mx-auto max-w-4xl">
               <SectionHeading
-                eyebrow="Your questions"
-                title="Frequently Asked Questions"
-                description="Answers selected for the confirmed treatments in your plan."
+                eyebrow="Good to know"
+                title="Answers before your next step"
+                description="Treatment-specific guidance and important information from your clinic."
               />
-              <Accordion
-                type="single"
-                collapsible
-                className="mt-7 rounded-3xl bg-white px-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/70 sm:px-7"
-              >
-                {faqs.map((faq) => (
-                  <AccordionItem key={faq.question} value={faq.id}>
-                    <AccordionTrigger className="text-left text-base hover:no-underline">
-                      {faq.question}
-                    </AccordionTrigger>
-                    <AccordionContent className="max-w-3xl pb-5 text-sm leading-6 text-muted-foreground">
-                      {faq.answer}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
-          </section>
-        )}
-        {document.patient_notes.length > 0 && (
-          <section id="important-information" className="shared-section py-8 sm:py-10">
-            <Alert className="rounded-2xl border-slate-200 bg-slate-50/70 px-5 py-4 text-slate-700">
-              <ShieldCheck className="size-4" />
-              <AlertTitle className="font-medium">Important Information</AlertTitle>
-              <AlertDescription>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
-                  {document.patient_notes.map((note) => (
-                    <li key={note}>{note}</li>
+              {faqs.length > 0 && (
+                <Accordion
+                  type="single"
+                  collapsible
+                  className="mt-7 rounded-3xl bg-white px-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/70 sm:px-7"
+                >
+                  {faqs.map((faq) => (
+                    <AccordionItem key={faq.question} value={faq.id}>
+                      <AccordionTrigger className="text-left text-base hover:no-underline">
+                        {faq.question}
+                      </AccordionTrigger>
+                      <AccordionContent className="max-w-3xl pb-5 text-sm leading-6 text-muted-foreground">
+                        {faq.answer}
+                      </AccordionContent>
+                    </AccordionItem>
                   ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
+                </Accordion>
+              )}
+              {document.patient_notes.length > 0 && (
+                <Alert className="mt-5 rounded-2xl border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm">
+                  <ShieldCheck className="size-4" />
+                  <AlertTitle className="font-medium">Important for your plan</AlertTitle>
+                  <AlertDescription>
+                    <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                      {document.patient_notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           </section>
         )}
         <section id="next-steps" className="shared-section scroll-mt-24 py-10 sm:py-16">
@@ -587,7 +589,7 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
   );
 }
 
-function PersonalCoordinatorNote({
+function PatientWelcome({
   document,
   primary,
 }: {
@@ -595,62 +597,73 @@ function PersonalCoordinatorNote({
   primary: string;
 }) {
   const coordinator = document.coordinator;
+  const treatmentCount = document.treatment_groups.reduce(
+    (total, group) => total + group.quantity,
+    0,
+  );
   return (
-    <article className="mx-auto block max-w-4xl rounded-md border border-gray-300 p-4 shadow-sm sm:p-6">
-      <div className="sm:flex sm:justify-between sm:gap-4 lg:gap-6">
-        <div className="sm:order-last sm:shrink-0">
+    <article className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_24px_70px_-48px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80">
+      <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            Prepared especially for {document.patient_name || "you"}
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-3xl">
+            A clear path to your new smile
+          </h2>
+          <p className="mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 text-slate-600 sm:text-base">
+            {document.clinic?.introduction ??
+              "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 pr-5 ring-1 ring-slate-200/70">
           {coordinator?.avatar_url ? (
             <img
               alt={coordinator.name}
               src={coordinator.avatar_url}
-              className="size-16 rounded-full object-cover sm:size-[4.5rem]"
+              className="size-12 rounded-full object-cover"
             />
           ) : document.clinic?.logo_url ? (
             <img
               alt=""
               src={document.clinic.logo_url}
-              className="size-16 rounded-full object-contain sm:size-[4.5rem]"
+              className="size-12 rounded-full bg-white object-contain p-1"
             />
           ) : (
             <span
-              className="grid size-16 place-items-center rounded-full text-lg font-semibold text-white sm:size-[4.5rem]"
+              className="grid size-12 place-items-center rounded-full font-semibold text-white"
               style={{ background: primary }}
               aria-hidden="true"
             >
               {coordinator?.name.charAt(0) ?? document.clinic?.name.charAt(0)}
             </span>
           )}
-        </div>
-        <div className="mt-4 min-w-0 sm:mt-0">
-          <h2 className="text-pretty text-lg font-medium text-gray-900">A personal note for you</h2>
-          <p className="mt-1 text-sm text-gray-700">{coordinator?.name ?? document.clinic?.name}</p>
-          <p className="mt-4 line-clamp-2 whitespace-pre-line text-pretty text-sm text-gray-700">
-            {document.clinic?.introduction ??
-              "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
-          </p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-950">
+              {coordinator?.name ?? document.clinic?.name}
+            </p>
+            <p className="truncate text-xs text-slate-500">
+              {coordinator?.title ?? "Patient coordinator"}
+            </p>
+          </div>
         </div>
       </div>
-      <dl className="mt-6 flex flex-wrap gap-4 lg:gap-6">
-        <div className="flex items-center gap-2">
-          <dt className="text-gray-700">
-            <span className="sr-only">Prepared on</span>
-            <CalendarDays className="size-5" aria-hidden="true" />
-          </dt>
-          <dd className="text-xs text-gray-700">
-            {new Date(document.prepared_at).toLocaleDateString()}
-          </dd>
-        </div>
-        {(coordinator?.title || coordinator?.name) && (
-          <div className="flex items-center gap-2">
-            <dt className="text-gray-700">
-              <span className="sr-only">Coordinator role</span>
-              <BookOpen className="size-5" aria-hidden="true" />
-            </dt>
-            <dd className="text-xs text-gray-700">{coordinator?.title ?? "Patient coordinator"}</dd>
-          </div>
-        )}
+      <dl className="grid grid-cols-2 border-t border-slate-200/80 bg-slate-50/70 sm:grid-cols-4">
+        <WelcomeFact label="Treatments" value={`${document.treatment_groups.length} types`} />
+        <WelcomeFact label="Planned units" value={String(treatmentCount)} />
+        <WelcomeFact label="Journey" value={`${document.journey.length} stages`} />
+        <WelcomeFact label="Prepared" value={new Date(document.prepared_at).toLocaleDateString()} />
       </dl>
     </article>
+  );
+}
+
+function WelcomeFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-slate-200/80 px-5 py-4 odd:border-r sm:border-r sm:last:border-r-0">
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 text-sm font-semibold text-slate-950">{value}</dd>
+    </div>
   );
 }
 
@@ -1188,41 +1201,35 @@ function TreatmentJourneyCard({
   index: number;
   accent: string;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <article className="journey-card group print-row relative h-[200px] w-full overflow-hidden rounded-[10px] bg-[#f2f2f2] shadow-[0_0_0_5px_#ffffff80] [perspective:1000px] motion-safe:transition-all motion-safe:duration-[600ms] motion-safe:[transition-timing-function:cubic-bezier(0.175,0.885,0.32,1.275)] md:hover:scale-105 md:hover:shadow-lg md:focus-within:scale-105">
-      <button
-        type="button"
-        className="journey-face flex size-full flex-col items-center justify-center gap-3 p-5 text-center md:cursor-default"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+    <article className="print-row relative ml-10 rounded-3xl bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.38)] ring-1 ring-slate-200/80 sm:ml-12 sm:p-6 lg:ml-0">
+      <span
+        className="absolute -left-[3.25rem] top-6 grid size-10 place-items-center rounded-full text-sm font-semibold text-white shadow-md sm:-left-[3.75rem] sm:size-12 lg:static lg:mb-6"
+        style={{ background: accent }}
+        aria-label={`Step ${index + 1}`}
       >
+        {index + 1}
+      </span>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Stage {index + 1}
+          </p>
+          <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{step.title}</h3>
+        </div>
         <span
-          className="rounded-full px-2 py-1 text-xs font-semibold text-white"
-          style={{ background: accent }}
-        >
-          Step {index + 1}
-        </span>
-        <Activity
-          className="size-12 text-[#333] motion-safe:transition-all motion-safe:duration-[600ms] md:group-hover:scale-0 md:group-focus-within:scale-0"
+          className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600"
           aria-hidden="true"
-        />
-        <span className="font-semibold text-[#333]">{step.title}</span>
-      </button>
-      <div
-        className={`journey-detail ${open ? "rotate-x-0" : "-rotate-x-90"} absolute inset-0 box-border flex flex-col bg-[#f2f2f2] p-5 [transform-origin:bottom] motion-reduce:transform-none motion-safe:transition-all motion-safe:duration-[600ms] motion-safe:[transition-timing-function:cubic-bezier(0.175,0.885,0.32,1.275)] md:-rotate-x-90 md:group-hover:rotate-x-0 md:group-focus-within:rotate-x-0`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-xl font-bold text-[#333] sm:text-2xl">{step.title}</h3>
-          <Badge variant="outline">{index + 1}</Badge>
-        </div>
-        <p className="mt-2 line-clamp-3 text-sm leading-[1.4] text-[#777]">
-          {step.description ?? "Your clinic will guide you through this confirmed stage."}
-        </p>
-        <div className="mt-auto flex flex-wrap gap-2 pt-3">
-          {step.stay && <Badge variant="secondary">Stay: {step.stay}</Badge>}
-          {step.healing && <Badge variant="secondary">Healing: {step.healing}</Badge>}
-        </div>
+        >
+          <Activity className="size-5" />
+        </span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-slate-600">
+        {step.description ?? "Your clinic will guide you through this confirmed stage."}
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+        {step.stay && <Badge variant="secondary">Stay: {step.stay}</Badge>}
+        {step.healing && <Badge variant="secondary">Healing: {step.healing}</Badge>}
       </div>
     </article>
   );
@@ -1248,6 +1255,8 @@ function HotelCarousel({
             <img
               src={image.url}
               alt={`${hotelName}, photo ${index + 1}`}
+              loading="lazy"
+              decoding="async"
               className="aspect-[4/3] w-full object-cover sm:aspect-[16/7]"
             />
           </CarouselItem>
@@ -1270,41 +1279,62 @@ function PatientClinicCard({
 }) {
   const clinic = document.clinic!;
   return (
-    <section id="your-clinic" className="shared-section scroll-mt-24 py-10 sm:py-16">
-      <SectionHeading eyebrow="Your clinic" title={clinic.name} />
-      <article className="print-card mt-8 block rounded-lg bg-white p-4 shadow-xs shadow-indigo-100">
-        {clinic.patient_image_url ? (
-          <img
-            alt={`${clinic.name} clinic`}
-            src={clinic.patient_image_url}
-            className="h-56 w-full rounded-md object-cover"
-          />
-        ) : (
-          <div className="grid h-56 w-full place-items-center rounded-md bg-slate-100">
-            {clinic.logo_url ? (
-              <img src={clinic.logo_url} alt="" className="max-h-28 max-w-[70%] object-contain" />
-            ) : (
-              <Building2 className="size-12 text-slate-400" aria-hidden="true" />
-            )}
-          </div>
-        )}
-        <div className="mt-2">
-          <p className="font-medium">{clinic.name}</p>
+    <section
+      id="your-clinic"
+      className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+    >
+      <SectionHeading
+        eyebrow="Confidence in your care"
+        title="Meet the clinic behind your plan"
+        description="Your treatment has been prepared by the team who will guide you throughout your visit."
+      />
+      <article className="print-card mt-8 grid overflow-hidden rounded-3xl bg-slate-950 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.8)] lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="min-h-64 lg:min-h-[26rem]">
+          {clinic.patient_image_url ? (
+            <img
+              alt={`${clinic.name} clinic`}
+              src={clinic.patient_image_url}
+              loading="lazy"
+              decoding="async"
+              className="size-full object-cover"
+            />
+          ) : (
+            <div className="grid size-full min-h-64 place-items-center bg-gradient-to-br from-slate-800 to-slate-950">
+              {clinic.logo_url ? (
+                <img src={clinic.logo_url} alt="" className="max-h-32 max-w-[70%] object-contain" />
+              ) : (
+                <Building2 className="size-12 text-slate-400" aria-hidden="true" />
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col justify-center p-7 sm:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
+            Your clinic
+          </p>
+          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+            {clinic.name}
+          </h3>
           {clinic.patient_description && (
-            <p className="mt-3 max-w-3xl whitespace-pre-line text-sm leading-6 text-gray-600">
+            <p className="mt-5 whitespace-pre-line text-sm leading-7 text-white/70 sm:text-base">
               {clinic.patient_description}
             </p>
           )}
-          <div className="mt-6 flex flex-wrap gap-3 text-sm">
+          <div className="no-print mt-7 flex flex-wrap gap-3 text-sm">
             {clinic.website && (
-              <Button size="sm" variant="outline" asChild>
+              <Button size="sm" variant="secondary" asChild>
                 <a href={clinic.website} target="_blank" rel="noreferrer">
                   Website <ExternalLink className="size-4" />
                 </a>
               </Button>
             )}
             {clinic.phone && (
-              <Button size="sm" variant="outline" asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white hover:bg-white/10 hover:text-white"
+                asChild
+              >
                 <a href={`tel:${clinic.phone.replace(/\s/g, "")}`}>
                   <Phone className="size-4" /> {clinic.phone}
                 </a>
@@ -1334,30 +1364,32 @@ function PatientHotelCard({
 }) {
   if (!hotel) return null;
   return (
-    <article className="print-card mt-8 block max-w-5xl rounded-lg bg-white p-4 shadow-xs shadow-indigo-100">
+    <article className="print-card overflow-hidden rounded-3xl bg-white shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80">
       {configuredHotel?.images.length ? (
-        <div className="overflow-hidden rounded-md [&_img]:h-56 [&_img]:w-full [&_img]:rounded-md [&_img]:object-cover">
+        <div className="overflow-hidden [&_img]:h-64 [&_img]:w-full [&_img]:object-cover sm:[&_img]:h-72">
           <HotelCarousel images={configuredHotel.images} hotelName={hotel.name} />
         </div>
       ) : (
-        <div className="grid h-56 w-full place-items-center rounded-md bg-slate-100 text-slate-400">
+        <div className="grid h-64 w-full place-items-center bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400 sm:h-72">
           <BedDouble className="size-12" aria-hidden="true" />
         </div>
       )}
-      <div className="mt-2">
+      <div className="p-5 sm:p-7">
         <dl>
           <div>
             <dt className="sr-only">Hotel category</dt>
-            <dd className="text-sm text-gray-500">
+            <dd className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               {configuredHotel?.categories[0] ?? hotel.board_type ?? "Selected accommodation"}
             </dd>
           </div>
           <div>
             <dt className="sr-only">Hotel name</dt>
-            <dd className="font-medium">{hotel.name}</dd>
+            <dd className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+              {hotel.name}
+            </dd>
           </div>
         </dl>
-        <div className="mt-6 flex flex-wrap items-start gap-6 text-xs sm:gap-8">
+        <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-100 pt-5 text-xs sm:grid-cols-3">
           <HotelFact
             icon={BedDouble}
             label="Stay"
@@ -1378,7 +1410,7 @@ function PatientHotelCard({
           />
         </div>
         {(configuredHotel?.website ?? hotel.website) && (
-          <Button className="no-print mt-4" size="sm" variant="outline" asChild>
+          <Button className="no-print mt-6" size="sm" variant="outline" asChild>
             <a href={configuredHotel?.website ?? hotel.website} target="_blank" rel="noreferrer">
               Hotel website <ExternalLink className="size-4" />
             </a>
@@ -1420,38 +1452,78 @@ function IncludedServicesPanel({
   accent: string;
   image?: string;
 }) {
+  const groups = groupIncludedServices(services);
   return (
-    <article className="print-card mt-12 rounded-xl border border-gray-700 bg-gray-800 p-4">
+    <article className="print-card rounded-3xl bg-white p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80 sm:p-7">
       <div className="flex items-center gap-4">
         {image ? (
-          <img alt="" src={image} className="size-16 rounded-full bg-white object-contain p-1" />
+          <img
+            alt=""
+            src={image}
+            loading="lazy"
+            decoding="async"
+            className="size-12 rounded-xl bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+          />
         ) : (
-          <span className="grid size-16 place-items-center rounded-full bg-gray-700 text-white">
-            <CheckCircle2 className="size-7" aria-hidden="true" />
+          <span className="grid size-12 place-items-center rounded-xl bg-slate-950 text-white">
+            <CheckCircle2 className="size-6" aria-hidden="true" />
           </span>
         )}
         <div>
-          <h3 className="text-lg font-medium text-white">Included in your plan</h3>
-          <p className="mt-1 text-xs font-medium text-gray-300">
+          <h3 className="text-lg font-semibold text-slate-950">Included in your visit</h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">
             {services.length} confirmed {services.length === 1 ? "service" : "services"}
           </p>
         </div>
       </div>
-      <ul className="mt-4 space-y-2">
-        {services.map((service) => (
-          <li key={service}>
-            <article
-              className="block h-full rounded-lg border border-gray-700 p-4 transition-colors hover:border-[var(--service-accent)] focus-within:border-[var(--service-accent)]"
-              style={{ "--service-accent": accent } as React.CSSProperties}
-            >
-              <strong className="font-medium text-white">{service}</strong>
-              <p className="mt-1 text-xs font-medium text-gray-300">
-                Included in the patient package confirmed by your clinic.
-              </p>
-            </article>
-          </li>
+      <Accordion type="multiple" defaultValue={groups.map((group) => group.label)} className="mt-5">
+        {groups.map((group) => (
+          <AccordionItem key={group.label} value={group.label}>
+            <AccordionTrigger className="py-4 text-sm hover:no-underline">
+              <span className="flex items-center gap-3">
+                <span className="text-[var(--shared-accent)]">
+                  <ServiceGroupIcon label={group.label} />
+                </span>
+                {group.label}
+                <Badge variant="secondary">{group.services.length}</Badge>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <ul className="space-y-2 pb-2">
+                {group.services.map((service) => (
+                  <li
+                    key={service}
+                    className="flex items-start gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
+                  >
+                    <Check
+                      className="mt-0.5 size-4 shrink-0"
+                      style={{ color: accent }}
+                      aria-hidden="true"
+                    />
+                    <span>{service}</span>
+                  </li>
+                ))}
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
         ))}
-      </ul>
+      </Accordion>
+    </article>
+  );
+}
+
+function VisitSupportCard() {
+  return (
+    <article className="print-card grid min-h-64 place-items-center rounded-3xl bg-white p-7 text-center shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80">
+      <div className="max-w-sm">
+        <span className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-100 text-slate-600">
+          <Plane className="size-5" aria-hidden="true" />
+        </span>
+        <h3 className="mt-4 text-lg font-semibold text-slate-950">Travel arranged around you</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Your coordinator will confirm accommodation and travel details with you before your visit.
+        </p>
+      </div>
     </article>
   );
 }
