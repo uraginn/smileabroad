@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DentalPlan, DentalPlanStudioProps } from "../types/dental-plan.types";
@@ -57,6 +56,11 @@ export function FinalReviewStep({
       ? [{ label: "Scheduled payments exceed the final total.", step: 3 }]
       : []),
   ];
+  const informationItems = [
+    ...(!plan.travel.selectedHotelId
+      ? [{ label: "Accommodation has not been selected.", step: 2 }]
+      : []),
+  ];
   const ready = missing.length === 0;
 
   return (
@@ -74,71 +78,93 @@ export function FinalReviewStep({
           </Badge>
         </div>
       </header>
-      <div className="grid gap-3 lg:grid-cols-3">
-        <ValidationGroup
-          title="Ready"
-          icon={<Check className="size-4 text-success" />}
-          items={readiness.filter((item) => item.ready)}
-          empty="Nothing completed yet."
-          onNavigate={onNavigate}
-        />
-        <ValidationGroup
-          title="Warnings"
-          icon={<AlertTriangle className="size-4 text-warning-foreground" />}
-          items={warningItems}
-          empty="No additional warnings."
-          onNavigate={onNavigate}
-        />
-        <ValidationGroup
-          title="Missing"
-          icon={<AlertTriangle className="size-4 text-destructive" />}
-          items={missing}
-          empty="No required information is missing."
-          onNavigate={onNavigate}
-        />
-      </div>
+      <TreatmentPlanValidationStack
+        ready={readiness.filter((item) => item.ready)}
+        information={informationItems}
+        warnings={warningItems}
+        blocking={missing}
+        onNavigate={onNavigate}
+      />
     </section>
   );
 }
 
-function ValidationGroup({
-  title,
-  icon,
-  items,
-  empty,
+function TreatmentPlanValidationStack({
+  ready,
+  information,
+  warnings,
+  blocking,
   onNavigate,
 }: {
-  title: string;
-  icon: ReactNode;
-  items: Array<{ label: string; step: number }>;
-  empty: string;
+  ready: Array<{ label: string; step: number }>;
+  information: Array<{ label: string; step: number }>;
+  warnings: Array<{ label: string; step: number }>;
+  blocking: Array<{ label: string; step: number }>;
   onNavigate?: (step: number) => void;
 }) {
+  const groups = [
+    {
+      key: "ready",
+      label: "Ready",
+      items: ready,
+      icon: CheckCircle2,
+      className: "border-green-500 bg-green-100 text-green-900 hover:bg-green-200",
+      iconClass: "text-green-600",
+    },
+    {
+      key: "information",
+      label: "Information",
+      items: information,
+      icon: Info,
+      className: "border-blue-500 bg-blue-100 text-blue-900 hover:bg-blue-200",
+      iconClass: "text-blue-600",
+    },
+    {
+      key: "warning",
+      label: "Warning",
+      items: warnings,
+      icon: AlertTriangle,
+      className: "border-yellow-500 bg-yellow-100 text-yellow-900 hover:bg-yellow-200",
+      iconClass: "text-yellow-600",
+    },
+    {
+      key: "blocking",
+      label: "Blocking Error",
+      items: blocking,
+      icon: XCircle,
+      className: "border-red-500 bg-red-100 text-red-900 hover:bg-red-200",
+      iconClass: "text-red-600",
+    },
+  ].filter((group) => group.items.length > 0);
   return (
-    <div className="rounded-lg border p-3">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        {icon}
-        {title}
-        <Badge variant="outline" className="ml-auto font-normal">
-          {items.length}
-        </Badge>
-      </div>
-      {items.length ? (
-        <div className="space-y-1">
-          {items.map((item) => (
-            <Button
-              key={`${title}-${item.label}`}
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-start whitespace-normal px-2 py-1.5 text-left text-sm"
-              onClick={() => onNavigate?.(item.step)}
+    <div className="space-y-2 p-4">
+      {groups.flatMap((group) =>
+        group.items.map((item) => {
+          const Icon = group.icon;
+          return (
+            <div
+              key={`${group.key}-${item.label}`}
+              role="alert"
+              className={`flex items-center rounded-lg border-l-4 p-2 transition duration-300 ease-in-out ${group.className}`}
             >
-              {item.label}
-            </Button>
-          ))}
-        </div>
-      ) : (
-        <p className="px-2 py-1.5 text-sm text-muted-foreground">{empty}</p>
+              <Icon className={`mr-2 size-5 shrink-0 ${group.iconClass}`} aria-hidden="true" />
+              <p className="min-w-0 flex-1 text-xs font-semibold">
+                {group.label} - {item.label}
+              </p>
+              {onNavigate && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="ml-2 h-7 shrink-0 px-2 text-xs"
+                  onClick={() => onNavigate(item.step)}
+                >
+                  Review
+                </Button>
+              )}
+            </div>
+          );
+        }),
       )}
     </div>
   );

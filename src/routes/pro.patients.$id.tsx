@@ -185,6 +185,7 @@ function PatientWorkspace() {
             assessment_id: assessment?.id,
             roadmap_id: roadmap?.id,
             dentist_id: patient.dentist_id,
+            dentist_ids: patient.dentist_id ? [patient.dentist_id] : [],
             coordinator_id: patient.coordinator_id ?? lead?.assigned_to,
             title: `${patient.treatment_interest ?? assessment?.dental.treatment_interest ?? "Dental"} Treatment Plan`,
             summary: assessment?.dental.concerns || "Draft clinical Treatment Plan.",
