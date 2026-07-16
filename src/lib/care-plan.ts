@@ -554,7 +554,7 @@ export function mapTreatmentPlanToPatientDocument(
       name: clinic.name,
       city: clinic.city,
       country: clinic.country,
-      logo_url: svgLogoUrl(branding?.logo_url ?? branding?.shared_view_logo_url),
+      logo_url: publicImageUrl(branding?.logo_url ?? branding?.shared_view_logo_url),
       banner_url: branding?.shared_view_banner_url || clinic.cover_image,
       tagline: branding?.shared_view_tagline ?? clinic.short_description,
       introduction: branding?.shared_view_introduction,
@@ -591,7 +591,7 @@ export function mapTreatmentPlanToPatientDocument(
         total,
       })),
       payment_schedule: totals.paymentScheduleMatches
-        ? normalizeSchedule(plan.payment_schedule ?? [], plan.visits)
+        ? normalizeSchedule(plan.payment_schedule ?? [], patientVisitCount(plan))
         : undefined,
       payment_schedule_valid: totals.paymentScheduleMatches,
       valid_until: plan.valid_until,
@@ -643,9 +643,12 @@ export function mapTreatmentPlanToPatientDocument(
 }
 
 function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
-  const stages = (plan.treatment_stages ?? []).map((stage) => ({
+  const visitCount = patientVisitCount(plan);
+  const rawStages = plan.treatment_stages ?? [];
+  const stages = rawStages.map((stage) => ({
     id: `stage_${stage.stage_number}`,
-    title: stage.title,
+    title:
+      rawStages.length === 1 && /^1st visit$/i.test(stage.title.trim()) ? "Treatment" : stage.title,
     description:
       stage.description ??
       "During this stage, your clinic completes the planned care and checks your progress before the next step.",
@@ -653,10 +656,15 @@ function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
     healing: stage.healing_period_after,
     instructions: stage.patient_instructions,
   }));
-  if (stages.length) return stages;
-  const visits = (plan.visit_plan ?? []).map((visit) => ({
+  const rawVisits = plan.visit_plan ?? [];
+  const visits = rawVisits.map((visit) => ({
     id: `visit_${visit.visit_number}`,
-    title: visit.title || `${ordinal(visit.visit_number)} Visit`,
+    title:
+      rawVisits.length === 1
+        ? !visit.title || /^1st visit$/i.test(visit.title.trim())
+          ? "Treatment"
+          : visit.title
+        : visit.title || `${ordinal(visit.visit_number)} Visit`,
     description:
       visit.description ??
       "During this visit, your clinic completes the planned stage and prepares you for what comes next.",
@@ -664,6 +672,33 @@ function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
     healing: visit.healing_period_after,
     instructions: visit.patient_instructions,
   }));
+  if (visitCount === 1) {
+    const treatmentStep = stages[0] ?? visits[0];
+    return [
+      {
+        id: "checks",
+        title: "Before treatment",
+        description: "We complete your clinical examination and confirm the planned treatment.",
+      },
+      {
+        id: "treatment",
+        title: "Treatment",
+        description:
+          treatmentStep?.description ??
+          "We complete the treatment included in your confirmed plan.",
+        stay: treatmentStep?.stay,
+        instructions: treatmentStep?.instructions,
+      },
+      {
+        id: "aftercare",
+        title: "After treatment",
+        description: plan.healing_weeks
+          ? `We guide you through aftercare and the expected ${plan.healing_weeks}-week recovery period.`
+          : "We provide your aftercare instructions and confirm any follow-up you need.",
+      },
+    ];
+  }
+  if (stages.length) return stages;
   if (visits.length) return visits;
   const result: PatientJourneyStep[] = [
     {
@@ -683,7 +718,7 @@ function buildJourney(plan: TreatmentPlan): PatientJourneyStep[] {
       title: "Healing period",
       description: `Allow approximately ${plan.healing_weeks} week${plan.healing_weeks === 1 ? "" : "s"} for healing.`,
     });
-  if (plan.visits > 1)
+  if (visitCount > 1)
     result.push({
       id: "visit_2",
       title: "2nd Visit",
@@ -718,10 +753,44 @@ function buildTravel(
   };
 }
 function normalizeSchedule(rows: TreatmentPlanPayment[], visits: number) {
+  if (visits === 1) {
+    return rows.map((row, index) => ({
+      ...row,
+      label:
+        rows.length === 1
+          ? "Treatment"
+          : index === 0
+            ? "Before treatment"
+            : index === rows.length - 1
+              ? "After treatment"
+              : "Treatment",
+    }));
+  }
   return rows.slice(0, Math.max(1, visits)).map((row, index) => ({
     ...row,
     label: index === 0 ? "1st Visit" : index === 1 ? "2nd Visit" : `${ordinal(index + 1)} Visit`,
   }));
+}
+
+function patientVisitCount(plan: TreatmentPlan) {
+  const stagedCount = Math.max(plan.treatment_stages?.length ?? 0, plan.visit_plan?.length ?? 0);
+  if (stagedCount > 1) return stagedCount;
+  const embedded = isDentalPlanData(plan.dental_plan_data) ? plan.dental_plan_data : undefined;
+  const multiVisitTypes = new Set([
+    "dental-implant",
+    "bone-graft",
+    "sinus-lift",
+    "all-on-4",
+    "all-on-6",
+  ]);
+  const requiresStagedCare =
+    embedded?.proposedTreatments.some((treatment) =>
+      multiVisitTypes.has(treatment.treatmentType),
+    ) ||
+    (plan.items ?? []).some((item) =>
+      ["implant", "bone_graft", "sinus_lift"].includes(item.treatment),
+    );
+  return requiresStagedCare ? Math.max(2, plan.visits || 0) : 1;
 }
 function ordinal(value: number) {
   if (value === 1) return "1st";
@@ -757,12 +826,14 @@ function publicTreatmentLabel(treatment: DentalPlanData["proposedTreatments"][nu
     return treatment.displayName;
   return treatment.material === "porcelain-metal" ? "Porcelain Bridge" : "Zirconium Bridge";
 }
-function svgLogoUrl(value?: string) {
+function publicImageUrl(value?: string) {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
   return normalized.startsWith("blob:") ||
-    normalized.startsWith("data:image/svg+xml") ||
-    /\.svg(?:[?#].*)?$/.test(normalized)
+    normalized.startsWith("data:image/") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("http://") ||
+    normalized.startsWith("/")
     ? value
     : undefined;
 }

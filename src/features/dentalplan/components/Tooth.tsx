@@ -22,6 +22,7 @@ type Props = {
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
   onDragEnd?: () => void;
+  spacious?: boolean;
 };
 const W = 40,
   H = 56;
@@ -37,6 +38,7 @@ export const Tooth = memo(function Tooth({
   onDragStart,
   onDragEnter,
   onDragEnd,
+  spacious,
 }: Props) {
   const visual = resolveToothVisualState({
     toothNumber,
@@ -67,18 +69,18 @@ export const Tooth = memo(function Tooth({
       disabled={readOnly && !allowReadOnlySelection}
       aria-label={label}
       aria-pressed={selected}
-      className={`group relative flex flex-col items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${readOnly && !allowReadOnlySelection ? "cursor-default opacity-90" : "cursor-pointer touch-manipulation select-none"}`}
+      className={`group relative flex flex-col items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${spacious ? "px-0.5 py-2" : ""} ${readOnly && !allowReadOnlySelection ? "cursor-default opacity-90" : "cursor-pointer touch-manipulation select-none"}`}
     >
       {isUpper ? (
         <>
           <span className="mb-0.5 text-[10px] leading-none text-muted-foreground">
             {toothNumber}
           </span>
-          <ToothSvg visual={visual} selected={selected} isUpper />
+          <ToothSvg visual={visual} selected={selected} isUpper spacious={spacious} />
         </>
       ) : (
         <>
-          <ToothSvg visual={visual} selected={selected} isUpper={false} />
+          <ToothSvg visual={visual} selected={selected} isUpper={false} spacious={spacious} />
           <span className="mt-0.5 text-[10px] leading-none text-muted-foreground">
             {toothNumber}
           </span>
@@ -91,10 +93,12 @@ function ToothSvg({
   visual,
   selected,
   isUpper,
+  spacious,
 }: {
   visual: ReturnType<typeof resolveToothVisualState>;
   selected: boolean;
   isUpper: boolean;
+  spacious?: boolean;
 }) {
   const flip = isUpper ? "" : "scale(1,-1) translate(0,-56)";
   return (
@@ -102,7 +106,7 @@ function ToothSvg({
       width={W}
       height={H}
       viewBox={`0 0 ${W} ${H}`}
-      className="drop-shadow-sm"
+      className={`drop-shadow-sm ${spacious ? "w-8 lg:w-10" : ""}`}
       aria-hidden="true"
     >
       <g transform={flip}>

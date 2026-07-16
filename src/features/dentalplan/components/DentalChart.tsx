@@ -16,6 +16,7 @@ type Props = {
   readOnly?: boolean;
   allowReadOnlySelection?: boolean;
   showSelectionTools?: boolean;
+  patientView?: boolean;
   onSelect: (tooth: ToothNumber, additive: boolean, anchor?: HTMLButtonElement) => void;
   onSelectAllUpper?: () => void;
   onSelectAllLower?: () => void;
@@ -35,6 +36,7 @@ export function DentalChart({
   readOnly,
   allowReadOnlySelection,
   showSelectionTools = true,
+  patientView = false,
   onSelect,
   onSelectAllUpper,
   onSelectAllLower,
@@ -45,9 +47,23 @@ export function DentalChart({
   onDragEnd,
   onBoxSelect,
 }: Props) {
+  const archProps = {
+    mode,
+    currentConditions,
+    proposedTreatments,
+    selected,
+    readOnly,
+    allowReadOnlySelection,
+    onSelect,
+    onDragStart,
+    onDragEnter,
+    onDragEnd,
+  };
+  const upperTeeth = orderedByArch(UPPER_TEETH);
+  const lowerTeeth = orderedByArch(LOWER_TEETH);
   return (
     <div
-      className={`rounded-xl bg-muted/20 px-2 py-4 sm:p-6 ${readOnly ? "opacity-90" : ""}`}
+      className={`rounded-xl bg-muted/20 px-2 py-4 sm:p-6 ${readOnly ? "opacity-90" : ""} ${patientView ? "sm:py-7" : ""}`}
       role="group"
       aria-label={title}
     >
@@ -66,43 +82,44 @@ export function DentalChart({
           </div>
         ) : null}
       </div>
-      <div className="overflow-x-auto overscroll-x-contain">
+      <div
+        className={`overflow-x-auto overflow-y-hidden overscroll-x-contain ${patientView ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}
+      >
         <SelectionSurface
           enabled={!readOnly && !!onBoxSelect}
+          spacious={patientView}
           onBoxSelect={onBoxSelect}
           onPointerEnd={onDragEnd}
         >
-          <Arch
-            teeth={orderedByArch(UPPER_TEETH)}
-            {...{
-              mode,
-              currentConditions,
-              proposedTreatments,
-              selected,
-              readOnly,
-              allowReadOnlySelection,
-              onSelect,
-              onDragStart,
-              onDragEnter,
-              onDragEnd,
-            }}
-          />
-          <div className="border-t border-dashed" />
-          <Arch
-            teeth={orderedByArch(LOWER_TEETH)}
-            {...{
-              mode,
-              currentConditions,
-              proposedTreatments,
-              selected,
-              readOnly,
-              allowReadOnlySelection,
-              onSelect,
-              onDragStart,
-              onDragEnter,
-              onDragEnd,
-            }}
-          />
+          {patientView ? (
+            <>
+              <div className="grid gap-3 lg:hidden">
+                <PatientMouthHalf
+                  label="Right side"
+                  upperTeeth={upperTeeth.slice(0, 8)}
+                  lowerTeeth={lowerTeeth.slice(0, 8)}
+                  archProps={archProps}
+                />
+                <PatientMouthHalf
+                  label="Left side"
+                  upperTeeth={upperTeeth.slice(8)}
+                  lowerTeeth={lowerTeeth.slice(8)}
+                  archProps={archProps}
+                />
+              </div>
+              <div className="hidden space-y-6 lg:block">
+                <Arch teeth={upperTeeth} spacious {...archProps} />
+                <div className="border-t border-dashed" />
+                <Arch teeth={lowerTeeth} spacious {...archProps} />
+              </div>
+            </>
+          ) : (
+            <>
+              <Arch teeth={upperTeeth} {...archProps} />
+              <div className="border-t border-dashed" />
+              <Arch teeth={lowerTeeth} {...archProps} />
+            </>
+          )}
         </SelectionSurface>
       </div>
       {!readOnly && onBoxSelect && (
@@ -124,11 +141,13 @@ type SelectionRect = {
 
 function SelectionSurface({
   enabled,
+  spacious,
   onBoxSelect,
   onPointerEnd,
   children,
 }: {
   enabled: boolean;
+  spacious: boolean;
   onBoxSelect?: (teeth: ToothNumber[], additive: boolean) => void;
   onPointerEnd?: () => void;
   children: React.ReactNode;
@@ -194,7 +213,7 @@ function SelectionSurface({
   return (
     <div
       ref={surfaceRef}
-      className="relative min-w-[650px] space-y-3 select-none"
+      className={`relative select-none ${spacious ? "min-w-0 space-y-6 py-2" : "min-w-[650px] space-y-3"}`}
       onPointerDown={pointerDown}
       onPointerMove={pointerMove}
       onPointerUp={endSelection}
@@ -246,25 +265,58 @@ function Arch(props: {
   onDragStart?: (tooth: ToothNumber, additive: boolean) => void;
   onDragEnter?: (tooth: ToothNumber) => void;
   onDragEnd?: () => void;
+  spacious?: boolean;
+}) {
+  const renderTooth = (tooth: ToothNumber) => (
+    <Tooth
+      key={tooth}
+      toothNumber={tooth}
+      currentConditions={props.currentConditions}
+      proposedTreatments={props.proposedTreatments}
+      mode={props.mode}
+      selected={props.selected.includes(tooth)}
+      readOnly={props.readOnly}
+      allowReadOnlySelection={props.allowReadOnlySelection}
+      onSelect={props.onSelect}
+      onDragStart={props.onDragStart}
+      onDragEnter={props.onDragEnter}
+      onDragEnd={props.onDragEnd}
+      spacious={props.spacious}
+    />
+  );
+  return (
+    <div className={`flex justify-center ${props.spacious ? "gap-0.5 lg:gap-2" : "gap-1"}`}>
+      {props.teeth.map(renderTooth)}
+    </div>
+  );
+}
+
+type ArchProps = Omit<Parameters<typeof Arch>[0], "teeth" | "spacious">;
+
+function PatientMouthHalf({
+  label,
+  upperTeeth,
+  lowerTeeth,
+  archProps,
+}: {
+  label: string;
+  upperTeeth: ToothNumber[];
+  lowerTeeth: ToothNumber[];
+  archProps: ArchProps;
 }) {
   return (
-    <div className="flex justify-center gap-1">
-      {props.teeth.map((tooth) => (
-        <Tooth
-          key={tooth}
-          toothNumber={tooth}
-          currentConditions={props.currentConditions}
-          proposedTreatments={props.proposedTreatments}
-          mode={props.mode}
-          selected={props.selected.includes(tooth)}
-          readOnly={props.readOnly}
-          allowReadOnlySelection={props.allowReadOnlySelection}
-          onSelect={props.onSelect}
-          onDragStart={props.onDragStart}
-          onDragEnter={props.onDragEnter}
-          onDragEnd={props.onDragEnd}
-        />
-      ))}
-    </div>
+    <section
+      className="rounded-xl border border-border/70 bg-background/70 px-1.5 py-3"
+      aria-label={label}
+    >
+      <p className="mb-2 text-center text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="space-y-3">
+        <Arch teeth={upperTeeth} spacious {...archProps} />
+        <div className="border-t border-dashed" />
+        <Arch teeth={lowerTeeth} spacious {...archProps} />
+      </div>
+    </section>
   );
 }

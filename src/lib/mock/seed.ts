@@ -111,7 +111,7 @@ export const seedBranding: ClinicBranding[] = seedClinics.map((c, i) => ({
   id: id("brand"),
   ...base(),
   clinic_id: c.id,
-  logo_url: i === 0 ? "/dtkurt-logo.svg" : undefined,
+  logo_url: i === 0 ? "/dtkurt-logo.svg?v=2" : undefined,
   shared_view_banner_url: c.cover_image,
   shared_view_tagline: c.short_description,
   shared_view_introduction:

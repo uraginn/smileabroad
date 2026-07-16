@@ -7,6 +7,11 @@ import { canUser } from "@/lib/auth/permissions";
 import { LEAD_PIPELINE_STAGES } from "@/lib/lead-workflow";
 import { useMockStore } from "@/lib/mock/store";
 import { makeId } from "@/lib/mock/seed";
+import {
+  resolveSharedViewColors,
+  SHARED_VIEW_ACCENT,
+  SHARED_VIEW_PRIMARY,
+} from "@/lib/shared-view-colors";
 import type {
   Clinic,
   ClinicBranding,
@@ -327,8 +332,9 @@ function Profile({
   const [primaryColor, setPrimaryColor] = useState(brand?.primary_color ?? "#0A1626");
   const [secondaryColor, setSecondaryColor] = useState(brand?.secondary_color ?? "#415469");
   const [sharedAccent, setSharedAccent] = useState(
-    brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A",
+    brand?.shared_view_accent_color ?? SHARED_VIEW_ACCENT,
   );
+  const sharedPreviewColors = resolveSharedViewColors(primaryColor, sharedAccent);
   const logoIsSvg = !sharedLogo || !!sharedLogoAssetId || isSvgLogoUrl(sharedLogo);
   const colorsAreValid = [primaryColor, secondaryColor, sharedAccent].every(isHexColor);
   const savedSignature = JSON.stringify({
@@ -348,7 +354,7 @@ function Profile({
     clinicDescription: brand?.shared_view_clinic_description ?? clinic.short_description,
     primaryColor: normalizeHex(brand?.primary_color ?? "#0A1626"),
     secondaryColor: normalizeHex(brand?.secondary_color ?? "#415469"),
-    accent: normalizeHex(brand?.shared_view_accent_color ?? brand?.primary_color ?? "#C8A46A"),
+    accent: normalizeHex(brand?.shared_view_accent_color ?? SHARED_VIEW_ACCENT),
   });
   const currentSignature = JSON.stringify({
     name,
@@ -505,14 +511,20 @@ function Profile({
                 onSecondary={setSecondaryColor}
                 onAccent={setSharedAccent}
               />
+              <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                Shared Patient View uses Primary and Accent with neutral surfaces. Secondary remains
+                saved for other clinic materials but is not used in Shared Patient View. Gold or
+                amber values are replaced in the Shared View only; saved branding is not
+                overwritten.
+              </p>
             </div>
             <BrandPreview
               clinicName={name}
               tagline={sharedTagline || description}
               logo={sharedLogo}
               banner={sharedBanner}
-              primary={isHexColor(primaryColor) ? primaryColor : "#0A1626"}
-              accent={isHexColor(sharedAccent) ? sharedAccent : "#C8A46A"}
+              primary={sharedPreviewColors.primary}
+              accent={sharedPreviewColors.accent}
             />
           </TabsContent>
           <TabsContent value="shared" className="m-0 space-y-5 p-4 sm:p-6">
@@ -609,9 +621,9 @@ function CompactPaletteEditor({
   onAccent: (value: string) => void;
 }) {
   const rows = [
-    ["Primary", primary, onPrimary, "#0A1626"],
+    ["Primary", primary, onPrimary, SHARED_VIEW_PRIMARY],
     ["Secondary", secondary, onSecondary, "#415469"],
-    ["Accent", accent, onAccent, "#C8A46A"],
+    ["Accent", accent, onAccent, SHARED_VIEW_ACCENT],
   ] as const;
   return (
     <div className="w-full max-w-md space-y-3 font-sans">
@@ -625,9 +637,9 @@ function CompactPaletteEditor({
           size="sm"
           variant="ghost"
           onClick={() => {
-            onPrimary("#0A1626");
+            onPrimary(SHARED_VIEW_PRIMARY);
             onSecondary("#415469");
-            onAccent("#C8A46A");
+            onAccent(SHARED_VIEW_ACCENT);
           }}
         >
           <RotateCcw className="size-4" /> Reset

@@ -29,13 +29,20 @@ import { useAuth, useAuthHydrated } from "@/lib/auth/mock-auth";
 import { isTreatmentPlanPubliclyViewable } from "@/lib/treatment-plan-status";
 import { mapTreatmentPlanToPatientDocument, type PatientTreatmentGroup } from "@/lib/care-plan";
 import { formatQuoteMoney } from "@/lib/quote";
+import { resolveSharedViewColors } from "@/lib/shared-view-colors";
 import { DentalChart } from "@/features/dentalplan/components/DentalChart";
+import { conditionByType } from "@/features/dentalplan/data/conditionDefinitions";
+import { treatmentByType } from "@/features/dentalplan/data/treatmentDefinitions";
 import {
   usePlannerAssetUrl,
   usePlannerAssetUrlMap,
 } from "@/features/dentalplan/adapters/plannerAssetStorage";
-import type { ToothNumber } from "@/features/dentalplan";
-import type { ClinicHotel, ToothTreatment } from "@/types/models";
+import type {
+  ConditionType,
+  ToothNumber,
+  ToothTreatment as PlannerToothTreatment,
+} from "@/features/dentalplan";
+import type { ClinicHotel, ToothTreatment as LegacyToothTreatment } from "@/types/models";
 import {
   Accordion,
   AccordionContent,
@@ -55,7 +62,6 @@ import {
 } from "@/components/ui/carousel";
 import { Separator } from "@/components/ui/separator";
 import { PageLoading } from "@/components/ui-bits";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -96,13 +102,19 @@ function SharedPlan() {
   const branding = useMockStore((s) =>
     plan ? s.branding.find((x) => x.clinic_id === plan.clinic_id) : undefined,
   );
-  const brandingLogoUrl = usePlannerAssetUrl(
-    branding?.logo_asset_id,
-    branding?.logo_url ?? branding?.shared_view_logo_url,
-  );
+  const bundledClinicLogo = clinic?.id === "clinic_istanbul" ? "/dtkurt-logo.svg?v=2" : undefined;
+  const configuredClinicLogo = branding?.logo_url ?? branding?.shared_view_logo_url;
+  const clinicLogoFallback =
+    configuredClinicLogo === "/dtkurt-logo.svg"
+      ? bundledClinicLogo
+      : (configuredClinicLogo ?? bundledClinicLogo);
+  const brandingLogoUrl = usePlannerAssetUrl(branding?.logo_asset_id, clinicLogoFallback);
   const resolvedBranding = useMemo(
-    () => (branding ? { ...branding, logo_url: brandingLogoUrl ?? branding.logo_url } : undefined),
-    [branding, brandingLogoUrl],
+    () =>
+      branding
+        ? { ...branding, logo_url: brandingLogoUrl ?? branding.logo_url ?? bundledClinicLogo }
+        : undefined,
+    [branding, brandingLogoUrl, bundledClinicLogo],
   );
   const patient = useMockStore((s) =>
     plan
@@ -196,9 +208,10 @@ function SharedPlan() {
   if (!hydrated || (preview && !authHydrated))
     return <PageLoading label="Loading Treatment Plan" />;
   if (!plan || !document) return <SafeNotFound />;
-  const accent = document.clinic?.accent_color ?? "#C8A46A";
-  const primary = document.clinic?.primary_color ?? accent;
-  const secondary = document.clinic?.secondary_color ?? "#415469";
+  const { primary, accent } = resolveSharedViewColors(
+    document.clinic?.primary_color,
+    document.clinic?.accent_color,
+  );
   const hasAdditionalCosts =
     (document.price.hotel_total ?? 0) > 0 ||
     (document.price.transfer_total ?? 0) > 0 ||
@@ -209,8 +222,17 @@ function SharedPlan() {
       style={
         {
           "--shared-primary": primary,
-          "--shared-secondary": secondary,
           "--shared-accent": accent,
+          "--palette-premium-gold": accent,
+          "--primary": primary,
+          "--primary-foreground": "#FFFFFF",
+          "--secondary": "#E7ECF2",
+          "--secondary-foreground": "#1A2332",
+          "--accent": accent,
+          "--accent-foreground": "#0A1626",
+          "--warning": accent,
+          "--ring": accent,
+          "--sidebar-primary": primary,
         } as React.CSSProperties
       }
     >
@@ -219,7 +241,7 @@ function SharedPlan() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <section
           id="introduction"
-          className="shared-section -mx-4 scroll-mt-24 border-b border-slate-200/80 bg-white px-4 py-5 sm:-mx-6 sm:px-6 sm:py-6"
+          className="shared-section -mx-4 scroll-mt-24 border-b border-slate-200/80 bg-white px-4 py-3 sm:-mx-6 sm:px-6 sm:py-4"
         >
           <PatientWelcome document={document} primary={primary} />
         </section>
@@ -228,9 +250,8 @@ function SharedPlan() {
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <section id="treatment-plan" className="shared-section scroll-mt-24 py-10 sm:py-16">
           <SectionHeading
-            eyebrow="Your personalized care"
             title="Understand your treatment"
-            description="See what your clinic recommends, why it is included and which teeth are involved."
+            description="See the treatment we have prepared for you and which teeth are involved."
           />
           <TreatmentExperience document={document} />
         </section>
@@ -239,26 +260,21 @@ function SharedPlan() {
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <SectionHeading
-            eyebrow="How your care unfolds"
             title="A clear journey, step by step"
-            description="Know what happens at each stage, including expected stays and healing time."
+            description="Follow how we plan each stage of your care, including stays and healing where needed."
           />
-          <div className="relative mt-9 space-y-4 before:absolute before:bottom-8 before:left-5 before:top-8 before:w-px before:bg-slate-200 sm:before:left-6 lg:grid lg:grid-cols-3 lg:gap-5 lg:space-y-0 lg:before:hidden">
+          <div className="relative mt-6 space-y-3 before:absolute before:bottom-6 before:left-4 before:top-6 before:w-px before:bg-slate-200 sm:before:left-5 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:before:hidden">
             {document.journey.map((step, index) => (
-              <TreatmentJourneyCard key={step.id} step={step} index={index} accent={accent} />
+              <TreatmentJourneyCard key={step.id} step={step} index={index} primary={primary} />
             ))}
           </div>
         </section>
         {(document.travel || document.included_services.length > 0) && (
           <section
             id="visit-package"
-            className="shared-section -mx-4 scroll-mt-24 bg-stone-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
+            className="shared-section -mx-4 scroll-mt-24 bg-slate-100/70 px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
           >
-            <SectionHeading
-              eyebrow="Your visit package"
-              title="Everything around your treatment"
-              description="Your accommodation, transfers and included support, brought together in one place."
-            />
+            <SectionHeading title="Your stay and support from our team" />
             <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.65fr)] lg:items-start">
               {document.travel?.hotel ? (
                 <PatientHotelCard
@@ -291,25 +307,21 @@ function SharedPlan() {
           className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
         >
           <SectionHeading
-            eyebrow="Your investment"
-            title="A clear view of your investment"
-            description="Review your treatment total and when each payment is expected."
+            title="Your treatment cost"
+            description="Review the estimate we have prepared and when each payment is expected."
           />
           <div
-            className={`print-grid mt-8 grid gap-8 lg:items-start ${hasAdditionalCosts ? "lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]" : "max-w-xl"}`}
+            className={`print-grid mt-8 grid gap-4 rounded-3xl border border-slate-200/80 bg-slate-50/50 p-4 sm:p-6 lg:items-stretch ${hasAdditionalCosts ? "lg:grid-cols-[minmax(0,1fr)_minmax(20rem,1fr)]" : "max-w-xl"}`}
           >
             {hasAdditionalCosts && (
-              <div className="order-2 min-w-0 space-y-8 lg:order-1">
-                <div className="pt-2">
+              <div className="order-2 min-w-0 rounded-2xl bg-white p-5 ring-1 ring-slate-200/80 lg:order-1">
+                <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Additional costs
                   </p>
-                  <h3 className="mt-2 text-lg font-semibold">Travel and selected services</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Additional items included in the final estimate.
-                  </p>
+                  <h3 className="mt-2 text-lg font-semibold">Travel and additional services</h3>
                 </div>
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5 shadow-sm sm:p-6">
+                <div className="mt-4 border-t border-slate-100 pt-3">
                   {(document.price.hotel_total ?? 0) > 0 && (
                     <PriceRow
                       label="Hotel"
@@ -340,25 +352,19 @@ function SharedPlan() {
                 </div>
               </div>
             )}
-            <aside className="payment-summary order-1 overflow-hidden rounded-3xl bg-slate-900 p-7 text-white shadow-[0_24px_60px_-28px_rgba(15,23,42,0.7)] lg:order-2 lg:sticky lg:top-20">
+            <aside className="payment-summary order-1 overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-[0_24px_60px_-28px_rgba(15,23,42,0.7)] sm:p-6 lg:order-2">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex size-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
                   <WalletCards className="size-5" aria-hidden="true" />
                 </div>
-                <Badge className="border-white/15 bg-white/10 text-white hover:bg-white/10">
-                  Transparent pricing
-                </Badge>
               </div>
-              <h3 className="mt-7 text-xs font-semibold uppercase tracking-[0.16em] text-white/55">
+              <h3 className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-white/55">
                 Final total
               </h3>
-              <p className="mt-2 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl lg:text-4xl">
+              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
                 {formatQuoteMoney(document.price.total ?? 0, document.price.currency)}
               </p>
-              <p className="mt-3 text-sm leading-6 text-white/65">
-                Your confirmed treatment and selected services, presented as one clear estimate.
-              </p>
-              <div className="mt-6 border-t border-white/15 pt-4 [&_span:first-child]:text-white/60">
+              <div className="mt-4 border-t border-white/15 pt-3 [&_span:first-child]:text-white/60">
                 <PriceRow
                   label="Subtotal"
                   value={formatQuoteMoney(document.price.subtotal ?? 0, document.price.currency)}
@@ -380,33 +386,30 @@ function SharedPlan() {
             </aside>
           </div>
           {document.price.payment_schedule?.length ? (
-            <div className="mt-12 border-t border-slate-200/80 pt-10">
+            <div className="mt-6 rounded-3xl border border-slate-200/80 bg-slate-50/50 p-4 sm:p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Payment schedule
               </p>
               <h3 className="mt-2 text-xl font-semibold">Payment milestones</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Payments are organized around your confirmed clinic visits.
-              </p>
-              <div className="relative mt-6 grid gap-4 before:absolute before:bottom-5 before:left-5 before:top-5 before:w-px before:bg-slate-200 sm:grid-cols-2 sm:before:hidden">
+              <div className="relative mt-4 grid gap-3 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-slate-200 sm:grid-cols-2 sm:before:hidden">
                 {document.price.payment_schedule.map((payment, index) => {
                   return (
                     <div
                       key={`${payment.label}-${payment.due}`}
-                      className="print-row relative rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                      className="print-row relative rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
                     >
                       <div className="flex items-start gap-4">
-                        <span className="z-10 grid size-10 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
+                        <span className="z-10 grid size-8 shrink-0 place-items-center rounded-lg bg-slate-900 text-xs font-semibold text-white shadow-sm">
                           {index + 1}
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {payment.label}
                           </p>
-                          <p className="mt-3 text-xl font-semibold">
+                          <p className="mt-2 text-lg font-semibold">
                             {formatQuoteMoney(payment.amount, document.price.currency)}
                           </p>
-                          <p className="mt-3 flex items-start gap-2 text-sm leading-5 text-muted-foreground">
+                          <p className="mt-2 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
                             <CalendarCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                             This payment is scheduled {payment.due.toLowerCase()}.
                           </p>
@@ -431,9 +434,8 @@ function SharedPlan() {
           >
             <div className="mx-auto max-w-4xl">
               <SectionHeading
-                eyebrow="Good to know"
                 title="Answers before your next step"
-                description="Treatment-specific guidance and important information from your clinic."
+                description="Treatment-specific guidance and important information from our clinical team."
               />
               {faqs.length > 0 && (
                 <Accordion
@@ -497,7 +499,7 @@ function SharedPlan() {
                     {!preview && plan.status === "viewed" && (
                       <Button
                         className="min-h-11 px-6 shadow-lg sm:min-w-52"
-                        style={{ background: accent }}
+                        style={{ background: primary }}
                         onClick={() => markAccepted(plan.id, plan.clinic_id)}
                       >
                         Accept & Continue
@@ -555,8 +557,7 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
       <div
         className="absolute inset-x-0 top-0 z-20 h-1"
         style={{
-          background:
-            "linear-gradient(90deg, var(--shared-primary), var(--shared-secondary), var(--shared-accent))",
+          background: "var(--shared-primary)",
         }}
       />
       <div className="absolute inset-0">
@@ -565,12 +566,12 @@ function Header({ document }: { document: ReturnType<typeof mapTreatmentPlanToPa
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-white via-white/95 to-white/75" />
       </div>
-      <div className="relative mx-auto flex min-h-[80svh] max-w-6xl flex-col items-center justify-center px-4 py-16 text-center sm:min-h-[88svh] sm:px-6">
+      <div className="relative mx-auto flex min-h-[76svh] max-w-6xl flex-col items-center justify-center px-4 py-12 text-center sm:min-h-[70svh] sm:px-6 lg:min-h-[26rem] lg:py-12">
         {clinic.logo_url ? (
           <img
             src={clinic.logo_url}
             alt={`${clinic.name} logo`}
-            className="h-auto max-h-44 w-auto max-w-[min(100%,13.75rem)] object-contain sm:max-h-56 sm:max-w-[21.25rem]"
+            className="h-auto max-h-44 w-[min(85vw,13.75rem)] object-contain sm:max-h-56 sm:w-[21.25rem] lg:max-h-80 lg:w-[42.5rem]"
           />
         ) : (
           <span
@@ -597,41 +598,32 @@ function PatientWelcome({
   primary: string;
 }) {
   const coordinator = document.coordinator;
-  const treatmentCount = document.treatment_groups.reduce(
-    (total, group) => total + group.quantity,
-    0,
-  );
   return (
     <article className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_24px_70px_-48px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80">
-      <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+      <div className="grid gap-4 p-4 sm:p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Prepared especially for {document.patient_name || "you"}
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-3xl">
-            A clear path to your new smile
+          <h2 className="text-base font-normal tracking-normal text-slate-800 sm:text-lg">
+            {document.patient_name
+              ? `Treatment plan for ${document.patient_name}`
+              : "Your treatment plan"}
           </h2>
-          <p className="mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 text-slate-600 sm:text-base">
-            {document.clinic?.introduction ??
-              "This personalized Treatment Plan brings together the information you need to understand your proposed care and decide on your next step."}
-          </p>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 pr-5 ring-1 ring-slate-200/70">
+        <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5 pr-4 ring-1 ring-slate-200/70">
           {coordinator?.avatar_url ? (
             <img
               alt={coordinator.name}
               src={coordinator.avatar_url}
-              className="size-12 rounded-full object-cover"
+              className="size-10 rounded-full object-cover"
             />
           ) : document.clinic?.logo_url ? (
             <img
               alt=""
               src={document.clinic.logo_url}
-              className="size-12 rounded-full bg-white object-contain p-1"
+              className="size-10 rounded-full bg-white object-contain p-1"
             />
           ) : (
             <span
-              className="grid size-12 place-items-center rounded-full font-semibold text-white"
+              className="grid size-10 place-items-center rounded-full text-sm font-semibold text-white"
               style={{ background: primary }}
               aria-hidden="true"
             >
@@ -639,6 +631,9 @@ function PatientWelcome({
             </span>
           )}
           <div className="min-w-0">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Prepared by
+            </p>
             <p className="truncate text-sm font-semibold text-slate-950">
               {coordinator?.name ?? document.clinic?.name}
             </p>
@@ -648,22 +643,7 @@ function PatientWelcome({
           </div>
         </div>
       </div>
-      <dl className="grid grid-cols-2 border-t border-slate-200/80 bg-slate-50/70 sm:grid-cols-4">
-        <WelcomeFact label="Treatments" value={`${document.treatment_groups.length} types`} />
-        <WelcomeFact label="Planned units" value={String(treatmentCount)} />
-        <WelcomeFact label="Journey" value={`${document.journey.length} stages`} />
-        <WelcomeFact label="Prepared" value={new Date(document.prepared_at).toLocaleDateString()} />
-      </dl>
     </article>
-  );
-}
-
-function WelcomeFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-slate-200/80 px-5 py-4 odd:border-r sm:border-r sm:last:border-r-0">
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold text-slate-950">{value}</dd>
-    </div>
   );
 }
 
@@ -723,10 +703,9 @@ function TreatmentExperience({
 }) {
   const [activeGroupId, setActiveGroupId] = useState(document.treatment_groups[0]?.id);
   const [activeTooth, setActiveTooth] = useState<ToothNumber>();
-  const [toothChoices, setToothChoices] = useState<PatientTreatmentGroup[]>([]);
-  const [toothSelectorOpen, setToothSelectorOpen] = useState(false);
+  const [toothMode, setToothMode] = useState<"current" | "proposed">("proposed");
+  const [viewerMode, setViewerMode] = useState<"treatment" | "tooth">("treatment");
   const viewerRef = useRef<HTMLElement | null>(null);
-  const toothAnchorRef = useRef<HTMLButtonElement | null>(null);
   const activeGroup =
     document.treatment_groups.find((group) => group.id === activeGroupId) ??
     document.treatment_groups[0];
@@ -739,25 +718,14 @@ function TreatmentExperience({
   const selectTreatment = (group: PatientTreatmentGroup, moveToViewer = false) => {
     setActiveGroupId(group.id);
     setActiveTooth(undefined);
-    setToothChoices([]);
-    setToothSelectorOpen(false);
-    toothAnchorRef.current = null;
+    setViewerMode("treatment");
     if (moveToViewer) focusViewer();
   };
-  const selectTooth = (tooth: ToothNumber, anchor?: HTMLButtonElement) => {
+  const selectTooth = (tooth: ToothNumber, mode: "current" | "proposed") => {
     setActiveTooth(tooth);
-    toothAnchorRef.current = anchor ?? null;
-    const matches = document.treatment_groups.filter((group) => group.teeth.includes(tooth));
-    if (matches.length === 1) {
-      const changedTreatment = matches[0].id !== activeGroup?.id;
-      setActiveGroupId(matches[0].id);
-      setToothChoices([]);
-      setToothSelectorOpen(false);
-      if (changedTreatment) focusViewer();
-    } else if (matches.length > 1) {
-      setToothChoices(matches);
-      setToothSelectorOpen(true);
-    }
+    setToothMode(mode);
+    setViewerMode("tooth");
+    focusViewer();
   };
   return (
     <>
@@ -775,7 +743,8 @@ function TreatmentExperience({
           </p>
         )}
       </div>
-      {activeGroup && explanation && (
+      {((viewerMode === "treatment" && activeGroup && explanation) ||
+        (viewerMode === "tooth" && activeTooth && document.diagrams)) && (
         <section
           id="treatment-viewer"
           ref={viewerRef}
@@ -783,67 +752,75 @@ function TreatmentExperience({
           aria-labelledby="active-treatment-title"
           className="mt-8 scroll-mt-24 outline-none"
         >
-          <TreatmentEncyclopedia group={activeGroup} explanation={explanation} />
+          {viewerMode === "tooth" && activeTooth && document.diagrams ? (
+            <ToothEncyclopedia
+              tooth={activeTooth}
+              mode={toothMode}
+              currentConditions={document.diagrams.currentConditions[activeTooth]?.conditions ?? []}
+              proposedTreatments={document.diagrams.proposedTreatments.filter((treatment) =>
+                treatment.toothNumbers.includes(activeTooth),
+              )}
+              relatedGroups={document.treatment_groups.filter((group) =>
+                group.teeth.includes(activeTooth),
+              )}
+              explanations={document.treatment_explanations}
+            />
+          ) : activeGroup && explanation ? (
+            <TreatmentEncyclopedia group={activeGroup} explanation={explanation} />
+          ) : null}
         </section>
       )}
-      {document.diagrams && activeGroup && (
+      {document.diagrams && (
         <section id="treatment-diagram" className="shared-section scroll-mt-24 py-10 sm:py-12">
-          <SectionHeading
-            eyebrow="Explore your plan"
-            title="Treatment Diagram"
-            description="Select a treated tooth to explore the treatment planned for that area."
-          />
-          <div className="mt-8 space-y-6">
-            <PatientDentalDiagram
-              title="Current Condition"
-              mode="current"
-              diagrams={document.diagrams}
-              selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
-              onSelect={selectTooth}
-            />
-            <PatientDentalDiagram
-              title="Proposed Treatment"
-              mode="proposed"
-              diagrams={document.diagrams}
-              selected={activeTooth ? [activeTooth] : (activeGroup.teeth as ToothNumber[])}
-              onSelect={selectTooth}
-            />
-          </div>
-          {toothChoices.length > 1 && (
-            <Popover open={toothSelectorOpen} onOpenChange={setToothSelectorOpen}>
-              <PopoverAnchor virtualRef={toothAnchorRef as React.RefObject<HTMLButtonElement>} />
-              <PopoverContent
-                side="top"
-                align="center"
-                sideOffset={8}
-                className="w-auto max-w-[calc(100vw-2rem)] rounded-full p-1.5"
-              >
-                <div
-                  className="flex max-w-full flex-wrap items-center justify-center gap-1"
-                  role="group"
-                  aria-label={`Treatments for tooth ${activeTooth ?? "selected"}`}
+          <Accordion type="single" collapsible>
+            <AccordionItem
+              value="treatment-diagram"
+              className="overflow-hidden rounded-3xl border border-slate-200 bg-white px-0 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)]"
+            >
+              <AccordionTrigger className="gap-4 px-5 py-5 text-left hover:no-underline sm:px-7 sm:py-6">
+                <span
+                  className="grid size-11 shrink-0 place-items-center rounded-2xl text-white shadow-sm"
+                  style={{ background: "var(--shared-primary)" }}
+                  aria-hidden="true"
                 >
-                  {toothChoices.map((group) => (
-                    <Button
-                      key={group.id}
-                      type="button"
-                      size="sm"
-                      variant={group.id === activeGroup.id ? "secondary" : "ghost"}
-                      className="h-8 rounded-full px-3 text-xs"
-                      onClick={() => {
-                        setActiveGroupId(group.id);
-                        setToothChoices([]);
-                        setToothSelectorOpen(false);
-                        focusViewer();
-                      }}
-                    >
-                      {group.label}
-                    </Button>
-                  ))}
+                  <Stethoscope className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-semibold text-slate-950 sm:text-lg">
+                    Explore your treatment diagram
+                  </span>
+                  <span className="mt-1 block text-sm font-normal leading-5 text-slate-500">
+                    Open the diagram and select a tooth to see its condition and planned care.
+                  </span>
+                </span>
+                <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
+                  Interactive
+                </Badge>
+              </AccordionTrigger>
+              <AccordionContent className="border-t border-slate-100 px-3 pb-4 pt-4 sm:px-6 sm:pb-6">
+                <div className="space-y-5">
+                  <PatientDentalDiagram
+                    title="Current Condition"
+                    mode="current"
+                    diagrams={document.diagrams}
+                    selected={
+                      activeTooth ? [activeTooth] : ((activeGroup?.teeth ?? []) as ToothNumber[])
+                    }
+                    onSelect={(tooth) => selectTooth(tooth, "current")}
+                  />
+                  <PatientDentalDiagram
+                    title="Proposed Treatment"
+                    mode="proposed"
+                    diagrams={document.diagrams}
+                    selected={
+                      activeTooth ? [activeTooth] : ((activeGroup?.teeth ?? []) as ToothNumber[])
+                    }
+                    onSelect={(tooth) => selectTooth(tooth, "proposed")}
+                  />
                 </div>
-              </PopoverContent>
-            </Popover>
-          )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </section>
       )}
     </>
@@ -913,8 +890,7 @@ function PatientTreatmentTable({
                   aria-current={group.id === activeGroupId ? "true" : undefined}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="font-semibold">{group.label}</p>
-                    <Badge variant="secondary">{group.quantity} units</Badge>
+                    <p className="font-semibold">{treatmentQuantityLabel(group)}</p>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                     <PriceFact
@@ -1017,6 +993,173 @@ function TreatmentEncyclopedia({
 }) {
   const Icon = treatmentIcon(group.treatment);
   return (
+    <ToothdexShell
+      icon={Icon}
+      title={group.label}
+      summary={explanation.short_summary}
+      facts={[
+        { label: "Category", value: group.category },
+        { label: "Visits", value: explanation.visits },
+        { label: "Healing", value: explanation.healing },
+        { label: "Your treatment", value: treatmentQuantityLabel(group) },
+      ]}
+      sectionLabel="Learn about this treatment"
+    >
+      <TreatmentInfoItem value="what" title="What is it?">
+        {explanation.what_it_is}
+      </TreatmentInfoItem>
+      <TreatmentInfoItem value="why" title="Why is it included?">
+        {explanation.plan_context}
+      </TreatmentInfoItem>
+      <TreatmentInfoItem value="how" title="How is it performed?">
+        {explanation.how_performed}
+      </TreatmentInfoItem>
+      <TreatmentInfoItem value="healing" title="Healing & Aftercare">
+        <p>{explanation.healing_and_visits}</p>
+        <p className="mt-3">{explanation.important_to_know}</p>
+      </TreatmentInfoItem>
+    </ToothdexShell>
+  );
+}
+
+function ToothEncyclopedia({
+  tooth,
+  mode,
+  currentConditions,
+  proposedTreatments,
+  relatedGroups,
+  explanations,
+}: {
+  tooth: ToothNumber;
+  mode: "current" | "proposed";
+  currentConditions: ConditionType[];
+  proposedTreatments: PlannerToothTreatment[];
+  relatedGroups: PatientTreatmentGroup[];
+  explanations: ReturnType<typeof mapTreatmentPlanToPatientDocument>["treatment_explanations"];
+}) {
+  const anatomy = toothAnatomy(tooth);
+  const conditionLabels = currentConditions.map((condition) => conditionByType(condition).label);
+  const treatmentLabels = proposedTreatments.map(plannerTreatmentLabel);
+  const relatedExplanations = explanations.filter((item) =>
+    relatedGroups.some((group) => group.id === item.id),
+  );
+  const isCurrent = mode === "current";
+  return (
+    <ToothdexShell
+      icon={CircleDot}
+      title={`Tooth ${tooth}`}
+      summary={`${anatomy.fullLabel}. ${isCurrent ? "Review the condition recorded by your clinic." : "Review every treatment layer planned for this tooth."}`}
+      facts={[
+        { label: "Tooth number", value: String(tooth) },
+        { label: "Tooth type", value: anatomy.type },
+        {
+          label: "Current condition",
+          value: conditionLabels.length ? conditionLabels.join(", ") : "No condition recorded",
+        },
+        {
+          label: "Proposed care",
+          value: treatmentLabels.length
+            ? `${treatmentLabels.length} treatment${treatmentLabels.length === 1 ? "" : "s"}`
+            : "No treatment recorded",
+        },
+      ]}
+      sectionLabel={isCurrent ? "Understand this tooth" : "Understand the proposed care"}
+    >
+      {isCurrent ? (
+        <>
+          <TreatmentInfoItem value="recorded" title="What is recorded on this tooth?">
+            {currentConditions.length ? (
+              <ToothdexList
+                items={currentConditions.map((condition) => ({
+                  title: conditionByType(condition).label,
+                  description: CONDITION_GUIDANCE[condition].meaning,
+                }))}
+              />
+            ) : (
+              "No specific current condition has been recorded for this tooth. Your clinic will confirm it during the clinical examination."
+            )}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="meaning" title="What does this mean?">
+            {currentConditions.length
+              ? currentConditions
+                  .map((condition) => CONDITION_GUIDANCE[condition].patient)
+                  .join(" ")
+              : `${anatomy.type} teeth support normal biting and appearance in this area. The clinical examination confirms whether any care is needed.`}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="planning" title="How can it affect treatment planning?">
+            {currentConditions.length
+              ? currentConditions
+                  .map((condition) => CONDITION_GUIDANCE[condition].planning)
+                  .join(" ")
+              : "With no condition recorded, this tooth is not currently driving a specific treatment decision in the plan."}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="next" title="What is planned next?">
+            {treatmentLabels.length
+              ? `Your clinic has linked ${formatNaturalList(treatmentLabels)} to tooth ${tooth}. Open the Proposed Treatment diagram to review these layers in Toothdex.`
+              : "No proposed treatment is currently linked to this tooth. Your clinic will reassess it during the final examination."}
+          </TreatmentInfoItem>
+        </>
+      ) : (
+        <>
+          <TreatmentInfoItem value="planned" title="What is planned for this tooth?">
+            {proposedTreatments.length ? (
+              <ToothdexList
+                items={proposedTreatments.map((treatment) => ({
+                  title: plannerTreatmentLabel(treatment),
+                  description: plannerTreatmentDetail(treatment),
+                }))}
+              />
+            ) : (
+              "No proposed treatment is currently linked to this tooth."
+            )}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="reason" title="What is the clinical purpose?">
+            {relatedExplanations.length
+              ? relatedExplanations.map((item) => item.plan_context).join(" ")
+              : conditionLabels.length
+                ? `The planned care is considered alongside the recorded ${formatNaturalList(conditionLabels).toLowerCase()} on this tooth.`
+                : "Your clinic will confirm the clinical purpose and final indication before treatment begins."}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="layers" title="How do the treatment layers work together?">
+            {proposedTreatments.length > 1
+              ? `This tooth combines ${formatNaturalList(treatmentLabels)}. The clinic sequences these layers from preparation and support through to the final restoration.`
+              : proposedTreatments.length === 1
+                ? `${treatmentLabels[0]} is the only treatment layer currently assigned to tooth ${tooth}.`
+                : "There are no treatment layers to sequence for this tooth."}
+          </TreatmentInfoItem>
+          <TreatmentInfoItem value="aftercare" title="Visits, healing & aftercare">
+            {relatedExplanations.length
+              ? relatedExplanations.map((item) => (
+                  <div key={item.id} className="not-last:mb-3">
+                    <p className="font-medium text-slate-800">{item.title}</p>
+                    <p>{item.healing_and_visits}</p>
+                    <p className="mt-1">{item.important_to_know}</p>
+                  </div>
+                ))
+              : "The clinic will confirm visit timing, healing expectations and aftercare for this tooth after the final clinical examination."}
+          </TreatmentInfoItem>
+        </>
+      )}
+    </ToothdexShell>
+  );
+}
+
+function ToothdexShell({
+  icon: Icon,
+  title,
+  summary,
+  facts,
+  sectionLabel,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  summary: string;
+  facts: Array<{ label: string; value: string }>;
+  sectionLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
     <div className="grid overflow-hidden rounded-[2rem] bg-white shadow-[0_24px_70px_-42px_rgba(15,23,42,0.55)] ring-1 ring-slate-200/80 lg:min-h-[320px] lg:grid-cols-[0.85fr_1.35fr]">
       <div className="relative flex overflow-hidden bg-slate-950 px-6 py-7 text-white sm:px-8 lg:flex-col lg:justify-center">
         <div
@@ -1037,42 +1180,24 @@ function TreatmentEncyclopedia({
               aria-live="polite"
               className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl"
             >
-              {group.label}
+              {title}
             </h2>
-            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300 sm:text-base">
-              {explanation.short_summary}
-            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-300 sm:text-base">{summary}</p>
           </div>
         </div>
       </div>
       <div className="p-5 sm:p-6">
         <dl className="grid grid-cols-2 gap-x-6 border-b border-slate-200 pb-3">
-          <TreatmentFact label="Category" value={group.category} />
-          <TreatmentFact label="Visits" value={explanation.visits} />
-          <TreatmentFact label="Healing" value={explanation.healing} />
-          <TreatmentFact
-            label="Included"
-            value={`${group.quantity} planned ${group.quantity === 1 ? "unit" : "units"}`}
-          />
+          {facts.map((fact) => (
+            <TreatmentFact key={fact.label} {...fact} />
+          ))}
         </dl>
         <div className="mt-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Learn about this treatment
+            {sectionLabel}
           </p>
           <Accordion type="single" collapsible className="mt-1">
-            <TreatmentInfoItem value="what" title="What is it?">
-              {explanation.what_it_is}
-            </TreatmentInfoItem>
-            <TreatmentInfoItem value="why" title="Why is it included?">
-              {explanation.plan_context}
-            </TreatmentInfoItem>
-            <TreatmentInfoItem value="how" title="How is it performed?">
-              {explanation.how_performed}
-            </TreatmentInfoItem>
-            <TreatmentInfoItem value="healing" title="Healing & Aftercare">
-              <p>{explanation.healing_and_visits}</p>
-              <p className="mt-3">{explanation.important_to_know}</p>
-            </TreatmentInfoItem>
+            {children}
           </Accordion>
         </div>
       </div>
@@ -1080,11 +1205,24 @@ function TreatmentEncyclopedia({
   );
 }
 
+function ToothdexList({ items }: { items: Array<{ title: string; description: string }> }) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item, index) => (
+        <li key={`${item.title}-${index}`}>
+          <p className="font-medium text-slate-800">{item.title}</p>
+          <p className="mt-0.5">{item.description}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function TreatmentFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 py-2">
       <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</dt>
-      <dd className="mt-1 truncate text-sm font-semibold leading-5 text-slate-900" title={value}>
+      <dd className="mt-1 break-words text-sm font-semibold leading-5 text-slate-900" title={value}>
         {value}
       </dd>
     </div>
@@ -1110,6 +1248,148 @@ function TreatmentInfoItem({
       </AccordionContent>
     </AccordionItem>
   );
+}
+
+const CONDITION_GUIDANCE: Record<
+  ConditionType,
+  { meaning: string; patient: string; planning: string }
+> = {
+  healthy: {
+    meaning: "The tooth is recorded without a specific active problem.",
+    patient: "A healthy record means no condition currently needs to be highlighted on this tooth.",
+    planning: "The clinic still verifies the tooth and surrounding gum before treatment begins.",
+  },
+  missing: {
+    meaning: "There is no natural tooth present at this position.",
+    patient: "A missing tooth can affect appearance, chewing and the stability of nearby teeth.",
+    planning:
+      "The space, bone and neighbouring teeth guide whether an implant, bridge or another replacement is suitable.",
+  },
+  "extraction-required": {
+    meaning: "The clinic has recorded that this tooth may not be predictably retained.",
+    patient:
+      "Removal may be recommended when keeping the tooth would not provide a stable long-term result.",
+    planning:
+      "Extraction timing is coordinated with healing, grafting and any replacement treatment planned for this site.",
+  },
+  "existing-crown": {
+    meaning: "This tooth already has a crown restoration.",
+    patient: "The existing crown covers and protects the prepared tooth beneath it.",
+    planning:
+      "The clinic checks its fit, condition, colour and relationship with the new treatment plan.",
+  },
+  "existing-implant": {
+    meaning: "An implant is already present at this tooth position.",
+    patient: "The implant acts as an artificial root supporting a restoration.",
+    planning:
+      "Its stability, position and compatibility must be confirmed before reusing or restoring it.",
+  },
+  "existing-bridge": {
+    meaning: "This position forms part of an existing fixed bridge.",
+    patient: "A bridge connects multiple tooth positions as one restoration.",
+    planning: "The whole bridge span and its supporting teeth or implants are assessed together.",
+  },
+  "existing-filling": {
+    meaning: "This tooth contains an existing filling.",
+    patient: "The filling replaces a previously damaged or decayed part of the tooth.",
+    planning:
+      "Its size, seal and remaining tooth structure influence whether it can stay or needs replacement.",
+  },
+  "root-canal-treated": {
+    meaning: "The inside of this tooth has previously received root canal treatment.",
+    patient: "The nerve space has been cleaned and sealed to preserve the tooth.",
+    planning:
+      "The clinic checks healing, remaining tooth strength and whether additional protection is required.",
+  },
+  decay: {
+    meaning: "An area of dental decay or caries is recorded.",
+    patient: "Decay weakens tooth structure and can progress toward the nerve if untreated.",
+    planning:
+      "Its depth and extent determine whether a filling, root canal treatment or stronger restoration is needed.",
+  },
+  fractured: {
+    meaning: "A crack or fracture is recorded in the tooth.",
+    patient: "A fracture can weaken the tooth and may cause sensitivity or pain when biting.",
+    planning:
+      "The fracture depth and restorability determine whether the tooth can be repaired or needs another approach.",
+  },
+  mobility: {
+    meaning: "The tooth has been recorded as mobile.",
+    patient: "Mobility means the tooth moves more than expected within its supporting tissues.",
+    planning:
+      "Gum health, bone support and bite forces must be assessed before definitive treatment.",
+  },
+  impacted: {
+    meaning: "The tooth has not fully erupted into its normal position.",
+    patient: "An impacted tooth may remain partly or fully within the gum or bone.",
+    planning:
+      "Imaging and its relationship to neighbouring structures guide monitoring or surgical treatment.",
+  },
+  "periodontal-problem": {
+    meaning: "A gum or supporting-bone concern is recorded around this tooth.",
+    patient: "Periodontal health affects the foundation that keeps the tooth stable.",
+    planning:
+      "Inflammation and bone support should be stabilized before or alongside restorative treatment.",
+  },
+  other: {
+    meaning: "The clinic has recorded an additional finding for this tooth.",
+    patient: "The exact finding is specific to your clinical examination and imaging.",
+    planning: "Your dentist will explain how the finding influences the final treatment sequence.",
+  },
+};
+
+function toothAnatomy(tooth: ToothNumber) {
+  const quadrant = Math.floor(tooth / 10);
+  const position = tooth % 10;
+  const location =
+    quadrant === 1
+      ? "Upper right"
+      : quadrant === 2
+        ? "Upper left"
+        : quadrant === 3
+          ? "Lower left"
+          : "Lower right";
+  const types: Record<number, string> = {
+    1: "Central incisor",
+    2: "Lateral incisor",
+    3: "Canine",
+    4: "First premolar",
+    5: "Second premolar",
+    6: "First molar",
+    7: "Second molar",
+    8: "Third molar",
+  };
+  const type = types[position] ?? "Tooth";
+  return { type, fullLabel: `${location} ${type.toLowerCase()}` };
+}
+
+function plannerTreatmentLabel(treatment: PlannerToothTreatment) {
+  return treatment.displayName?.trim() || treatmentByType(treatment.treatmentType).label;
+}
+
+function plannerTreatmentDetail(treatment: PlannerToothTreatment) {
+  const details = [
+    treatment.implantBrand,
+    treatment.material ? humanizeClinicalValue(treatment.material) : undefined,
+    treatment.layer ? `${humanizeClinicalValue(treatment.layer)} layer` : undefined,
+    treatment.stage ? humanizeClinicalValue(treatment.stage) : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return details.length
+    ? details.join(" · ")
+    : `${treatmentByType(treatment.treatmentType).category} treatment assigned to this tooth.`;
+}
+
+function humanizeClinicalValue(value: string) {
+  return value
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatNaturalList(values: string[]) {
+  if (values.length <= 1) return values[0] ?? "";
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 function PriceFact({
@@ -1151,6 +1431,7 @@ function PatientDentalDiagram({
         selected={selected}
         readOnly
         allowReadOnlySelection
+        patientView
         onSelect={(tooth, _additive, anchor) => onSelect(tooth, anchor)}
       />
     </div>
@@ -1162,16 +1443,20 @@ function SectionHeading({
   description,
   compact = false,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description?: string;
   compact?: boolean;
 }) {
   return (
     <div className={compact ? "max-w-2xl" : "max-w-3xl"}>
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{eyebrow}</p>
+      {eyebrow && (
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {eyebrow}
+        </p>
+      )}
       <h2
-        className={`mt-3 font-semibold tracking-[-0.03em] ${compact ? "text-2xl" : "text-2xl sm:text-4xl"}`}
+        className={`${eyebrow ? "mt-3 " : ""}font-semibold tracking-[-0.03em] ${compact ? "text-2xl" : "text-2xl sm:text-4xl"}`}
       >
         {title}
       </h2>
@@ -1195,39 +1480,41 @@ function PriceRow({ label, value }: { label: string; value: string }) {
 function TreatmentJourneyCard({
   step,
   index,
-  accent,
+  primary,
 }: {
   step: ReturnType<typeof mapTreatmentPlanToPatientDocument>["journey"][number];
   index: number;
-  accent: string;
+  primary: string;
 }) {
   return (
-    <article className="print-row relative ml-10 rounded-3xl bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.38)] ring-1 ring-slate-200/80 sm:ml-12 sm:p-6 lg:ml-0">
+    <article className="print-row relative ml-8 rounded-2xl bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.38)] ring-1 ring-slate-200/80 sm:ml-10 lg:ml-0 lg:grid lg:grid-cols-[auto_1fr] lg:gap-x-3">
       <span
-        className="absolute -left-[3.25rem] top-6 grid size-10 place-items-center rounded-full text-sm font-semibold text-white shadow-md sm:-left-[3.75rem] sm:size-12 lg:static lg:mb-6"
-        style={{ background: accent }}
+        className="absolute -left-[2.5rem] top-4 grid size-8 place-items-center rounded-full text-xs font-semibold text-white shadow-md sm:-left-[3rem] lg:static lg:row-span-3"
+        style={{ background: primary }}
         aria-label={`Step ${index + 1}`}
       >
         {index + 1}
       </span>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
             Stage {index + 1}
           </p>
-          <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{step.title}</h3>
+          <h3 className="mt-1 text-base font-semibold tracking-tight text-slate-950">
+            {step.title}
+          </h3>
         </div>
         <span
-          className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600"
+          className="grid size-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600"
           aria-hidden="true"
         >
-          <Activity className="size-5" />
+          <Activity className="size-4" />
         </span>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">
+      <p className="mt-2 text-sm leading-5 text-slate-600 lg:col-start-2">
         {step.description ?? "Your clinic will guide you through this confirmed stage."}
       </p>
-      <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3 lg:col-start-2">
         {step.stay && <Badge variant="secondary">Stay: {step.stay}</Badge>}
         {step.healing && <Badge variant="secondary">Healing: {step.healing}</Badge>}
       </div>
@@ -1278,22 +1565,20 @@ function PatientClinicCard({
   document: ReturnType<typeof mapTreatmentPlanToPatientDocument>;
 }) {
   const clinic = document.clinic!;
+  const clinicImage = clinic.name.toLowerCase().includes("dtkurt")
+    ? "/shared-plan/dtkurt-clinic-front.jpg"
+    : clinic.patient_image_url;
   return (
     <section
       id="your-clinic"
       className="shared-section -mx-4 scroll-mt-24 bg-white px-4 py-10 sm:-mx-6 sm:px-6 sm:py-16"
     >
-      <SectionHeading
-        eyebrow="Confidence in your care"
-        title="Meet the clinic behind your plan"
-        description="Your treatment has been prepared by the team who will guide you throughout your visit."
-      />
-      <article className="print-card mt-8 grid overflow-hidden rounded-3xl bg-slate-950 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.8)] lg:grid-cols-[1.05fr_0.95fr]">
+      <article className="print-card grid overflow-hidden rounded-3xl bg-slate-950 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.8)] lg:grid-cols-[1.05fr_0.95fr]">
         <div className="min-h-64 lg:min-h-[26rem]">
-          {clinic.patient_image_url ? (
+          {clinicImage ? (
             <img
               alt={`${clinic.name} clinic`}
-              src={clinic.patient_image_url}
+              src={clinicImage}
               loading="lazy"
               decoding="async"
               className="size-full object-cover"
@@ -1309,12 +1594,7 @@ function PatientClinicCard({
           )}
         </div>
         <div className="flex flex-col justify-center p-7 sm:p-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
-            Your clinic
-          </p>
-          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-            {clinic.name}
-          </h3>
+          <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{clinic.name}</h2>
           {clinic.patient_description && (
             <p className="mt-5 whitespace-pre-line text-sm leading-7 text-white/70 sm:text-base">
               {clinic.patient_description}
@@ -1471,12 +1751,9 @@ function IncludedServicesPanel({
         )}
         <div>
           <h3 className="text-lg font-semibold text-slate-950">Included in your visit</h3>
-          <p className="mt-1 text-xs font-medium text-slate-500">
-            {services.length} confirmed {services.length === 1 ? "service" : "services"}
-          </p>
         </div>
       </div>
-      <Accordion type="multiple" defaultValue={groups.map((group) => group.label)} className="mt-5">
+      <Accordion type="single" collapsible className="mt-5">
         {groups.map((group) => (
           <AccordionItem key={group.label} value={group.label}>
             <AccordionTrigger className="py-4 text-sm hover:no-underline">
@@ -1485,7 +1762,6 @@ function IncludedServicesPanel({
                   <ServiceGroupIcon label={group.label} />
                 </span>
                 {group.label}
-                <Badge variant="secondary">{group.services.length}</Badge>
               </span>
             </AccordionTrigger>
             <AccordionContent>
@@ -1529,7 +1805,7 @@ function VisitSupportCard() {
 }
 
 type TreatmentFaq = { id: string; question: string; answer: string };
-const FAQ_BY_TREATMENT: Partial<Record<ToothTreatment, Array<Omit<TreatmentFaq, "id">>>> = {
+const FAQ_BY_TREATMENT: Partial<Record<LegacyToothTreatment, Array<Omit<TreatmentFaq, "id">>>> = {
   implant: [
     {
       question: "How painful is implant treatment?",
@@ -1658,7 +1934,7 @@ function buildTreatmentFaq(groups: PatientTreatmentGroup[]): TreatmentFaq[] {
   }
   return result;
 }
-const TREATMENT_ICONS: Partial<Record<ToothTreatment, LucideIcon>> = {
+const TREATMENT_ICONS: Partial<Record<LegacyToothTreatment, LucideIcon>> = {
   implant: CircleDot,
   crown: Crown,
   extraction: Activity,
@@ -1673,7 +1949,7 @@ const TREATMENT_ICONS: Partial<Record<ToothTreatment, LucideIcon>> = {
   whitening: Sparkles,
   denture: Crown,
 };
-function treatmentIcon(treatment?: ToothTreatment): LucideIcon {
+function treatmentIcon(treatment?: LegacyToothTreatment): LucideIcon {
   return (treatment && TREATMENT_ICONS[treatment]) || Stethoscope;
 }
 function ServiceGroupIcon({ label }: { label: string }) {
@@ -1696,6 +1972,10 @@ function groupIncludedServices(services: string[]) {
     group.services.push(service);
   }
   return groups.filter((group) => group.services.length > 0);
+}
+
+function treatmentQuantityLabel(group: PatientTreatmentGroup) {
+  return `${group.quantity} × ${group.label}`;
 }
 function Footer({ document }: { document: ReturnType<typeof mapTreatmentPlanToPatientDocument> }) {
   return (
